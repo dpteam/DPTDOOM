@@ -13,6 +13,8 @@
 unsigned int numlumps;
 int maxammo[NUMAMMO]={200,50,300,50},clipammo[NUMAMMO]={10,4,20,1};
 mobjinfo_t mobjinfo[NUMMOBJTYPES]; // synthetic tables; real info.c covered by engine test
+state_t states[NUMSTATES];
+static void ActionSentinel(void) {}
 int W_LumpLength(unsigned int i){(void)i;return 0;}
 void W_ReadLump(unsigned int i,void *p){(void)i;(void)p;}
 static int Load(const char *text){return DPT_DehLoadBytes((const unsigned char*)text,strlen(text));}
@@ -29,6 +31,9 @@ int main(void)
         "Patch File for DeHackEd v3.0\nDoom version = 19\nMisc 0\nInitial Health = 12\n"};
     mobjinfo[MT_POSSESSED].spawnhealth=20;mobjinfo[MT_POSSESSED].speed=8;mobjinfo[MT_ROCKET].speed=20*FRACUNIT;
     mobjinfo[MT_POSSESSED].spawnstate=42;mobjinfo[MT_POSSESSED].flags=123;
+    states[S_NULL].tics=-1;states[S_PISTOL1].tics=4;states[S_PISTOL1].nextstate=S_PISTOL2;
+    states[S_PISTOL1].sprite=SPR_PISG;states[S_PISTOL1].frame=7;
+    states[S_PISTOL1].action.acv=ActionSentinel;
     DPT_DehReset();DPT_DehChecksum(a);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));
     REQUIRE(Load(HEADER "Initial Health = 77\nInitial Bullets = 23\nBFG Cells/Shot = 20\n"));
     REQUIRE(deh_initial_health==77&&deh_initial_bullets==23&&deh_bfg_cells_per_shot==20);
@@ -85,6 +90,25 @@ int main(void)
     REQUIRE(!Load(HEADER "Thing 2 (Outer (Inner))\nMass = 250\n"));
     DPT_DehReset();REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==20&&mobjinfo[MT_POSSESSED].speed==8&&mobjinfo[MT_ROCKET].speed==20*FRACUNIT);
     REQUIRE(mobjinfo[NUMMOBJTYPES-1].mass==0);
+    REQUIRE(Load(HEADER "Frame 13\nDuration = 30\nframe 14\nDuration = 31\n"));
+    REQUIRE(states[S_PISTOL1].tics==30&&states[S_PISTOL2].tics==31);
+    REQUIRE(states[S_PISTOL1].nextstate==S_PISTOL2&&states[S_PISTOL1].sprite==SPR_PISG&&states[S_PISTOL1].frame==7);
+    REQUIRE(states[S_PISTOL1].action.acv==ActionSentinel);DPT_DehChecksum(a);
+    {const char *invalid[]={HEADER "Frame 0\nDuration = 1\n",HEADER "Frame -1\nDuration = 1\n",
+      HEADER "Frame 999999999999999999999\nDuration = 1\n",HEADER "Frame 13 (Pistol)\nDuration = 1\n",
+      HEADER "Frame 13\nDuration = 0\n",HEADER "Frame 13\nDuration = -1\n",HEADER "Frame 13\nDuration = 32768\n",
+      HEADER "Frame 13\nNext frame = 14\n",HEADER "Frame 13\nSprite number = 1\n",
+      HEADER "Initial Health = 5\nAmmo 0\nPer ammo = 12\nThing 2\nHit points = 42\nFrame 13\nDuration = 2\nFrame 14\nDuration = 0\n"};
+     for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i){REQUIRE(!Load(invalid[i]));REQUIRE(states[S_PISTOL1].tics==30&&states[S_PISTOL2].tics==31);
+      REQUIRE(deh_initial_health==100&&clipammo[0]==10&&mobjinfo[MT_POSSESSED].spawnhealth==20);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
+    {char patch[256];
+     snprintf(patch,sizeof(patch),HEADER "Frame %d\nDuration = 1\n",NUMSTATES);REQUIRE(!Load(patch));
+     snprintf(patch,sizeof(patch),HEADER "Frame %d\nDuration = 2\n",S_SARG_RUN1);REQUIRE(!Load(patch));
+     snprintf(patch,sizeof(patch),HEADER "Frame %d\nDuration = 2\n",S_SARG_PAIN2);REQUIRE(!Load(patch));
+     snprintf(patch,sizeof(patch),HEADER "Frame %d\nDuration = 32767\n",NUMSTATES-1);REQUIRE(Load(patch));REQUIRE(states[NUMSTATES-1].tics==32767);}
+    REQUIRE(Load(HEADER "Frame 13\nDuration = 60\n"));REQUIRE(states[S_PISTOL1].tics==60);
+    DPT_DehReset();REQUIRE(states[S_PISTOL1].tics==4&&states[S_NULL].tics==-1);
+    REQUIRE(states[S_PISTOL1].action.acv==ActionSentinel&&states[S_PISTOL1].nextstate==S_PISTOL2);
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
-    puts("DeHackEd Misc: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
+    puts("DeHackEd Misc/Ammo/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
 }

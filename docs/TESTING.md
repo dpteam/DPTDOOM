@@ -8,7 +8,7 @@ CI без игровых данных и его ограничения опис�
 DeHackEd subset: `deh-misc` — data-free parser/rollback/limits/digest;
 `deh-engine` — headless с локальным IWAD, synthetic patches/lumps, реальные
 health/ammo/capacity, weapon ammo use и two-peer patch mismatch. Это classic
-Misc 0 / Ammo / Weapon Ammo type / Thing numeric, не full
+Misc 0 / Ammo / Weapon Ammo type / Thing numeric / Frame Duration, не full
 DeHackEd/BEX; patched saves/recording запрещены до manifest. См. [DEHACKED.md](DEHACKED.md).
 
 Native master directory собирается вместе с engine (`DPTDOOM_MASTER=ON`).

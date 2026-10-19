@@ -1574,7 +1574,7 @@ void D_DoomMain (void)
         }
     }
     if (DPT_DehLoadedCount())
-        puts("DeHackEd: Misc/Ammo/Weapon-ammo/Thing-numeric subset active; vanilla save/load and recording disabled; no full DeHackEd/BEX/Boom/MBF compatibility");
+        puts("DeHackEd: bounded Misc/Ammo/Weapon-ammo/Thing-numeric/Frame-Duration subset active; vanilla save/load and recording disabled; no full DeHackEd/BEX/Boom/MBF compatibility");
 #elif ORIGCODE
     //!
     // @category mod

@@ -1,7 +1,7 @@
-# DeHackEd: ограниченный Misc / Ammo / Weapon-ammo / Thing срез
+# DeHackEd: ограниченный Misc / Ammo / Weapon-ammo / Thing / Frame Duration срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-thing-v3` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-duration-v4` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -14,7 +14,8 @@
 не объявляется готовым: их patches могут содержать неподдерживаемые секции.
 
 Пока принимается classic signature v3.0, `Doom version = 19`, `Patch format = 6`
-и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, `Thing 1..NUMMOBJTYPES`, не выдуманная `[Misc]`
+и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, `Thing 1..NUMMOBJTYPES`,
+`Frame 1..NUMSTATES-1` (с ограничениями ниже), не выдуманная `[Misc]`
 и не BEX `[STRINGS]`.
 
 ```text
@@ -124,8 +125,37 @@ map ID, звуков и любых state fields (`Initial frame` и т.п.) по
 staged: неверное поле в конце patch не меняет ни Things, ни Misc/Ammo/Weapon,
 ни digest/count. Reset восстанавливает все исходные таблицы.
 
+### Frame — только Duration
+
+Поддерживается `Duration = 1..32767` для существующих состояний; Frame индексы
+**с нуля** в оригинальной таблице, но `Frame 0` (`S_NULL`) неизменяем и отклоняется.
+В отличие от Thing, подписи в скобках у Frame пока не принимаются.
+
+```text
+Frame 13
+Duration = 60
+```
+
+`13` — исходный `S_PISTOL1`: задержка до следующего состояния становится 60
+тиков. Меняется только `state.tics`, не nextstate/sprite/frame/misc/action.
+Источник staged целиком вместе с другими секциями; при ошибке в конце файла
+не применяются даже предыдущие корректные Duration assignments. Digest subset
+обновлён до v4, чтобы peers не путали разные semantics.
+
+Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
+отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
+Nightmare штатно сдвигает вправо/влево, пока **не patchable**. Это не полная
+историческая Frame совместимость. Исходные нулевые/бесконечные vanilla states
+остаются прежними, пока пользователь не меняет их разрешённой положительной
+длительностью; переходы исходного графа не редактируются. Source reset возвращает
+исходные длительности, не копируя function pointers.
+
+`Sprite number`, `Sprite subnumber`, `Next frame`, `Unknown 1/2`, code pointers,
+weapon state references и новые state индексы по-прежнему отклоняются. Для них
+нужны отдельные проверки graph/resources/action compatibility.
+
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-`Monsters Infight`, Frame/Sound/Sprite/Pointer/Cheat/Text и неподдерживаемые Thing fields,
+`Monsters Infight`, Sound/Sprite/Pointer/Cheat/Text, неподдерживаемые Frame/Thing fields,
 BEX, include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
@@ -170,5 +200,12 @@ save/load/record guards и одинаковые/разные patches в наст
 Unit tests не линкуют action code: используют synthetic mobjinfo; настоящий
 info.c и игровой spawn проверяет deh-engine. Все patch/WAD fixtures создаются во временных
 каталогах; IWAD/извлечённые ресурсы не коммитятся.
+
+Duration tests проверяют реальный firing cadence (по расходу ammo с одинаковыми
+attack commands), file/lump equivalence, rollback нескольких секций/digest,
+index/range/overflow/fast exclusion, неизменные action/transition/sprite и reset,
+same/different patch peers и matching traces с `-fast`. `deh-engine` имеет общий
+deadline 150s из-за дополнительных настоящих игровых прогонов, а не снятия
+таймаутов отдельных network/child operations.
 
 Полная compatibility matrix/будущие модули — `DEHACKED-MBF-AUDIT.md`.

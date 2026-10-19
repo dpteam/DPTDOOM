@@ -60,7 +60,7 @@ ACE LICENSE — LGPL-2.1; это отдельная обязанность по 
 | Уровень | Первый целевой scope | Пока |
 |---|---|---|
 | `vanilla` | Текущие IWAD/PWAD без patches | Работает, baseline закреплены |
-| `deh-classic` | bounded `.deh`, `DEHACKED` lump; Thing/Frame/Weapon/Ammo/Misc/Text | Следующий parser vertical slice |
+| `deh-classic` | bounded `.deh`, `DEHACKED` lump; Thing/Frame/Weapon/Ammo/Misc/Text | Thing numeric и Frame Duration реализованы; graph/Text остаются отдельными срезами |
 | `bex-basic` | `[STRINGS]`, безопасные `[PARS]`, ограниченные compatibility aliases | После classic tests |
 | `bex-codeptr` | `[CODEPTR]` только allowlist существующих DPT action functions | Не исполнять произвольные pointers |
 | `boom` | generalized linedefs/sectors, Boom flags/specials, blockmap/physics cases | Отдельный map/runtime этап |
@@ -105,5 +105,6 @@ Boom/MBF/MBF21 не отмечать готовыми от наличия refere
 
 Реализованный subset описан в `DEHACKED.md`: **Misc 0, Ammo max/per, Weapon
 Ammo type и Thing numeric fields**, отдельный DPT_DEH_CLASSIC path, без включения
-полного FEATURE_DEHACKED. Thing state/flags/sounds, Frame/Text, weapon frames и
-BEX остаются очередью следующих срезов.
+полного FEATURE_DEHACKED. Добавлена bounded Frame Duration (positive, not S_NULL/
+fast-transformed range). Thing state/flags/sounds, остальные Frame fields/Text,
+weapon frames и BEX остаются очередью следующих срезов.

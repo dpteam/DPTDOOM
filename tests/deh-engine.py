@@ -53,7 +53,7 @@ def main():
         first=root/'first.deh';second=root/'second.deh';same=root/'other-path.deh';bad=root/'bad.deh';overlay=root/'patches.wad'
         first.write_bytes(HEADER+b'Initial Health = 77\nInitial Bullets = 23\n')
         same.write_bytes(first.read_bytes());second.write_bytes(HEADER+b'Initial Health = 88\n')
-        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 1\nDuration = 4\n')
+        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 13\nNext frame = 14\n')
         wad(overlay,[HEADER+b'Initial Health = 90\n',HEADER+b'Initial Health = 91\n'])
         base=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-tics','5','-headless-session-report']
 
@@ -90,14 +90,28 @@ def main():
         inputs=root/'attack.bin';inputs.write_bytes(b''.join(struct.pack('!bbhBBBB',0,0,0,1 if tic%30>=15 else 0,0,0,0) for tic in range(200)))
         command=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-tics','140',
                  '-headless-session-report','-headless-input',str(inputs)]
-        for name,extra in [('standard-fire',[]),('patched-fire',['-deh',str(ammo)])]:
+        duration=root/'duration.deh';duration_copy=root/'duration-copy.deh'
+        duration.write_bytes(HEADER+b'Frame 13\nDuration = 60\nFrame 14\nDuration = 60\nFrame 15\nDuration = 60\nFrame 16\nDuration = 60\n')
+        duration_copy.write_bytes(duration.read_bytes())
+        fire_ammo={}
+        for name,extra in [('standard-fire',[]),('patched-fire',['-deh',str(ammo)]),('slow-fire',['-deh',str(duration)])]:
             work=root/name;work.mkdir()
             result=subprocess.run(command+extra,cwd=work,capture_output=True,text=True,timeout=20)
             assert result.returncode==0 and 'AddressSanitizer' not in result.stderr,(result.stdout,result.stderr)
             match=re.search(r'Session report: .* health=100 ammo=(\d+)',result.stdout)
             assert match,result.stdout
-            assert (int(match[1])==50 if extra else int(match[1])<50),result.stdout
-        _,text=run('reject',['-deh',str(bad)],False);assert 'unsupported section' in text,text
+            fire_ammo[name]=int(match[1])
+            if name=='patched-fire':assert fire_ammo[name]==50,result.stdout
+            elif name=='standard-fire':assert fire_ammo[name]<50,result.stdout
+        assert fire_ammo['standard-fire']<fire_ammo['slow-fire']<50,fire_ammo
+        # Embedded Duration patch takes the identical runtime path.
+        duration_wad=root/'duration.wad';wad(duration_wad,[duration.read_bytes()])
+        work=root/'slow-fire-lump';work.mkdir()
+        result=subprocess.run(command+['-file',str(duration_wad),'-dehlump'],cwd=work,capture_output=True,text=True,timeout=20)
+        assert result.returncode==0 and 'AddressSanitizer' not in result.stderr,(result.stdout,result.stderr)
+        match=re.search(r'Session report: .* health=100 ammo=(\d+)',result.stdout)
+        assert match and int(match[1])==fire_ammo['slow-fire'],result.stdout
+        _,text=run('reject',['-deh',str(bad)],False);assert 'unsupported Frame field' in text,text
         _,text=run('missing',['-deh'],False);assert 'requires at least one' in text,text
         for name,extra in [('save',['-headless-save-tic','2']),('load',['-loadgame','0']),('record',['-record','test'])]:
             work,text=run(name,['-deh',str(first)]+extra,False)
@@ -139,7 +153,12 @@ def main():
         pair('ammo-different',[ammo,first],False)
         pair('thing-same',[things,thing_copy],True,'type=30 health=123 radius=1572864',('-file',str(map_wad)))
         pair('thing-different',[things,first],False,extra=('-file',str(map_wad)))
-        print('DeHackEd engine: actual health/ammo/spawned Thing, external/lump order, rejection/guards, matching/mismatched network digest and traces OK')
+        pair('duration-same',[duration,duration_copy],True,'health=100',('-headless-input',str(inputs)))
+        pair('duration-different',[duration,first],False)
+        # Repeating -fast initialization must not mutate the patched pistol
+        # durations; the fast-transformed SARG range itself is not patchable.
+        pair('duration-fast',[duration,duration_copy],True,'health=100',('-fast','-headless-input',str(inputs)))
+        print('DeHackEd engine: actual health/ammo/spawned Thing, Duration firing cadence file/lump, rejection/guards, same/different/fast network patches and traces OK')
 
 
 if __name__=='__main__':main()
