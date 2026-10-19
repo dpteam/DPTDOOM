@@ -86,9 +86,12 @@ ctest --preset windows-headless
   headless/ASan/SDL. См. `docs/NETWORK.md`; не заявлять публичную Internet-ready
   сеть, NAT, reconnect или совместимость с Chocolate/csDoom. В `refs/csDoomMaster`
   — только старый мастер-сервер, не используемый новым прототипом.
-- Active direct session failure теперь возвращает в меню; `-net-fail-fast`
-  только для тестов, которые ожидают ненулевой exit. F7 предлагает disconnect
-  с cancel/confirm. Перед SP сбрасываются loop/player/rules/chat/pause/fast states.
+- Обычный peer leave/transport loss/empty timeout теперь оставляет напарника в
+  текущем мире (оба слота), local coop session/rules сохраняются, late join нет.
+  Собственный F7 с cancel/confirm возвращает только выходящего в меню; собственный
+  F7 оставшегося тоже заканчивает локальное продолжение. Malformed/truncated tic,
+  invalid cmd/desync → меню, не считать их обычным leave. `-net-fail-fast` для tests.
+  Перед SP после собственного выхода сбрасываются loop/player/rules/chat/pause/fast states.
   Startup/handshake errors пока fail-fast; reconnect/re-host из меню не реализованы.
 - Direct protocol теперь v2/100-byte handshake с `dmflags` (0..3). Bit1=не
   создавать multiplayer-only coop weapon pickups, bit2=player body pass-through.

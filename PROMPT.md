@@ -26,6 +26,10 @@ https://github.com/kgsws/doom_ace (в refs будет)
 
 ## Уточнения из рабочей сессии
 
+- Обычный выход одного игрока не должен завершать мир у напарника: оставшийся
+  продолжает кооп-карту один. Выходящий F7 — в меню; survivor сохраняет world/
+  inventory/rules, но reconnect/late join/dedicated server этим не подразумеваются.
+
 - Новые идеи/план: удобный launcher, server browser/master; in-game voice chat;
   общий и командный чат для будущих TDM/командных режимов; настройки игрока,
   цветные ники/цвет персонажа, cosmetic skins (humanoid зомби/имп и т.п.).

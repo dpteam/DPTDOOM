@@ -32,8 +32,10 @@
 ## Открытые ограничения (не путать с реализованными фичами)
 
 - **NET-001 — исправлено локально для активной игры:** direct peer close/timeout/
-  malformed tic теперь возвращают в меню, не закрывают игру. Проверки
-  `net-recovery`/`net-windows-local-end`, включая SP/save/load после отключения.
+  transport loss теперь оставляют напарника в текущем мире. Некорректный/
+  неполный tic/desync возвращают в меню, не закрывают приложение. Собственный
+  F7 возвращает только выходящего в меню. Проверки `net-survivor`/`net-recovery`/
+  оконных host/guest F7 сценариев, включая SP/save/load после своего выхода.
   Startup/handshake ошибки ещё завершаются с ненулевым кодом; reconnect не готов.
 - **NET-002:** только 2-player trusted LAN TCP, нет Internet hardening/NAT/late join.
 - **CHAT-001:** пока ASCII vanilla HUD, нет team routing, истории, mute/rate-limits

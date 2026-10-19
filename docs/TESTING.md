@@ -59,8 +59,9 @@ SDL-тесты ввода используют dummy video, аудио — dummy
 сигналы, не громкоговорители. Они проверяют реальный ненулевой PCM и панораму,
 паузы/возобновление музыки, отключение подсистем и ошибку аудиодрайвера.
 
-Оконный `net-windows` теперь проверяет peer close → меню → SP/save/load;
-`net-windows-local-end` — F7 cancel/confirm, rules/fast/chat/pause cleanup.
+Оконный `net-windows` проверяет peer close → напарник продолжает карту → свой
+F7 → меню → SP/save/load; `net-windows-local-end` и `net-windows-guest-end` —
+F7 cancel/confirm для обеих ролей, rules/fast/chat/pause handling.
 Игровые packet errors проверяются отдельно в fail-fast и menu-recovery режимах.
 Тестовый WAV подставляется через штатный механизм music substitutions; это
 не доказательство работы аппаратного MIDI на любой машине. Конвертация MUS

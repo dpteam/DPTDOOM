@@ -152,8 +152,8 @@ Chocolate Doom и не готовый публичный Internet server. UDP/pr
 
 ### Этап 2.3 — завершение активной сессии
 
-- [x] Peer close, receive/send failure, timeout, malformed/order/command/desync
-  возвращают в menu на границе тика вместо I_Error завершения процесса.
+- [x] Исходный этап: transport/game packet errors не закрывают процесс, а
+  восстанавливают управление меню на границе тика (обычный peer leave уточнён ниже).
 - [x] F7 disconnect с cancel/confirm; закрытие окна по-прежнему закрывает приложение.
 - [x] Сброс buffered ticcmd/local player mask/timebase, players/rules/chat/input/
   pause/fast-monster shared state; старый мир не обновляется после обрыва.
@@ -166,6 +166,26 @@ Chocolate Doom и не готовый публичный Internet server. UDP/pr
 
 Диагностический `-net-fail-fast` оставляет аварийный exit для packet regression tests.
 Он не включён по умолчанию для обычной игры.
+
+### Этап 2.4 — оставшийся игрок продолжает карту
+
+- [x] По уточнению владельца: F7 возвращает только выходящего в меню, напарник
+  продолжает тот же мир; закрытие peer/connection loss/empty timeout также не
+  выбрасывают оставшегося. Работает для обоих слотов, не только первоначального хоста.
+- [x] Карта/leveltime/позиция/инвентарь/монстры/dmflags не сбрасываются;
+  отсутствующий игрок исключается из маски/команд, его body — неблокирующий corpse.
+- [x] Снимается пауза, показывается локальное сообщение о выходе напарника.
+- [x] Malformed/truncated tic, invalid command и desync остаются error → menu,
+  не подменяются успешным выходом и не исполняют частичный/сомнительный ввод.
+- [x] Headless host/guest survivor 70→140 тиков; ASan; SDL окно закрытие/F7
+  обоих игроков, продолжение, собственный F7 и последующая SP/save/load.
+- [x] Регрессия: 17/17 headless, 19/19 headless ASan на полном прогоне,
+  20/20 SDL; усиленный survivor и сетевой ASan subset перепроверены после
+  добавления boundary-report. SDL ASan+dummy audio guest-F7 teardown тоже зелёный.
+- [ ] Сохранение local-only coop world, late join/reconnect ещё не реализованы.
+
+Это не превращение в SP и не постоянно слушающий dedicated server. Сетевой
+partition может породить две отдельные локальные ветки — их merge/resync нет.
 
 - Требование владельца: разрешить локальный snapshot во время онлайн-игры.
   Загрузка snapshot запускает single-player; в подключённой МП-сессии сначала
