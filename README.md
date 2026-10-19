@@ -42,6 +42,7 @@ SDL2 2.32.10 и SDL2_mixer 2.8.2 скачиваются из официальн�
 - [AddressSanitizer и найденные ошибки](docs/SANITIZERS.md)
 - [CI-матрица и границы автоматических проверок](docs/CI.md)
 - [Прямой кооператив: запуск и ограничения](docs/NETWORK.md)
+- [Идеи: большие серверы, боты и правила матча](docs/IDEAS.md)
 - [Разбор upstream PR](docs/UPSTREAM.md)
 - [Требования владельца](PROMPT.md)
 

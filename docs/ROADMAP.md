@@ -94,6 +94,7 @@ WSL-инструменты по решению владельца не уста�
 ### Этап 2.1 — direct coop v1 (экспериментальный Windows loopback)
 
 - [x] Собственный DPT protocol v1, TCP lockstep, ровно два игрока, explicit IPv4.
+  (Первоначальный этап; текущий протокол поднят до v2 для dmflags.)
 - [x] По умолчанию bind только localhost, LAN bind только явным аргументом.
 - [x] Handshake: fingerprint исходников/build версии, содержимое/порядок lumps,
   skill/map/monster flags/gameversion и противоположные player IDs.
@@ -113,6 +114,21 @@ WSL-инструменты по решению владельца не уста�
 Chocolate Doom и не готовый публичный Internet server. UDP/prediction/NAT не
 реализованы. Старый `FEATURE_MULTIPLAYER` остаётся выключен; новый путь включён
 через CMake `DPTDOOM_NETWORK` и не использует заголовки как подмену реализации.
+
+### Этап 2.2 — базовые DMFLAGS (протокол v2)
+
+- [x] Идеи 1024-player server и DM/COOP-ботов записаны отдельно в `docs/IDEAS.md`.
+- [x] `-dmflags 1`: не создавать в коопе multiplayer-only оружие, не трогая
+  обычное оружие/патроны/ключи/дополнительных монстров.
+- [x] `-dmflags 2`: проходить сквозь живых игроков, не через стены/монстров;
+  выстрелы и урон не отключаются. Маска 3 включает оба флага.
+- [x] Маска сверяется между peers и входит в checksum, неизвестные биты отвергаются.
+- [x] Реальный temporary MAP01 test для всех четырёх масок + loopback с flags=3.
+- [ ] Server config maxplayers и collision policy auto|block|pass (auto при configured max >4).
+- [ ] DM-режим и DM-боты; текущая direct coop сессия всё ещё на двух игроков.
+
+Не повышать MAXPLAYERS до 1024 ради заявления поддержки: нужна новая серверная
+архитектура и нагрузочные тесты. См. подробности идей/этапов в `docs/IDEAS.md`.
 
 - Требование владельца: разрешить локальный snapshot во время онлайн-игры.
   Загрузка snapshot запускает single-player; в подключённой МП-сессии сначала

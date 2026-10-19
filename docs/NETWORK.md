@@ -1,7 +1,7 @@
 # Экспериментальный прямой кооператив DPT.DOOM
 
 Первый игровой прототип: **ровно два игрока**, TCP lockstep на 35 тиках/с.
-Это отдельный DPT.DOOM protocol v1, **не** Chocolate Doom/csDoom protocol.
+Это отдельный DPT.DOOM protocol v2, **не** Chocolate Doom/csDoom protocol.
 Не dedicated server, нет master server, prediction, rollback, NAT traversal,
 reconnect, late join, аутентификации или шифрования. Только доверенная LAN/loopback.
 Не выставлять порт в публичный Интернет как готовый защищённый сервер.
@@ -35,6 +35,35 @@ reconnect, late join, аутентификации или шифрования. 
 Адреса пока только numeric IPv4 (не DNS и не IPv6). `-net-timeout N` — таймаут
 операции в ms (100..120000, default 10000), включая ожидание второго игрока.
 
+## DMFLAGS (начальное подмножество правил)
+
+`-dmflags N` — десятичная маска; **оба игрока указывают одинаковое значение**.
+По умолчанию `0`: прежние vanilla multiplayer pickup/collision rules.
+Это собственная нумерация DPT.DOOM, не ZDoom/Odamex-compatible bits.
+
+| Бит | Значение | Правило |
+|---|---:|---|
+| COOP_NO_EXTRA_WEAPONS | 1 | В коопе не создавать weapon pickups, помеченные THINGS flag 16 (multiplayer-only). |
+| PLAYERS_PASS_THROUGH | 2 | Разрешить живым телам игроков проходить сквозь друг друга, включая отсутствие player-to-player telefrag при teleport. |
+
+Примеры: `-dmflags 1` — убрать дополнительные оружия; `-dmflags 2` — прохождение;
+`-dmflags 3` — оба правила. Неизвестные биты/отрицательные/hex значения отвергаются.
+Обычные оружия, патроны, ключи и extra coop monsters первым флагом не скрываются.
+Отдельного DM-only бита в vanilla THINGS нет: фильтр касается только
+multiplayer-marked pickups shotgun/SSG/chaingun/rocket launcher/plasma/BFG/chainsaw,
+не weapon projectiles и не оружия, выпавшего из убитых монстров.
+
+Прохождение — не общий `noclip`: стены/монстры остаются препятствиями. Выстрелы,
+ракеты, splash damage и friendly-fire policy этим флагом не отключаются.
+Он относится к двум активным живым player bodies, не к телам умерших игроков.
+`maxplayers > 4` и auto collision policy пока отсутствуют: прототип фиксирован
+на двух игроках. План для server config `auto|block|pass` — в `IDEAS.md`.
+
+Правила задаются при запуске, не меняются локально на лету и сверяются в
+handshake/state checksum. Ненулевой `-dmflags` вне direct coop запрещён, пока
+нет расширенных save/demo formats: vanilla DSG не хранит эту маску.
+Protocol v1 build и v2 build несовместимы; обоим тестировщикам нужен один artifact.
+
 Меню не останавливает симуляцию в netgame. Закрытие/обрыв одного процесса
 завершает второго понятной сетевой ошибкой; возврата в меню/reconnect пока нет.
 На плохом канале TCP блокирует дальнейшие тики до доставки/таймаута: это
@@ -47,9 +76,9 @@ Attract-demo snapshots в single-player остаются доступными.
 
 ## Протокол и сверка
 
-- Фиксированный handshake 96 bytes: magic/version, SHA-1 fingerprint версии/
+- Фиксированный handshake 100 bytes: magic/version, SHA-1 fingerprint версии/
   исходников, SHA-1 имён/размеров/содержимого загруженных lumps в порядке загрузки,
-  параметры игры, противоположный player index, player count 2.
+  параметры игры, противоположный player index, player count 2 и `dmflags` (offset 96).
 - Fingerprint исходников генерируется CMake из `.c/.h`, CRLF нормализуется к LF.
   Это проверка случайно разных builds, не remote attestation и не криптозащита.
 - Фиксированный tic record 24 bytes: magic, номер тика, предыдущий state projection,
@@ -74,9 +103,16 @@ ctest --preset windows-asan -R 'net-' --output-on-failure
 - `net-loopback`: два реальных headless процесса, scripted movement/fire,
   монстры, 210 тиков и сравнение всего trace. Больше BACKUPTICS (128).
 - `net-errors`: аргументы, несовпадение handshake, fragmented/truncated stream,
-  silent peer, disconnect, неверный номер тика, checksum/command errors.
+  silent peer, disconnect, неверный номер тика, checksum/command errors и dmflags mismatch.
+- `match-rules`: маска, weapon type/coop/DM filtering, живые игроки против
+  monsters/projectiles/corpses (без игровых данных, включён в CI).
+- `net-rules`: временный MAP01 overlay из локального Doom II IWAD, все четыре
+  комбинации маски, реальные spawned pickups и player movement clipping.
+  Временные игровые ресурсы не попадают в Git/artifacts; без MAP01 тест skip.
+- `net-loopback-dmflags`: полные 210 тиков с маской 3 и сверкой трасс.
 - `net-windows`: два SDL-окна с различным движением/стрельбой/камерами,
   живое keyboard input и close/disconnect; interactive test с локальным IWAD.
+  Для ручного запуска скрипта с новыми правилами добавить `--dmflags 3`.
 
 `-headless-input path.bin` — только тестовый headless input, последовательность
 8-byte команд формата codec; после EOF — нулевая команда. Legacy consistency

@@ -26,6 +26,13 @@ https://github.com/kgsws/doom_ace (в refs будет)
 
 ## Уточнения из рабочей сессии
 
+- Идеи для МП (подробно `docs/IDEAS.md`): сервер с configurable max до 1024,
+  DM-боты и COOP-боты, способные проходить игру (ключи/кнопки/двери/бой/выходы).
+  Это долгосрочные цели, не текущая двухпользовательская сеть.
+- Нужны dmflags: скрыть multiplayer-only оружие в COOP; block/pass столкновений
+  игроков. Будущий server config auto включает pass при configured maxplayers >4,
+  явные block/pass должны переопределять auto.
+
 - В GitHub Actions публиковать downloadable build artifacts для друзей и других
   тестировщиков до появления релизов. Включать runtime-зависимости и инструкции,
   commit ID/лицензии/соответствующие исходники; не включать IWAD и user data.

@@ -86,6 +86,13 @@ ctest --preset windows-headless
   headless/ASan/SDL. См. `docs/NETWORK.md`; не заявлять публичную Internet-ready
   сеть, NAT, reconnect или совместимость с Chocolate/csDoom. В `refs/csDoomMaster`
   — только старый мастер-сервер, не используемый новым прототипом.
+- Direct protocol теперь v2/100-byte handshake с `dmflags` (0..3). Bit1=не
+  создавать multiplayer-only coop weapon pickups, bit2=player body pass-through.
+  Это не ZDoom numbering. Ненулевые flags только в direct coop, не писать их
+  молча в vanilla DSG/demo. См. `docs/NETWORK.md`, `match-rules`/`net-rules` tests.
+- 1024 игрока, DM/COOP progression bots и auto collision при configured max>4
+  — **идеи/цели**, не готовые функции. См. `docs/IDEAS.md`; MAXPLAYERS не увеличен,
+  серверного maxplayers config и ботов сейчас нет.
 - Artifacts: `.github/workflows/ci.yml` + `tools/package-build.py`. Windows SDL
   build использует static CRT. Пакеты только из allowlist CMake install и
   `git archive HEAD`; source должен совпадать с HEAD, не паковать dirty builds.
