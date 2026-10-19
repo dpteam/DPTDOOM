@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows",
+      "displayName": "Windows x64 (Visual Studio 2022)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows",
+      "cacheVariables": { "DPTDOOM_BACKEND": "win32" }
+    },
+    {
+      "name": "windows-headless",
+      "inherits": "windows",
+      "binaryDir": "${sourceDir}/build/windows-headless",
+      "cacheVariables": { "DPTDOOM_BACKEND": "headless" }
+    },
+    {
+      "name": "headless",
+      "displayName": "Headless (Ninja, compiler from environment)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/headless",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "DPTDOOM_BACKEND": "headless" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows", "configurePreset": "windows", "configuration": "Release" },
+    { "name": "windows-headless", "configurePreset": "windows-headless", "configuration": "Release" },
+    { "name": "headless", "configurePreset": "headless" }
+  ],
+  "testPresets": [
+    { "name": "windows", "configurePreset": "windows", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "windows-headless", "configurePreset": "windows-headless", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "headless", "configurePreset": "headless", "output": { "outputOnFailure": true } }
+  ]
+}
