@@ -53,13 +53,13 @@ def main():
         first=root/'first.deh';second=root/'second.deh';same=root/'other-path.deh';bad=root/'bad.deh';overlay=root/'patches.wad'
         first.write_bytes(HEADER+b'Initial Health = 77\nInitial Bullets = 23\n')
         same.write_bytes(first.read_bytes());second.write_bytes(HEADER+b'Initial Health = 88\n')
-        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 13\nSprite number = 1\n')
+        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 13\nUnknown 1 = 1\n')
         wad(overlay,[HEADER+b'Initial Health = 90\n',HEADER+b'Initial Health = 91\n'])
-        base=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-tics','5','-headless-session-report']
+        base=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-session-report']
 
-        def run(name,extra,ok=True):
+        def run(name,extra,ok=True,tics=5):
             work=root/name;work.mkdir()
-            result=subprocess.run(base+extra,cwd=work,capture_output=True,text=True,timeout=20)
+            result=subprocess.run(base+['-headless-tics',str(tics)]+extra,cwd=work,capture_output=True,text=True,timeout=20)
             text=result.stdout+result.stderr
             assert 'AddressSanitizer' not in text and 'runtime error:' not in text,text
             assert (result.returncode==0)==ok,(result.returncode,text)
@@ -87,14 +87,43 @@ def main():
         thing_map(iwad,map_wad)
         thing_map(iwad,patched_map,4000)
         things.write_bytes(HEADER+b'Thing 31 (Barrel)\nID # = 4000\nBits = 2\nInitial frame = 806\nAlert sound = 1\nAttack sound = 2\nPain sound = 3\nDeath sound = 16\nAction sound = 8\nHit points = 123\nSpeed = 1\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 100\nReaction time = 20\n')
+        # Both barrel animation states use existing TROOA frames, fullbright.
+        things.write_bytes(things.read_bytes()+b'Frame 806\nSprite number = 0\nSprite subnumber = 32768\nFrame 807\nSprite number = 0\nSprite subnumber = 32768\n')
         thing_copy.write_bytes(things.read_bytes())
         _,plain_thing=run('plain-thing',['-file',str(map_wad),'-deh',str(first)])
         assert 'Patch thing: type=30 id=2035 flags=524294 state=807 death=808 sounds=0,0,0,82,0 health=20 radius=655360 height=2752512' in plain_thing,plain_thing
         _,patched_thing=run('patched-thing',['-file',str(patched_map),'-deh',str(things)])
         assert 'Patch thing: type=30 id=4000 flags=2 state=807 death=808 sounds=1,2,3,16,8 health=123 radius=1572864 height=3932160 speed=1 mass=250 damage=7 pain=100 reaction=20' in patched_thing,patched_thing
+        assert 'Patch visual: type=30 sprite=0 frame=32768' in patched_thing,patched_thing
         embedded=root/'thing-lump.wad';wad(embedded,[things.read_bytes()])
         _,embedded_thing=run('thing-lump',['-file',str(patched_map),str(embedded),'-dehlump'])
         assert 'type=30 id=4000 flags=2 state=807 death=808 sounds=1,2,3,16,8 health=123 radius=1572864 height=3932160' in embedded_thing,embedded_thing
+        assert 'Patch visual: type=30 sprite=0 frame=32768' in embedded_thing,embedded_thing
+        missing_frame=root/'missing-frame.deh'
+        missing_frame.write_bytes(HEADER+b'Frame 806\nSprite number = 0\nSprite subnumber = 28\n')
+        _,text=run('missing-frame',['-file',str(map_wad),'-deh',str(missing_frame)],False)
+        assert 'DeHackEd sprite validation: Frame 806:' in text and 'absent from loaded sprite resources' in text,text
+        assert 'Session report:' not in text,text
+        missing_lump=root/'missing-frame.wad';wad(missing_lump,[missing_frame.read_bytes()])
+        _,text=run('missing-frame-lump',['-file',str(map_wad),str(missing_lump),'-dehlump'],False)
+        assert 'DeHackEd sprite validation: Frame 806:' in text,text
+        visual=root/'visual.deh';visual_copy=root/'visual-copy.deh'
+        # Ready and raising pistol states draw an existing shotgun frame B.
+        visual.write_bytes(HEADER+b'Frame 10\nSprite number = 1\nSprite subnumber = 32769\nFrame 12\nSprite number = 1\nSprite subnumber = 32769\n')
+        visual_copy.write_bytes(visual.read_bytes())
+        plain_work,_=run('visual-plain',['-headless-dump','frame.ppm'],tics=40)
+        visual_work,text=run('visual-patched',['-deh',str(visual),'-headless-dump','frame.ppm'],tics=40)
+        assert 'Patch weapon visual: sprite=1 frame=32769' in text,text
+        visual_repeat,_=run('visual-repeat',['-deh',str(visual),'-headless-dump','frame.ppm'],tics=40)
+        visual_lump=root/'visual-lump.wad';wad(visual_lump,[visual.read_bytes()])
+        visual_embedded,_=run('visual-lump',['-file',str(visual_lump),'-dehlump','-headless-dump','frame.ppm'],tics=40)
+        assert plain_work.joinpath('frame.ppm').read_bytes()!=visual_work.joinpath('frame.ppm').read_bytes()
+        assert visual_work.joinpath('frame.ppm').read_bytes()==visual_repeat.joinpath('frame.ppm').read_bytes()
+        assert visual_work.joinpath('frame.ppm').read_bytes()==visual_embedded.joinpath('frame.ppm').read_bytes()
+        # The final combination is checked, not an intermediate assignment.
+        repaired=root/'repaired-frame.deh'
+        repaired.write_bytes(missing_frame.read_bytes()+b'Frame 806\nSprite subnumber = 0\n')
+        run('repaired-frame',['-file',str(map_wad),'-deh',str(repaired)])
         # Identical attack commands: standard pistol burns bullets; patched
         # pistol uses empty shell reserve and must not burn the 50 bullets.
         inputs=root/'attack.bin';inputs.write_bytes(b''.join(struct.pack('!bbhBBBB',0,0,0,1 if tic%30>=15 else 0,0,0,0) for tic in range(200)))
@@ -170,8 +199,10 @@ def main():
         pair('text-same',[text_patch,text_copy],True,'health=100 ammo=50')
         text_different=root/'text-different.deh';text_different.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(b'Other message!')).encode()+b'\n'+old+b'Other message!')
         pair('text-different',[text_patch,text_different],False)
-        pair('thing-same',[things,thing_copy],True,'type=30 id=4000 flags=2 state=',('-file',str(patched_map)))
+        pair('thing-same',[things,thing_copy],True,'Patch visual: type=30 sprite=0 frame=32768',('-file',str(patched_map)))
         pair('thing-different',[things,first],False,extra=('-file',str(patched_map)))
+        pair('visual-same',[visual,visual_copy],True,'Patch weapon visual: sprite=1 frame=32769')
+        pair('visual-different',[visual,first],False)
         pair('duration-same',[duration,duration_copy],True,'health=100',('-headless-input',str(inputs)))
         pair('duration-different',[duration,first],False)
         # Repeating -fast initialization must not mutate the patched pistol
@@ -181,15 +212,15 @@ def main():
         pair('transition-different',[transition,first],False)
         # Skipping S_PISTOL2 skips A_FirePistol, so the same attack stream
         # leaves the clip unchanged. This verifies the real state graph path.
-        _,transition_text=run('transition-engine',['-deh',str(transition),'-headless-tics','140','-headless-input',str(inputs)])
+        _,transition_text=run('transition-engine',['-deh',str(transition),'-headless-input',str(inputs)],tics=140)
         match=re.search(r'Session report: .* health=100 ammo=(\d+)',transition_text)
         assert match and int(match[1])==50,transition_text
-        _,weapon_text=run('weapon-frame-engine',['-deh',str(weapon_frames),'-headless-tics','140','-headless-input',str(inputs)])
+        _,weapon_text=run('weapon-frame-engine',['-deh',str(weapon_frames),'-headless-input',str(inputs)],tics=140)
         match=re.search(r'Session report: .* health=100 ammo=(\d+)',weapon_text)
         assert match and int(match[1])==50,weapon_text
         pair('weapon-frame-same',[weapon_frames,weapon_frames_copy],True,'health=100',('-headless-input',str(inputs)))
         pair('weapon-frame-different',[weapon_frames,first],False)
-        print('DeHackEd engine: actual health/ammo/spawned Thing, Duration cadence, Next-frame graph, rejection/guards and network patch traces OK')
+        print('DeHackEd engine: actual health/ammo/Thing, Frame visuals and resource rejection, file/lump pixels, firing cadence, guards and network traces OK')
 
 
 if __name__=='__main__':main()

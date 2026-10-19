@@ -8,6 +8,7 @@
 #include "info.h"
 #include "m_fixed.h"
 #include "p_mobj.h"
+#include "p_pspr.h"
 #include "sounds.h"
 #include "d_englsh.h"
 #include "deh_str.h"
@@ -56,10 +57,12 @@ static mobjinfo_t base_things[NUMMOBJTYPES];
 // Parser startup is single-threaded. Keep staged tables off the small C stack;
 // unsupported states/flags/sounds never receive an assignment.
 static mobjinfo_t staged_things[NUMMOBJTYPES];
-// Only durations and existing transitions are copied/committed; action
-// pointers, sprites and state payloads never receive patch assignments.
+// Stage supported state fields only, never action pointers or misc payloads.
 static int base_tics[NUMSTATES],staged_tics[NUMSTATES];
 static statenum_t base_nextstate[NUMSTATES],staged_nextstate[NUMSTATES];
+static spritenum_t base_sprite[NUMSTATES],staged_sprite[NUMSTATES];
+static int base_frame[NUMSTATES],staged_frame[NUMSTATES];
+static boolean visual_patched[NUMSTATES],staged_visual_patched[NUMSTATES];
 static boolean base_weapon_state[NUMSTATES];
 static weaponinfo_t staged_weapons[NUMWEAPONS];
 typedef struct { const char *original; char replacement[TEXT_MAX+1]; boolean present; } text_replacement_t;
@@ -92,6 +95,21 @@ static boolean Error(unsigned int line,const char *message)
 {
     snprintf(last_error,sizeof(last_error),"line %u: %s",line,message);
     return false;
+}
+boolean DPT_DehValidateSpriteFrames(const int *frame_counts,size_t count)
+{
+    unsigned int i;
+    for(i=1;i<NUMSTATES;++i)
+    {
+        int sprite=(int)states[i].sprite,frame=states[i].frame&FF_FRAMEMASK;
+        if(!visual_patched[i])continue;
+        if(!frame_counts||sprite<0||(size_t)sprite>=count||frame>=frame_counts[sprite])
+        {
+            snprintf(last_error,sizeof(last_error),"Frame %u: sprite %d frame %d is absent from loaded sprite resources",i,sprite,frame);
+            return false;
+        }
+    }
+    return true;
 }
 static int Equal(const char *a,const char *b)
 {
@@ -328,6 +346,7 @@ void DPT_DehReset(void)
         {
             base_tics[i]=states[i].tics;
             base_nextstate[i]=states[i].nextstate;
+            base_sprite[i]=states[i].sprite;base_frame[i]=states[i].frame;
         }
         BuildWeaponStateSet();
     }
@@ -338,6 +357,8 @@ void DPT_DehReset(void)
     {
         states[i].tics=base_tics[i];
         states[i].nextstate=base_nextstate[i];
+        states[i].sprite=base_sprite[i];states[i].frame=base_frame[i];
+        visual_patched[i]=false;
     }
     for(i=0;i<TEXT_COUNT;++i)
     {
@@ -375,6 +396,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     {
         staged_tics[i]=states[i].tics;
         staged_nextstate[i]=states[i].nextstate;
+        staged_sprite[i]=states[i].sprite;staged_frame[i]=states[i].frame;
+        staged_visual_patched[i]=visual_patched[i];
         next_changed[i]=false;
     }
     while(offset<size)
@@ -457,6 +480,20 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         }
         if(section==FRAME)
         {
+            if(Equal(text,"Sprite number"))
+            {
+                if(value<0||value>=NUMSPRITES)return Error(line_number,"Sprite number outside the existing sprite table");
+                staged_sprite[index]=(spritenum_t)value;
+                staged_visual_patched[index]=true;++assignments;continue;
+            }
+            if(Equal(text,"Sprite subnumber"))
+            {
+                // Renderer supports A..] (29 frames), optionally fullbright.
+                if(value<0||value>=(FF_FULLBRIGHT*2)||(value&FF_FRAMEMASK)>=29)
+                    return Error(line_number,"Sprite subnumber must be 0..28 with optional fullbright bit 32768");
+                staged_frame[index]=value;
+                staged_visual_patched[index]=true;++assignments;continue;
+            }
             if(Equal(text,"Duration"))
             {
                 if(value<1||value>32767)return Error(line_number,"Frame Duration must be 1..32767 (zero/negative unsupported)");
@@ -468,7 +505,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
                 staged_nextstate[index]=(statenum_t)value;
                 next_changed[index]=true;++assignments;continue;
             }
-            return Error(line_number,"unsupported Frame field (only Duration and Next frame)");
+            return Error(line_number,"unsupported Frame field (Duration, Next frame, Sprite number/subnumber only)");
         }
         if(section==TEXT)
             return Error(line_number,"Text payload must follow its Text header");
@@ -515,6 +552,11 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     memcpy(mobjinfo,staged_things,sizeof(staged_things));
     for(i=0;i<NUMSTATES;++i)states[i].tics=staged_tics[i];
     for(i=0;i<NUMSTATES;++i)states[i].nextstate=staged_nextstate[i];
+    for(i=0;i<NUMSTATES;++i)
+    {
+        states[i].sprite=staged_sprite[i];states[i].frame=staged_frame[i];
+        visual_patched[i]=staged_visual_patched[i];
+    }
     memcpy(text_replacements,staged_text,sizeof(staged_text));
     SHA1_UpdateInt32(&digest_context,(unsigned int)size);
     SHA1_Update(&digest_context,(byte*)data,size);

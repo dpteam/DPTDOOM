@@ -107,6 +107,7 @@ Boom/MBF/MBF21 не отмечать готовыми от наличия refere
 Ammo type и Thing numeric fields**, отдельный DPT_DEH_CLASSIC path, без включения
 полного FEATURE_DEHACKED. Добавлены bounded Text replacements для whitelist
 vanilla messages, Thing ID/Bits/state/sound references, Frame Duration/Next frame и bounded Weapon frame references
-(existing states, без arbitrary action pointers). Thing sounds/action pointers,
+(existing states, без arbitrary action pointers). Frame Sprite number/subnumber
+имеют bounded parser и проверку загруженных кадров до симуляции. Action pointers,
 полный Text/[STRINGS], остальные Frame fields, произвольные weapon frames и BEX
 остаются очередью следующих срезов.

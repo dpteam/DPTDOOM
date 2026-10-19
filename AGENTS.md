@@ -164,13 +164,15 @@ ctest --preset windows-headless
   v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.
   Raw bytes/order/subset digest в ResourceDigest; patched vanilla save/load/
-  record запрещены до manifest format. Версия DPT-deh-thingsounds-v10; Ammo max/per,
+  record запрещены до manifest format. Версия DPT-deh-framevisual-v11; Ammo max/per,
   Weapon Ammo type только 0..3, arbitrary frame/noammo/overflow tricks отклонять.
   Tests deh-misc/deh-engine, docs/DEHACKED.md.
   Thing 1-based, optional (label); ID #/Bits/state/sound references bounded; health/reaction/pain/speed/
   radius/height/mass/damage bounded; Frame Duration1..32767, S_NULL и SARG fast range запрещены,
   bounded Text whitelist; durations only staged/reset; bounded Next frame and Weapon frame references only,
-  zero-tic cycles rejected, actions/resources не менять. Full Thing flags/
+  Frame Sprite number 0..NUMSPRITES-1, subnumber0..28|32768 (fullbright), staged/reset.
+  R_InitSprites validates visually patched states against loaded frame counts
+  before simulation; missing resources fail startup, no fallback. Actions не менять. Full Thing flags/
   states/sounds, остальные Frame/Text/BEX/MBF не готовы.
   Base/staged mobjinfo static, reset restores original. Tests actual barrel spawn;
   refs code не переносился.

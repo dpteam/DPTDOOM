@@ -1,7 +1,7 @@
 # DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-thingsounds-v10` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-framevisual-v11` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -61,7 +61,6 @@ patches или их поиска на диске; launcher пока не име�
 (количество в обычной порции; коэффициенты pickup/skill остаются штатными).
 Понижение bullet capacity ниже Initial Bullets отклоняет весь источник.
 
-`Weapon N`: индексы 0=fist, 1=pistol, 2=shotgun, 3=chaingun, 4=rocket launcher,
 `Text` принимает classic `Text old-length new-length` только для заранее
 зарегистрированных vanilla messages. Разрешены pickup/save/chat strings из
 текущего whitelist; старые bytes должны совпасть полностью. Новый payload —
@@ -70,7 +69,7 @@ non-ASCII bytes запрещены. `[STRINGS]`, неизвестные old stri
 не поддерживаются.
 
 ```text
-Text 22 18
+Text 19 18
 Picked up the armor.DPT armor message!
 ```
 
@@ -136,7 +135,8 @@ actor/class name, не исполняется и не попадает в digest
 | Alert/Attack/Pain/Death/Action sound | существующий vanilla `sfx` ID `0..NUMSFX-1` |
 
 Категория Speed определяется исходной таблицей (исходная speed ≥65536 —
-fixed-point). Patches не меняют flags/actions и не могут переключить категорию.
+fixed-point). Категория остаётся исходной даже при правке Bits/state references;
+совместимость любых сочетаний поведения с новой скоростью не гарантируется.
 Ноль отклоняется: некоторые missile/charge paths делят на speed. Это намеренно
 узкий subset, не обещание корректности любых сочетаний свойств любого мода.
 Nightmare/`-fast` штатно переопределяет скорости некоторых снарядов; в этом
@@ -153,25 +153,25 @@ Mass = 250
 После такого patch barrel при spawn получает health123/radius24/height60.
 `ID #` меняет DoomEd number, а `Bits` — только разрешённую vanilla flag mask;
 это влияет на последующие map spawns и collision/pickup/kill semantics. Duplicate
-non-negative IDs отклоняются, чтобы DoomEd lookup не стал неоднозначным. Полные
+non-negative IDs отклоняются, чтобы DoomEd lookup не стал неоднозначным.
 State fields меняют только существующие non-weapon state references; `S_NULL`
 разрешён как конечное состояние, weapon-state pool и выход за таблицу запрещены.
 Sound fields меняют только ID существующей vanilla sound table; новые lumps,
 произвольные resources и action pointers через Thing не разрешены.
 `Thing 1 Hit points` меняет mobjinfo player, но стартовое `player.health` по-прежнему
 задаёт `Misc 0 Initial Health`, как в существующем engine path. Изменения `Bits`,
- map ID и state fields staged атомарно; звуковые и action substitutions по-прежнему отклоняются.
-Типы не добавляются, frame/action tables не меняются. Таблица Thing также
+map ID, sound и state references staged атомарно; action pointers не меняются.
+Типы не добавляются. Таблица Thing также
 staged: неверное поле в конце patch не меняет ни Things, ни Misc/Ammo/Weapon,
 ни digest/count. Reset восстанавливает все исходные таблицы.
 
-### Frame — Duration и ограниченный Next frame
+### Frame — Duration, Next frame и визуальные поля
 
 Поддерживается `Duration = 1..32767` для существующих состояний; Frame индексы
 **с нуля** в оригинальной таблице, но `Frame 0` (`S_NULL`) неизменяем и отклоняется.
 В отличие от Thing, подписи в скобках у Frame пока не принимаются. `Next frame`
-меняет только существующий `state.nextstate`; action pointers, sprite/frame/misc
-и таблицы weapon references остаются неизменными.
+меняет только существующий `state.nextstate`. `Sprite number` и `Sprite subnumber`
+меняют визуальные свойства этого состояния; action pointers и misc не меняются.
 
 ```text
 Frame 13
@@ -184,10 +184,10 @@ Next frame = 15
 `S_PISTOL3`, пропуская `S_PISTOL2` и его action. Индексы — нулевые, диапазон
 `0..NUMSTATES-1`; `0` (`S_NULL`) разрешён как конечный переход.
 
-Меняются только `state.tics` и `state.nextstate`, не sprite/frame/misc/action.
+Меняются только `state.tics`, `state.nextstate`, `state.sprite` и `state.frame`.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v10, чтобы peers не путали разные semantics.
+обновлён до v11, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -198,9 +198,38 @@ Nightmare штатно сдвигает вправо/влево, пока **не
 состояний: цикл, состоящий только из zero-tic states, отклоняется, чтобы
 `P_SetMobjState`/`P_SetPsprite` не зависали. Циклы с положительной или
 бесконечной (`-1`) длительностью допустимы. Source reset возвращает исходные
-длительности и переходы, не копируя function pointers.
+длительности, переходы и визуальные поля, не копируя function pointers.
 
-`Sprite number`, `Sprite subnumber`, `Unknown 1/2`, code pointers,
+#### Sprite number / Sprite subnumber
+
+- `Sprite number = 0..NUMSPRITES-1`: индекс существующей `sprnames` таблицы,
+  не номер WAD lump и не новая sprite definition.
+- `Sprite subnumber`: frame index **0..28** (A..], предел текущего renderer),
+  опционально OR с **32768** (`FF_FULLBRIGHT`). Например, 32769 — B fullbright.
+  Остальные биты, отрицательные числа и переполнение отклоняются parser-ом.
+- Применение числовых полей атомарно вместе с другими секциями источника;
+  промежуточная пара sprite/frame не проверяется по ресурсам до конца загрузки.
+- После IWAD/PWAD и `R_InitSpriteDefs` проверяются **все визуально изменённые
+  состояния**, включая неиспользованные в текущем уровне: frame должен реально
+  существовать в загруженной `sprites[]` таблице. Отсутствующий frame/sprite —
+  startup error до симуляции, без silent fallback. Проверку полноты rotations
+  выполняет штатный sprite loader. Числовой диапазон сам по себе недостаточен.
+- Ошибка ресурса завершает startup; это не rollback уже принятых источников.
+  Порядок file/lump assignments сохраняется, допустимо исправить промежуточную
+  неверную пару поздним patch. Unit parser без IWAD вызывает отдельный validator
+  с synthetic frame counts; настоящий engine вызывает его всегда при startup.
+
+```text
+Frame 10
+Sprite number = 1
+Sprite subnumber = 32769
+```
+
+Пример меняет готовый pistol state на существующий shotgun frame B fullbright;
+не меняет action, длительность или урон оружия. Новые sprite names/ресурсы,
+самостоятельная секция `Sprite` и произвольные executable offsets не добавлены.
+
+`Unknown 1/2`, code pointers,
 произвольные weapon state references и новые state индексы по-прежнему
 отклоняются. Для них нужны отдельные проверки graph/resources/action compatibility.
 
@@ -254,11 +283,16 @@ info.c и игровой spawn проверяет deh-engine. Все patch/WAD f
 
 Duration/Frame/Weapon-frame tests проверяют реальный firing cadence (по расходу ammo с
 одинаковыми attack commands), file/lump equivalence, rollback нескольких
-секций/digest, index/range/overflow/fast exclusion, неизменные action/sprite и
+секций/digest, index/range/overflow/fast exclusion, неизменные action pointers и
 reset. Text проверяется через engine report, file/lump equivalence и same/different
 patch peers. Отдельно проверяются Next frame, пропуск pistol action, границы state
 table, zero-tic cycle, weapon action skip, same/different patch peers и matching
 traces с `-fast`.
+Frame visual tests: spawned barrel и psprite report, изменившийся framebuffer,
+повторяемость и file/lump pixel equivalence, validation отсутствующего TROO frame
+до уровня, исправление поздним assignment, полная проверка range/fullbright,
+reset и atomic rollback/digest/count. Matching peers сравнивают tic traces;
+framebuffer checksum не считается доказательством полной сетевой детерминированности.
 `deh-engine` имеет общий
 deadline 150s из-за дополнительных настоящих игровых прогонов, а не снятия
 таймаутов отдельных network/child operations.

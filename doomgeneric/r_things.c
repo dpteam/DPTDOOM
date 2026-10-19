@@ -24,6 +24,7 @@
 
 
 #include "deh_main.h"
+#include "deh_classic.h"
 #include "doomdef.h"
 
 #include "i_swap.h"
@@ -298,6 +299,15 @@ void R_InitSprites (char** namelist)
     }
 	
     R_InitSpriteDefs (namelist);
+#ifdef DPT_DEH_CLASSIC
+    {
+        int frame_counts[NUMSPRITES];
+        for(i=0;i<NUMSPRITES;++i)
+            frame_counts[i]=i<numsprites?sprites[i].numframes:0;
+        if(!DPT_DehValidateSpriteFrames(frame_counts,NUMSPRITES))
+            I_Error("DeHackEd sprite validation: %s",DPT_DehLastError());
+    }
+#endif
 }
 
 

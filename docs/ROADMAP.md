@@ -367,6 +367,15 @@ partition может породить две отдельные локальны
 - [x] `DPT-deh-thingsounds-v10`: five bounded Thing sound references to existing
   vanilla `sfx` IDs, bounds/rollback/reset, real barrel diagnostic and matching/
   mismatch network coverage. New sound lumps and action pointers remain rejected.
+- [x] `DPT-deh-framevisual-v11`: Frame Sprite number/subnumber + fullbright,
+  atomic stage/reset, loaded sprite/frame validation after R_InitSpriteDefs
+  before simulation. Barrel/weapon visuals, repeated/file/lump framebuffer,
+  missing-frame rejection, matching/mismatch peer traces. No new sprite names,
+  Sprite section, misc/action pointers or full DeHackEd compatibility.
+- [x] Проверки v11 на Windows: полный MinGW headless **33/33**, MSVC SDL
+  **35/35**, MSVC headless ASan **35/35**. Vanilla state baselines не менялись;
+  deh-engine проверяет real visual fields/framebuffer и loaded-resource rejects.
+  Новый remote Linux/macOS Actions run для v11 ещё не подтверждён.
 - [x] Предыдущий Thing slice: полные MinGW headless 33/33 и MSVC SDL 35/35,
   целевые MSVC ASan parser/engine/baselines 3/3.
 - [x] Actions run 39304002144/ddd69cc success: macOS master-client-wire fixture

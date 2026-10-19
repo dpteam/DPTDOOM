@@ -8,6 +8,7 @@
 #include "d_englsh.h"
 #include "deh_str.h"
 #include "sounds.h"
+#include "p_pspr.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -168,7 +169,7 @@ int main(void)
     {const char *invalid[]={HEADER "Frame 0\nDuration = 1\n",HEADER "Frame -1\nDuration = 1\n",
       HEADER "Frame 999999999999999999999\nDuration = 1\n",HEADER "Frame 13 (Pistol)\nDuration = 1\n",
       HEADER "Frame 13\nDuration = 0\n",HEADER "Frame 13\nDuration = -1\n",HEADER "Frame 13\nDuration = 32768\n",
-      HEADER "Frame 13\nNext frame = 999999\n",HEADER "Frame 13\nSprite number = 1\n",
+      HEADER "Frame 13\nNext frame = 999999\n",HEADER "Frame 13\nUnknown 1 = 1\n",
       HEADER "Initial Health = 5\nAmmo 0\nPer ammo = 12\nThing 2\nHit points = 42\nFrame 13\nDuration = 2\nFrame 14\nDuration = 0\n"};
      for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i){REQUIRE(!Load(invalid[i]));REQUIRE(states[S_PISTOL1].tics==30&&states[S_PISTOL2].tics==31);
       REQUIRE(deh_initial_health==100&&clipammo[0]==10&&mobjinfo[MT_POSSESSED].spawnhealth==20);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
@@ -185,6 +186,37 @@ int main(void)
     REQUIRE(Load(HEADER "Frame 13\nDuration = 60\n"));REQUIRE(states[S_PISTOL1].tics==60);
     DPT_DehReset();REQUIRE(states[S_PISTOL1].tics==4&&states[S_NULL].tics==-1);
     REQUIRE(states[S_PISTOL1].action.acv==ActionSentinel&&states[S_PISTOL1].nextstate==S_PISTOL2);
+    {
+        int counts[NUMSPRITES];char patch[256];unsigned int loaded_before;
+        memset(counts,0,sizeof(counts));counts[SPR_TROO]=2;
+        REQUIRE(DPT_DehValidateSpriteFrames(NULL,0)); // untouched tables need no resources
+        REQUIRE(Load(HEADER "Frame 13\nSprite subnumber = 32769\nSprite number = 0\n"));
+        REQUIRE(states[S_PISTOL1].sprite==SPR_TROO&&states[S_PISTOL1].frame==(FF_FULLBRIGHT|1));
+        REQUIRE(states[S_PISTOL1].tics==4&&states[S_PISTOL1].action.acv==ActionSentinel);
+        REQUIRE(states[S_PISTOL1].nextstate==S_PISTOL2);
+        REQUIRE(DPT_DehValidateSpriteFrames(counts,NUMSPRITES));
+        counts[SPR_TROO]=1;REQUIRE(!DPT_DehValidateSpriteFrames(counts,NUMSPRITES));
+        REQUIRE(strstr(DPT_DehLastError(),"Frame 13"));
+        REQUIRE(!DPT_DehValidateSpriteFrames(NULL,0));
+        counts[SPR_TROO]=2;REQUIRE(DPT_DehValidateSpriteFrames(counts,NUMSPRITES));
+        DPT_DehChecksum(a);loaded_before=DPT_DehLoadedCount();
+        {const char *invalid[]={HEADER "Frame 13\nSprite number = -1\n",
+          HEADER "Frame 13\nSprite subnumber = -1\n",HEADER "Frame 13\nSprite subnumber = 29\n",
+          HEADER "Frame 13\nSprite subnumber = 32797\n",HEADER "Frame 13\nSprite subnumber = 65536\n",
+          HEADER "Frame 13\nSprite number = 99999999999999999999999\n",
+          HEADER "Initial Health = 5\nFrame 13\nSprite subnumber = 0\nFrame 14\nSprite number = -1\n"};
+         for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i)
+         {REQUIRE(!Load(invalid[i]));REQUIRE(states[S_PISTOL1].frame==(FF_FULLBRIGHT|1));
+          REQUIRE(deh_initial_health==100&&DPT_DehLoadedCount()==loaded_before);
+          DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
+        snprintf(patch,sizeof(patch),HEADER "Frame 13\nSprite number = %d\n",NUMSPRITES);REQUIRE(!Load(patch));
+        REQUIRE(Load(HEADER "Frame 13\nSprite subnumber = 0\n"));
+        REQUIRE(states[S_PISTOL1].frame==0);REQUIRE(DPT_DehValidateSpriteFrames(counts,NUMSPRITES));
+        REQUIRE(Load(HEADER "Frame 13\nSprite subnumber = 32796\n")); // renderer bound accepted; resources checked later
+        REQUIRE(!DPT_DehValidateSpriteFrames(counts,NUMSPRITES));
+        DPT_DehReset();REQUIRE(states[S_PISTOL1].sprite==SPR_PISG&&states[S_PISTOL1].frame==7);
+        REQUIRE(states[S_PISTOL1].action.acv==ActionSentinel&&DPT_DehValidateSpriteFrames(NULL,0));
+    }
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
     puts("DeHackEd Misc/Ammo/Weapon-frame/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
 }

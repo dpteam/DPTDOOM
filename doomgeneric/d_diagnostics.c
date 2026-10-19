@@ -253,6 +253,9 @@ void D_DiagnosticsTic(void)
                     p->ammo[0],p->ammo[1],p->ammo[2],p->ammo[3],
                     clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
                 printf("Patch text: armor=%s saved=%s\n",DPT_DehString(GOTARMOR),DPT_DehString(GGSAVED));
+                if(p->psprites[ps_weapon].state)
+                    printf("Patch weapon visual: sprite=%d frame=%d\n",
+                        (int)p->psprites[ps_weapon].state->sprite,p->psprites[ps_weapon].state->frame);
                 // Report an actual spawned entity, not just the patched table.
                 // Entity fields are copied at spawn, while speed/mass/damage
                 // are consumed through info during gameplay.
@@ -267,6 +270,7 @@ void D_DiagnosticsTic(void)
                                 printf("Patch thing: type=%d id=%d flags=%d state=%d death=%d sounds=%d,%d,%d,%d,%d health=%d radius=%d height=%d speed=%d mass=%d damage=%d pain=%d reaction=%d\n",
                                     (int)mo->type,mo->info->doomednum,mo->flags,(int)(mo->state-states),mo->info->deathstate,mo->info->seesound,mo->info->attacksound,mo->info->painsound,mo->info->deathsound,mo->info->activesound,mo->health,mo->radius,mo->height,mo->info->speed,
                                     mo->info->mass,mo->info->damage,mo->info->painchance,mo->reactiontime);
+                                printf("Patch visual: type=%d sprite=%d frame=%d\n",(int)mo->type,(int)mo->sprite,mo->frame);
                                 break;
                             }
                         }
