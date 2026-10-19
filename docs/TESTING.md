@@ -18,6 +18,52 @@ ctest --preset windows
 Win32 backend пока без звука. Тест окна проверяет заголовок и `WM_CLOSE`;
 он ненадолго открывает игру. Для регулярных проверок использовать headless.
 
+## Windows SDL2: звук и музыка
+
+```powershell
+powershell -NoProfile -File tools/fetch-sdl.ps1
+cmake --preset windows-sdl -DDPTDOOM_TEST_IWAD="$PWD/refs/iwads/doom2.wad"
+cmake --build --preset windows-sdl
+ctest --preset windows-sdl
+& ./build/windows-sdl/Release/dptdoom.exe -iwad refs/iwads/doom2.wad -warp 1
+```
+
+Скрипт скачивает **официальные VC development ZIP** SDL 2.32.10 и SDL_mixer 2.8.2,
+проверяет фиксированные SHA-256 и распаковывает в `build/deps`. Он не ставит
+пакеты глобально и не скачивает игровые данные. Скрипт можно не использовать,
+если уже есть совместимые библиотеки: передать `SDL2_DIR`/`SDL2_mixer_DIR` в CMake.
+Нужны SDL2 2.0.7+ и, для звука, SDL2_mixer 2.6+.
+Сборка копирует `SDL2.dll` и `SDL2_mixer.dll` рядом с EXE. Опциональные codec DLL
+не копируются; уведомления о лицензиях — `docs/SDL-LICENSES.txt`.
+
+MUS конвертируется в MIDI в памяти, без общего временного `doom.mid`.
+Windows использует доступный native MIDI synth; для других платформ может
+понадобиться отдельная настройка синтезатора/патчей. Можно задать
+`timidity_cfg_path` в `dptdoom-doom.cfg`; пути к инструментам в таком конфиге
+должны быть настроены самим пользователем. Soundfont/Windows MIDI bank не
+поставляется с форком. RDP-перенаправление звука должно быть включено до запуска;
+если аудиоустройство сменилось, перезапустить игру.
+
+Параметры: `-nosound` — всё аудио, `-nosfx` — только эффекты, `-nomusic` — музыка.
+SDL backend поддерживает изменение размера окна, nearest-neighbor scaling и
+software fallback. Мышь/геймпады пока не добавлены.
+
+Частые проверки без видимых окон:
+
+```powershell
+ctest --preset windows-sdl -E windows-smoke
+```
+
+SDL-тесты ввода используют dummy video, аудио — dummy audio и синтетические
+сигналы, не громкоговорители. Они проверяют реальный ненулевой PCM и панораму,
+паузы/возобновление музыки, отключение подсистем и ошибку аудиодрайвера.
+Тестовый WAV подставляется через штатный механизм music substitutions; это
+не доказательство работы аппаратного MIDI на любой машине. Конвертация MUS
+проверяется отдельно, а слышимость через RDP подтверждена владельцем вручную.
+При заданном IWAD `sdl-engine` прогоняет настоящий движок с dummy video/audio,
+проверяет flags/shutdown и graceful failure. Никаких extracted IWAD ресурсов
+или сгенерированных WAV не сохраняется в Git.
+
 ## Headless
 
 Это отдельный исполняемый файл без создания окна, клавиатуры и вывода звука.
@@ -72,7 +118,8 @@ RGB-байтам; alpha/padding не участвуют. Это диагност
   неверные параметры и отсутствующий IWAD без всплывающих диалогов.
 - Win32: брендированный заголовок и закрытие окна с кодом 0.
 
-При отсутствии `DPTDOOM_TEST_IWAD` CTest запускает только тест версии.
+При отсутствии `DPTDOOM_TEST_IWAD` CTest запускает тест версии и, для SDL,
+самодостаточные тесты ввода/аудио без игровых данных.
 Для shareware 1.8 дополнительно передать `-DDPTDOOM_TEST_GAMEVERSION=1.8`.
 Скрипты также запускаются напрямую:
 
@@ -81,6 +128,6 @@ python tests/headless-smoke.py --exe build/headless/dptdoom-headless.exe --iwad 
 python tests/windows-smoke.py --exe build/msvc/Release/dptdoom.exe --iwad refs/iwads/doom2.wad
 ```
 
-Тесты пока не проверяют save/load игровых сохранений, input replay, звук, сеть,
-или совместимость модов. GCC/MSVC сохраняют ряд legacy-предупреждений Doom;
+Тесты пока не проверяют save/load игровых сохранений, gameplay input replay,
+сеть или совместимость модов. GCC/MSVC сохраняют ряд legacy-предупреждений Doom;
 успешная сборка не означает, что они все исправлены.

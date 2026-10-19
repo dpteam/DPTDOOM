@@ -19,7 +19,20 @@ cmake --build --preset windows
 
 В текущем этапе есть Win32-сборка, брендинг/иконка и headless для автоматических
 проверок. Мультиплеер, мастер-сервер, лаунчер, PK3 и DECORATE **ещё не реализованы**.
-Нативный Win32 backend пока без звука; SDL-аудио требует отдельной сборки и проверки.
+Нативный Win32 backend пока без звука; для звука использовать SDL backend.
+Для игры со звуком есть проверенная Windows SDL2-сборка:
+
+```powershell
+powershell -NoProfile -File tools/fetch-sdl.ps1
+cmake --preset windows-sdl
+cmake --build --preset windows-sdl
+& ./build/windows-sdl/Release/dptdoom.exe -iwad refs/iwads/doom2.wad
+```
+
+SDL2 2.32.10 и SDL2_mixer 2.8.2 скачиваются из официальных релизов в
+`build/deps` с проверкой SHA-256. Библиотеки не устанавливаются в систему.
+Сборка копирует нужные SDL DLL рядом с EXE. MIDI под Windows использует
+доступный системный синтезатор; звук через RDP подтверждён владельцем.
 
 - [Сборка и тестирование, включая headless](docs/TESTING.md)
 - [План и текущее состояние](docs/ROADMAP.md)
@@ -31,7 +44,7 @@ cmake --build --preset windows
 Корневой CMake выбирает Win32 на Windows, X11 на Linux/Unix и SDL на macOS.
 Можно явно указать `-DDPTDOOM_BACKEND=win32|x11|sdl|headless`.
 Для SDL нужны CMake-пакеты SDL2 и, с `-DDPTDOOM_SOUND=ON`, SDL2_mixer.
-Конфигурации Linux/macOS/SDL в форке пока не протестированы.
+Конфигурации Linux/macOS в форке пока не протестированы.
 
 Release/MinSizeRel используют LTO при поддержке компилятора; отключение:
 `-DDPTDOOM_LTO=OFF`. CRT остаётся штатным. `fast-math` не используется.

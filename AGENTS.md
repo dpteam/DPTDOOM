@@ -40,6 +40,13 @@ ctest --preset windows-headless
 
 - В текущей машине также проверены `build/msvc`, `build/mingw`, `build/headless`
   (MinGW), `build/headless-msvc`. Это локальные build trees, не исходники.
+- Windows SDL + звук: `powershell -NoProfile -File tools/fetch-sdl.ps1`, затем
+  `cmake --preset windows-sdl`, build/test с тем же preset. Зависимости лежат
+  только в `build/deps`, официальный ZIP проверяется SHA-256. Полные инструкции
+  и ограничения — `docs/TESTING.md`. Владелец подтвердил звук через RDP.
+- `ctest --preset windows-sdl -E windows-smoke` не открывает видимые окна:
+  input/audio tests и sdl-engine используют dummy SDL drivers. Они не доказывают
+  работу аппаратного MIDI; для него нужна ручная оконная проверка.
 - Тесты создают временные рабочие каталоги, не меняя конфиги игрока.
 - Headless — бэкенд тестирования, **не** dedicated multiplayer server.
 - Ванильный `-timedemo` сообщает результат через `I_Error` и возвращает ненулевой
@@ -53,6 +60,7 @@ ctest --preset windows-headless
 
 - `FEATURE_MULTIPLAYER` выключен, `net_*.c` отсутствуют. Заголовки не означают,
   что сеть работает. В `refs/csDoomMaster` — только мастер-сервер, не netcode.
-- Звук есть в исходном SDL-бэкенде; нативная Win32/headless сборка без звука.
+- Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
+  Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
 - Upstream PR и решения по ним фиксируются в `docs/UPSTREAM.md`.
