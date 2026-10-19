@@ -16,7 +16,10 @@
 
 - `refs/` — локальные материалы, весь каталог игнорируется Git.
 - Тестовый лицензионный IWAD владельца: `refs/iwads/doom2.wad`.
-  Не коммитить IWAD, извлечённые игровые ресурсы, сохранения или скриншоты игры.
+  Не коммитить IWAD, извлечённые игровые ресурсы, сохранения или тестовые снимки.
+  Исключение по явной просьбе владельца: выбранные showcase PNG в `docs/images/`
+  для README; получать из framebuffer/WebView, без рамок/рабочего стола/личных
+  путей. Генерация — `tools/capture-showcase.py`, временные captures в build/.
 - Иконка из `refs/DPTDOOM_ICON.png` скопирована в `resources/`.
   Обновление: `python tools/import-icon.py` (нужен Pillow).
 - Сохранять GPL и copyright исходных авторов. Наличие кода в `refs/` не является
@@ -116,6 +119,10 @@ ctest --preset windows-headless
   протокол/limits — `docs/MASTER.md`. Windows MSVC/MinGW tests: master-model,
   master-loopback (Python только клиент теста). Не называть directory игровым
   server: публикации игры/browser/query-reachability пока нет, TLS/auth тоже нет.
+  Default master TCP port 25135; launcher.ini [Master] Endpoint по умолчанию
+  play.dartpower.xyz:25135 (не перезаписывать пользовательский адрес).
+  По просьбе владельца допустим тестовый --bind 0.0.0.0:25135, но не создавать
+  firewall/router rules и не заявлять внешнюю доступность без проверки.
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.

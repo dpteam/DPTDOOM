@@ -5,6 +5,29 @@
 
 ![DPT.DOOM icon](resources/dptdoom.png)
 
+## Посмотреть
+
+Windows HTML launcher: локальные ресурсы, профили, одиночная игра и direct COOP.
+Тёмная и светлая темы переключаются внутри приложения.
+
+| Тёмная тема | Светлая тема |
+|---|---|
+| ![DPT.DOOM Launcher — тёмная тема](docs/images/launcher-dark.png) | ![DPT.DOOM Launcher — светлая тема](docs/images/launcher-light.png) |
+
+**Игра — настоящие кадры DPT.DOOM из Doom II demo playback:**
+
+![DPT.DOOM — Doom II, DEMO1](docs/images/game-demo1.png)
+
+| DEMO2 | DEMO3 |
+|---|---|
+| ![DPT.DOOM — Doom II, DEMO2](docs/images/game-demo2.png) | ![DPT.DOOM — Doom II, DEMO3](docs/images/game-demo3.png) |
+
+Снимки сняты автоматически из WebView2 и кадрового буфера движка — без рамок
+окон, рабочего стола и OpenCode. Пути в launcher — демонстрационные.
+Игровые кадры иллюстрируют работу порта: Doom II и его графика принадлежат
+соответствующим правообладателям, **IWAD в комплект не входит**.
+Как переснять: [docs/images/README.md](docs/images/README.md).
+
 ## Быстрый старт: Windows
 
 Нужны CMake 3.21+, Visual Studio 2022 (C++/Windows SDK) и собственный IWAD.
@@ -12,6 +35,7 @@
 `refs/` и WAD-файлы не попадают в Git.
 
 ```powershell
+powershell -NoProfile -File tools/fetch-webview2.ps1
 cmake --preset windows
 cmake --build --preset windows
 & ./build/windows/Release/dptdoom.exe -iwad refs/iwads/doom2.wad
@@ -19,13 +43,15 @@ cmake --build --preset windows
 
 В текущем этапе есть Win32-сборка, брендинг/иконка и headless для автоматических
 проверок. Есть **экспериментальный direct coop для двух игроков** на доверенной
-LAN/loopback; это ещё не готовый Internet multiplayer. Мастер-сервер, лаунчер,
-PK3 и DECORATE **не реализованы**.
+LAN/loopback; это ещё не готовый Internet multiplayer. Есть Windows HTML launcher
+и отдельный нативный master directory-прототип. Автопубликация/список серверов
+в launcher, игровой dedicated server, PK3 и DECORATE **ещё не реализованы**.
 Нативный Win32 backend пока без звука; для звука использовать SDL backend.
 Для игры со звуком есть проверенная Windows SDL2-сборка:
 
 ```powershell
 powershell -NoProfile -File tools/fetch-sdl.ps1
+powershell -NoProfile -File tools/fetch-webview2.ps1
 cmake --preset windows-sdl
 cmake --build --preset windows-sdl
 & ./build/windows-sdl/Release/dptdoom.exe -iwad refs/iwads/doom2.wad

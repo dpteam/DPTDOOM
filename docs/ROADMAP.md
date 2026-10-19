@@ -239,7 +239,13 @@ partition может породить две отдельные локальны
 - [x] Data-free C model + real native EXE loopback tests; MSVC/MinGW Windows.
 - [x] Regression Windows: 20/20 MinGW headless, 22/22 MSVC headless ASan,
   18/18 SDL без interactive; игровой engine/handshake не менялись.
+- [x] По просьбе владельца master default TCP port 25135, клиентский default
+  `play.dartpower.xyz:25135` в launcher.ini при сохранении; custom не затирается.
+  Тестовый bind 0.0.0.0:25135 локально ответил; внешний port forwarding/DNS не проверены.
 - [ ] Автопубликация waiting-host из игры/launcher, снятие при подключении/выходе.
+- [ ] По просьбе владельца: Debug-only AllocConsole игрового клиента + file log;
+  Release не открывает диагностическую консоль. Master — console + file events
+  (startup/registration/heartbeat/expiry/errors), без токенов и packet spam.
 - [ ] Browser в launcher, выбор IP/домена/порта master; статус unverified,
   совместимость build/resources/map/rules и join без зависимости direct от master.
 - [ ] Отдельный безопасный game-query/challenge для port reachability; текущий
@@ -285,6 +291,10 @@ partition может породить две отдельные локальны
   также world/map/physics/AI изменений, не только подключения Vulkan.
 
 ## Что не заявляется готовым
+
+README showcase обновлён по просьбе владельца: WebView screenshots обеих тем и
+три headless demo framebuffer PNG, без desktop/window borders/личных путей.
+Воспроизведение — `tools/capture-showcase.py`; raw captures только в build/.
 
 Полноценный Internet multiplayer, integrated server browser/master publication,
 игровой dedicated server, PK3 и DECORATE ещё отсутствуют. Windows HTML launcher
