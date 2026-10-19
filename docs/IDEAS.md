@@ -118,6 +118,8 @@
 
 1. **Надёжный выход из сети**: disconnect-to-menu, reconnect/resync и сохранение
    причины ошибки вместо закрытия всей игры; UI состояния подключения/таймаутов.
+   Active-session disconnect-to-menu уже добавлен; reconnect/startup recovery
+   и resync ещё нет, не объединять их в одну «готовую» функцию.
 2. **Профили модов и manifest ресурсов**: человекочитаемый mismatch report и
    нужный порядок WAD/PK3; автоматические downloads только с подтверждением,
    лимитами/хешами, sandbox paths и соблюдением прав на game data.

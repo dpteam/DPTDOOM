@@ -77,8 +77,22 @@ state checksum и завершала игру при T. Исправление �
 transport/UI-поле, не отключая остальные проверки состояния. Чат сбрасывается
 при новом уровне/получателе, Escape отменяет накопленный текст.
 
-Меню не останавливает симуляцию в netgame. Закрытие/обрыв одного процесса
-завершает второго понятной сетевой ошибкой; возврата в меню/reconnect пока нет.
+Меню не останавливает симуляцию в netgame. Закрытие/обрыв одного процесса,
+таймаут или некорректный игровой пакет возвращают второго в титульное меню с
+понятной причиной. После подтверждения сообщения можно начать SP или загрузить
+обычный SP save. Сетевые игроки/rules/очереди/чат/пауза/fast state сбрасываются;
+никакой тик из недополученной пары команд не исполняется.
+
+**F7 / End Game** в direct coop предлагает подтверждение отключения. `N`/Escape
+не меняют сессию; `Y` завершает её у обоих игроков и показывает меню. Закрытие
+окна по-прежнему завершает локальный процесс нормально, не как разрыв в меню.
+Reconnect/re-host/join из меню пока нет: для новой сетевой сессии перезапустить
+оба процесса с CLI-параметрами. Автовосстановление прерванного мира не заявляется.
+
+Ошибки аргументов/bind/connect/handshake **до старта сессии** пока завершают
+процесс с ненулевым кодом; их UI recovery — следующий отдельный шаг.
+`-net-fail-fast` сохраняет прежний диагностический ненулевой выход и для игровых
+сетевых ошибок (используется тестом `net-errors`), не нужен для обычной игры.
 На плохом канале TCP блокирует дальнейшие тики до доставки/таймаута: это
 осознанное ограничение простого lockstep, не обещание плавного Internet gameplay.
 
@@ -117,6 +131,9 @@ ctest --preset windows-asan -R 'net-' --output-on-failure
   монстры, 210 тиков и сравнение всего trace. Больше BACKUPTICS (128).
 - `net-errors`: аргументы, несовпадение handshake, fragmented/truncated stream,
   silent peer, disconnect, неверный номер тика, checksum/command errors и dmflags mismatch.
+- `net-recovery`: игровые peer close/timeout/order/desync/command failures без
+  fail-fast возвращают в меню, продолжают headless loop и завершаются по лимиту
+  тиков с кодом 0. Старый тест `net-errors` явно использует `-net-fail-fast`.
 - `match-rules`: маска, weapon type/coop/DM filtering, живые игроки против
   monsters/projectiles/corpses (без игровых данных, включён в CI).
 - `net-rules`: временный MAP01 overlay из локального Doom II IWAD, все четыре
@@ -127,8 +144,13 @@ ctest --preset windows-asan -R 'net-' --output-on-failure
   210 тиков и совпадающие trace; сетевой GUI test также проверяет реальные T,
   пробел/Backspace/Enter/Escape и input widget при уменьшенном viewport.
 - `net-windows`: два SDL-окна с различным движением/стрельбой/камерами,
-  живое keyboard input и close/disconnect; interactive test с локальным IWAD.
+  живое keyboard input, peer close → меню → бывший guest стартует SP/save/load;
+  interactive test с локальным IWAD. `net-windows-local-end` проверяет F7 cancel/
+  confirm, dmflags=3, fast monsters, paused/open chat teardown и тот же SP reset.
   Для ручного запуска скрипта с новыми правилами добавить `--dmflags 3`.
+
+Дополнительно локально проверен SDL ASan-вариант с dummy аудио, `--audio` и
+`--fast --local-end`. Это не проверка полного reconnect/online snapshot.
 
 `-headless-input path.bin` — только тестовый headless input, последовательность
 8-byte команд формата codec; после EOF — нулевая команда. Legacy consistency

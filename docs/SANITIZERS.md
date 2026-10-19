@@ -72,3 +72,10 @@ signed shifts/overflow conventions, их нельзя молча подавля�
 capture/ошибки аргументов, allocator probes и timer tests. Дополнительно ASan
 прогнал три демо и save/load shareware v1.8. Это не fuzzing произвольных модов
 и не проверка всех карт. Автотесты не требуют видимых окон.
+
+Дополнительно для active-session teardown локально проверена SDL ASan-сборка
+`build/asan-sdl` (RelWithDebInfo, `DPTDOOM_BACKEND=sdl`, `DPTDOOM_SOUND=ON`,
+`DPTDOOM_SANITIZER=address`, `DPTDOOM_LTO=OFF`, пути к тем же SDL packages).
+`tests/net-windows.py --local-end --fast --audio --dmflags 3` с
+`SDL_AUDIODRIVER=dummy` проверяет остановку каналов/чата/паузы, возврат в меню,
+старт SP и save/load. Этот оконный тест не включён в обычный headless ASan preset.

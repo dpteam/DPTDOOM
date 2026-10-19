@@ -41,8 +41,8 @@ OPL-синтез, мышь/геймпады. Дефолтный native Win32 bac
 
 ## Ближайшее
 
-1. Graceful disconnect-to-menu и читабельная причина сетевой ошибки; затем
-   профили ресурсов/игрока и простое UI прямого подключения как основа launcher.
+1. Профили ресурсов/игрока и простое UI прямого подключения как основа launcher;
+   graceful startup/handshake failure UI, затем reconnect/re-host lifecycle.
 2. Первый реальный GitHub Actions run после разрешённого push; проверить Linux/macOS.
 3. Продолжить 64-битный/UB-аудит (не все legacy warnings устранены),
    расширить sanitizer coverage на SDL, другие IWAD/карты и платформы.
@@ -127,7 +127,8 @@ WSL-инструменты по решению владельца не уста�
 - [x] Регрессионные state-baselines сохранены без обновления.
 - [ ] Реальная сессия двух машин/друзей, проверка latency/packet loss.
 - [ ] Online snapshots и load-to-SP с предупреждением/подтверждением отключения.
-- [ ] Graceful disconnect-to-menu/reconnect; сейчас peer failure завершает процесс.
+- [x] Graceful disconnect-to-menu для активной игры; причина/подтверждение/SP reset.
+- [ ] Reconnect/re-host из меню; startup/handshake failure recovery ещё не готов.
 
 Команды и строгие ограничения: `docs/NETWORK.md`. Это не сетевой протокол
 Chocolate Doom и не готовый публичный Internet server. UDP/prediction/NAT не
@@ -148,6 +149,23 @@ Chocolate Doom и не готовый публичный Internet server. UDP/pr
 
 Не повышать MAXPLAYERS до 1024 ради заявления поддержки: нужна новая серверная
 архитектура и нагрузочные тесты. См. подробности идей/этапов в `docs/IDEAS.md`.
+
+### Этап 2.3 — завершение активной сессии
+
+- [x] Peer close, receive/send failure, timeout, malformed/order/command/desync
+  возвращают в menu на границе тика вместо I_Error завершения процесса.
+- [x] F7 disconnect с cancel/confirm; закрытие окна по-прежнему закрывает приложение.
+- [x] Сброс buffered ticcmd/local player mask/timebase, players/rules/chat/input/
+  pause/fast-monster shared state; старый мир не обновляется после обрыва.
+- [x] Бывший player2 начинает SP как player1, сохраняется/загружается без ghost player.
+- [x] Headless recovery tests, SDL window tests с cancel/open-chat/paused/fast,
+  отдельный SDL+ASan+dummy-audio teardown прогон.
+- [x] Финальная регрессия: 16/16 MinGW headless, 18/18 MSVC headless ASan,
+  19/19 MSVC SDL; single-player state baselines неизменны.
+- [ ] Graceful startup/connect/handshake recovery, reconnect/re-host ещё отсутствуют.
+
+Диагностический `-net-fail-fast` оставляет аварийный exit для packet regression tests.
+Он не включён по умолчанию для обычной игры.
 
 - Требование владельца: разрешить локальный snapshot во время онлайн-игры.
   Загрузка snapshot запускает single-player; в подключённой МП-сессии сначала

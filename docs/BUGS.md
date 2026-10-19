@@ -31,8 +31,10 @@
 
 ## Открытые ограничения (не путать с реализованными фичами)
 
-- **NET-001:** direct peer disconnect/timeout закрывает процесс вместо возврата
-  в меню; планируется graceful disconnect/reconnect.
+- **NET-001 — исправлено локально для активной игры:** direct peer close/timeout/
+  malformed tic теперь возвращают в меню, не закрывают игру. Проверки
+  `net-recovery`/`net-windows-local-end`, включая SP/save/load после отключения.
+  Startup/handshake ошибки ещё завершаются с ненулевым кодом; reconnect не готов.
 - **NET-002:** только 2-player trusted LAN TCP, нет Internet hardening/NAT/late join.
 - **CHAT-001:** пока ASCII vanilla HUD, нет team routing, истории, mute/rate-limits
   высокого уровня; общий чат не является защищённым/приватным каналом.

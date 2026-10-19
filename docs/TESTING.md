@@ -58,6 +58,10 @@ ctest --preset windows-sdl -LE interactive
 SDL-тесты ввода используют dummy video, аудио — dummy audio и синтетические
 сигналы, не громкоговорители. Они проверяют реальный ненулевой PCM и панораму,
 паузы/возобновление музыки, отключение подсистем и ошибку аудиодрайвера.
+
+Оконный `net-windows` теперь проверяет peer close → меню → SP/save/load;
+`net-windows-local-end` — F7 cancel/confirm, rules/fast/chat/pause cleanup.
+Игровые packet errors проверяются отдельно в fail-fast и menu-recovery режимах.
 Тестовый WAV подставляется через штатный механизм music substitutions; это
 не доказательство работы аппаратного MIDI на любой машине. Конвертация MUS
 проверяется отдельно, а слышимость через RDP подтверждена владельцем вручную.
