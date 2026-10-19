@@ -41,8 +41,8 @@ OPL-синтез, мышь/геймпады. Дефолтный native Win32 bac
 
 ## Ближайшее
 
-1. Довести HTML launcher по обратной связи владельца; затем master API/browser
-   с выбором IP/домена master. Player profiles пока план. Graceful engine
+1. Прогнать новый publication/browser на GitHub и двух машинах; затем улучшать
+   reachability/compatibility UI. Player profiles пока план. Graceful engine
    startup/handshake recovery, reconnect/re-host lifecycle — отдельный этап.
 2. Первый реальный GitHub Actions run после разрешённого push; проверить Linux/macOS.
 3. Продолжить 64-битный/UB-аудит (не все legacy warnings устранены),
@@ -72,7 +72,8 @@ mod manifests, administration/mute/rate-limits, сетевой HUD/diagnostic re
 - [x] Actions pinned SHA, read-only token, timeout/cancel, failure logs без build tree.
 - [x] Workflow прошёл actionlint; Windows data-free build проверен с чистого дерева сборки.
 - [x] Добавлены downloadable Windows SDL/headless build artifacts с инструкцией,
-  commit ID, SHA-256 и соответствующим source ZIP; remote upload ещё не выполнен.
+  commit ID, SHA-256 и соответствующим source ZIP; появились успешные remote
+  runs (6061a13/run #11), текущие изменения требуют нового прогона.
 - [x] Исправлены X11 null display handling и неверная высота XImage (runtime не проверен).
 - [ ] Выполнить workflow на GitHub и устранить реальные cross-platform failures.
 
@@ -222,9 +223,10 @@ partition может породить две отдельные локальны
 - [x] Pinned SDK fetch + SHA-256, CMake install/package Loader DLL/LICENSE/NOTICE.
 - [x] Model data-free tests и реальный Windows/WebView2 SP/host/join UI test.
 - [x] Windows regression: 22/22 SDL, 18/18 MinGW headless, 20/20 MSVC headless
-  ASan; workflow actionlint зелёный. Remote GitHub run всё ещё не выполнен.
-- [ ] Browser/master endpoint IP/domain; player appearance profiles, Unicode
-  engine paths, drag/drop/search, launcher для Linux/macOS.
+  ASan; workflow actionlint зелёный. Remote run #7/21aae1e прошёл.
+- [x] Browser/master endpoint IP/domain — см. этап 3.2 ниже.
+- [ ] Player appearance profiles, Unicode engine paths, drag/drop/search,
+  launcher для Linux/macOS.
 
 См. `docs/LAUNCHER.md`. Это playtest, не installer/release. WebView2 Runtime
 требуется отдельно, сам launcher ничего не устанавливает.
@@ -242,7 +244,8 @@ partition может породить две отдельные локальны
 - [x] По просьбе владельца master default TCP port 25135, клиентский default
   `play.dartpower.xyz:25135` в launcher.ini при сохранении; custom не затирается.
   Тестовый bind 0.0.0.0:25135 локально ответил; внешний port forwarding/DNS не проверены.
-- [ ] Автопубликация waiting-host из игры/launcher, снятие при подключении/выходе.
+- [x] Opt-in публикация waiting-host из игры/launcher, heartbeat, снятие при
+  accept/shutdown; реальный engine/master/guest test и outage fallback.
 - [x] По просьбе владельца: Debug-only AllocConsole игрового клиента + file log;
   Release не открывает диагностическую консоль. Master — console + file events
   (startup/registration/heartbeat/expiry/errors), без токенов и packet spam.
@@ -251,18 +254,25 @@ partition может породить две отдельные локальны
 - [x] Полный локальный прогон: 23/23 MinGW headless, 25/25 MSVC headless ASan;
   27/27 MSVC SDL; настоящий Debug SDL windows-smoke и launcher SP/COOP suite
   тоже прошли. Simulation baselines не обновлялись.
-- [ ] CI run #9: Windows jobs успешны; Linux/macOS master-loopback падает.
+- [x] CI run #9: Windows jobs успешны; Linux/macOS master-loopback падал.
   Исправлены предпосылки теста (loopback aliases, capacity pacing/TTL), добавлены
-  case diagnostics; точный remote traceback ещё ожидается, rerun не выполнен.
-- [ ] Browser в launcher, выбор IP/домена/порта master; статус unverified,
-  совместимость build/resources/map/rules и join без зависимости direct от master.
+  case diagnostics; новый run #11/6061a13 success, подтверждён API и владельцем.
+- [x] Browser в launcher, выбор IP/домена/порта master, refresh/select и
+  unverified metadata; join с переносом map/rules, ресурсы проверяет handshake.
+- [x] Regression: 29/29 Windows MSVC SDL, 26/26 MinGW headless,
+  28/28 MSVC headless ASan. Новые client-wire и actual game publication tests.
+- [ ] Browser compatibility badges/ping/filter/favorites; сейчас не обещать
+  совпадение build/resources до handshake и game-port reachability.
 - [ ] Отдельный безопасный game-query/challenge для port reachability; текущий
   single accept нельзя занимать проверочным подключением master.
 
 Протокол/запуск/ограничения — `docs/MASTER.md`. Это directory, **не игровой server**,
-не Internet-ready сервис. Launcher browser остаётся недоступным до интеграции.
+не Internet-ready сервис. Native browser/publication связка проверяется локально.
 
 ### Последующие задачи master/server
+
+- [ ] P2P PWAD (PK3 после загрузчика), без коммерческих IWAD; allowlist точных
+  hashes для Freedoom 1/2 и shareware DOOM1.WAD, согласие/права/лимиты/safe cache.
 
 - После работающего игрового подключения: heartbeat, TTL, список серверов,
   challenge/проверка источника, лимиты и защита от UDP amplification.
@@ -304,7 +314,7 @@ README showcase обновлён по просьбе владельца: WebView
 три headless demo framebuffer PNG, без desktop/window borders/личных путей.
 Воспроизведение — `tools/capture-showcase.py`; raw captures только в build/.
 
-Полноценный Internet multiplayer, integrated server browser/master publication,
-игровой dedicated server, PK3 и DECORATE ещё отсутствуют. Windows HTML launcher
-и standalone directory-ядро есть; игра — экспериментальный direct coop (protocol v2).
+Полноценный Internet multiplayer, игровой dedicated server, P2P downloads,
+PK3 и DECORATE ещё отсутствуют. Windows HTML launcher/browser и opt-in
+master publication есть; игра — экспериментальный direct coop (protocol v2).
 Первый этап не является реализацией всего ТЗ.

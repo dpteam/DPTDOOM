@@ -99,6 +99,7 @@ def main():
     user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     processes, clients, game_pids = [], [], []
+    master, master_log = None, None
 
     def windows(pid):
         handles = []
@@ -229,18 +230,41 @@ def main():
             assert (storage / "game/profile1/default.cfg").read_bytes() == original
             # Host/join through real page buttons; no engine CLI bypass.
             port = free_port()
+            master_port = free_port()
+            master_log = (root / "master.stdout.log").open("wb")
+            master = subprocess.Popen([str(exe.parent / "dptdoom-master.exe"), "--port", str(master_port),
+                                       "--log", str(root / "master.events.log")], cwd=root, stdout=master_log, stderr=master_log)
             p2, c2, storage2 = start(root / "custom data")
             set_fields(c, 1, 2, port)
             c.js("$('extra').checked=true;$('pass').checked=true;send('preview')")
+            c.js(f"$('serversNav').click();$('masterEndpoint').value='localhost:{master_port}';$('publishHost').checked=true;$('sessionName').value='<b>Browser test</b>';$('masterSave').click()")
+            wait(lambda: c.js("$('status').textContent==='Настройки master сохранены.'"))
             pid1 = launch(c, False)
-            set_fields(c2, 2, 1, port)
-            c2.js("$('extra').checked=true;$('pass').checked=true;send('preview')")
+            wait(lambda: any('waiting coop host published' in f.read_text(errors='replace') for f in storage.glob('sessions/*/game.log')))
+            set_fields(c2, 0, 1, 2342)
+            c2.js(f"$('serversNav').click();$('masterEndpoint').value='localhost:{master_port}';$('refreshServers').click()")
+            wait(lambda: c2.js("document.querySelectorAll('.server-card').length===1"))
+            assert c2.js("document.querySelector('.server-card strong').textContent") == '<b>Browser test</b>'
+            assert c2.js("document.querySelectorAll('.server-card b').length") == 0
+            c2.js("document.querySelector('.server-card button').click()")
+            wait(lambda: c2.js("mode===2&&$('port').value==='" + str(port) + "'"))
+            assert c2.js("$('extra').checked&&$('pass').checked")
+            assert c2.js("$('status').textContent.includes('не проверена')")
             pid2 = launch(c2)
             time.sleep(2)
             close_game(pid2)
             wait(lambda: c2.js("!$('launch').disabled"))
             close_game(pid1)
             wait(lambda: c.js("!$('launch').disabled"))
+            c2.js("$('refreshServers').click()")
+            wait(lambda: c2.js("$('status').textContent.includes('Список получен: 0')"))
+            assert c2.js("document.querySelectorAll('.server-card').length") == 0
+            assert '[Master]' in (storage / 'launcher.ini').read_text(encoding='utf-16')
+            master.terminate();master.wait(10);master_log.close()
+            c2.js("$('refreshServers').click()")
+            wait(lambda: c2.js("$('status').textContent.includes('Master недоступен')"))
+            c2.js("$('masterEndpoint').value='https://bad.invalid:5';$('refreshServers').click()")
+            wait(lambda: c2.js("$('status').classList.contains('error')"))
             logs = [f.read_text(errors="replace") for d in (storage, storage2) for f in d.glob("sessions/*/game.log")]
             assert sum("connected" in text for text in logs) >= 2, logs
             assert not any("desync" in text.lower() for text in logs), logs
@@ -249,8 +273,12 @@ def main():
             time.sleep(.3)
             assert c.js("location.href") == "https://dptdoom.local.invalid/"
             assert c.js("document.title").startswith("DPT.DOOM")
-            print("Launcher Windows: bridge, portable/CWD, light/dark theme persistence/layout, profiles, validation, escaping, profile lock, SP twice, coop host/join and blocked navigation OK")
+            print("Launcher Windows: bridge/themes/portable, actual master publication + DNS browser selection/escaping/removal/outage, SP/COOP and blocked navigation OK")
         finally:
+            if master is not None and master.poll() is None:
+                master.terminate();master.wait(10)
+            if master_log is not None:
+                master_log.close()
             for pid in game_pids:
                 for hwnd in windows(pid):
                     user.PostMessageW(hwnd, 0x10, 0, 0)

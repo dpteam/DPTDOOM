@@ -14,6 +14,13 @@ test portability fixes (loopback alias capability, paced full-list test с TTL60
 и case-level failure logs; успешный remote rerun нового master пока не подтверждён.
 Это не полная ручная проверка игры Linux/macOS.
 
+Подтверждено исправление: run
+[#11, 6061a13](https://github.com/dpteam/DPTDOOM/actions/runs/39269095812) завершён
+**success** (public GitHub API, 19.10.2026), также подтверждено владельцем.
+Headless/SDL Windows/Linux/macOS и Windows ASan в этом run прошли. Это проверка
+именно той ревизии и data-free сценариев; новые browser/publication изменения
+ещё требуют следующего remote run. Ручная игра Linux/macOS не проверена.
+
 ## Матрица
 
 | Job | Runner | Проверки без игровых данных |

@@ -2,8 +2,11 @@
 #define UNICODE
 #define _UNICODE
 #define NOMINMAX
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include "launch_model.h"
 #include "storage.h"
+#include "../master/client.h"
 #include <commdlg.h>
 #include <shlobj.h>
 #include <shellapi.h>
@@ -29,6 +32,28 @@ static bool importOffered;
 static const wchar_t *uiOrigin=L"https://dptdoom.local.invalid/";
 static std::deque<std::wstring> pendingMessages;
 static bool processingMessage;
+static std::wstring masterEndpoint=LP_MASTER_ENDPOINT;
+static std::string resolvedMaster;
+static bool publishHost;
+static bool masterSettingsValid=true;
+static std::wstring sessionName=L"DPT.DOOM COOP";
+static std::vector<unsigned char> serverRows;
+struct DirectoryJob
+{
+    std::string host;
+    unsigned int port=0;
+    bool list=false,ok=false;
+    std::string ip;
+    std::vector<unsigned char> rows;
+};
+static DirectoryJob *directoryJob;
+static HANDLE directoryThread;
+static ULONGLONG directoryDeadline;
+static bool directoryTimedOut, launchAfterResolve;
+static ULONGLONG rowsReceived;
+static bool masterSettingsMessageFailed;
+static launch_profile_t pendingLaunchProfile;
+static std::wstring pendingLaunchEndpoint,pendingLaunchName;
 
 static void Error(const wchar_t *text) { MessageBoxW(window, text, L"DPT.DOOM Launcher", MB_OK | MB_ICONWARNING); }
 static std::wstring Quote(const std::wstring &s)
@@ -68,7 +93,79 @@ static void State(bool withProfile = true)
         for (unsigned int i=0; i<profile.mod_count; ++i) { if (i) json += L","; json += Quote(profile.mods[i]); }
         json += L"]}";
     }
+    if(withProfile)json+=L",\"masterEndpoint\":"+Quote(masterEndpoint)+L",\"publishHost\":"+(publishHost?L"true":L"false")+L",\"sessionName\":"+Quote(sessionName);
     Send(json + L"}");
+}
+static DWORD WINAPI DirectoryWorker(void *argument)
+{
+    auto job=static_cast<DirectoryJob*>(argument);
+    WSADATA wsa;
+    if(WSAStartup(MAKEWORD(2,2),&wsa))return 0;
+    addrinfo hints={},*addresses=nullptr;hints.ai_family=AF_INET;hints.ai_socktype=SOCK_STREAM;
+    if(!getaddrinfo(job->host.c_str(),nullptr,&hints,&addresses))
+    {
+        char ip[INET_ADDRSTRLEN];
+        auto address=reinterpret_cast<sockaddr_in*>(addresses->ai_addr);
+        if(inet_ntop(AF_INET,&address->sin_addr,ip,sizeof(ip)))job->ip=ip;
+        freeaddrinfo(addresses);
+    }
+    if(!job->ip.empty())
+    {
+        if(!job->list)job->ok=true;
+        else
+        {
+            dm_client_query_t query;MC_Init(&query);
+            MC_Begin(&query,job->ip.c_str(),job->port,DM_LIST,nullptr,0,GetTickCount64());
+            int result=0;
+            while(!result){result=MC_Poll(&query,GetTickCount64());if(!result)Sleep(5);}
+            if(result>0&&!query.status)
+            {
+                unsigned count=DM_Get32(query.response+DM_HEADER);
+                job->rows.assign(query.response+DM_HEADER+4,query.response+DM_HEADER+4+count*DM_ROW);job->ok=true;
+            }
+            MC_Close(&query);
+        }
+    }
+    WSACleanup();return 0;
+}
+static bool MasterFields(const std::vector<std::wstring> &f)
+{
+    if(f.size()!=6 || f[2].size()>260 || f[4].empty() || f[4].size()>63 || (f[3]!=L"0"&&f[3]!=L"1"))return false;
+    std::string endpoint;
+    for(wchar_t ch:f[2]){if(ch>127)return false;endpoint+=static_cast<char>(ch);}
+    char host[254];unsigned port;
+    if(!MC_Endpoint(endpoint.c_str(),host,&port))return false;
+    for(wchar_t ch:f[4])if(ch<32||ch>126)return false;
+    if(f[4].front()==L' '||f[4].back()==L' ')return false;
+    if(masterEndpoint!=f[2]){serverRows.clear();resolvedMaster.clear();if(directoryThread){directoryTimedOut=true;launchAfterResolve=false;}}
+    masterEndpoint=f[2];publishHost=f[3]==L"1";sessionName=f[4];return true;
+}
+static bool StartDirectory(bool list)
+{
+    if(directoryThread){Status(L"Предыдущий запрос master ещё завершается.",true);return false;}
+    std::string endpoint(masterEndpoint.begin(),masterEndpoint.end());char host[254];unsigned port;
+    if(!MC_Endpoint(endpoint.c_str(),host,&port)){Status(L"Master: нужен IP/домен:порт без URL, пути и пробелов.",true);return false;}
+    directoryJob=new DirectoryJob;directoryJob->host=host;directoryJob->port=port;directoryJob->list=list;
+    directoryThread=CreateThread(nullptr,0,DirectoryWorker,directoryJob,0,nullptr);
+    if(!directoryThread){delete directoryJob;directoryJob=nullptr;Status(L"Не удалось создать запрос master.",true);return false;}
+    directoryDeadline=GetTickCount64()+5000;directoryTimedOut=false;
+    if(list){serverRows.clear();Send(L"{\"servers\":[]}");}
+    Status(list?L"Master: запрашиваю список…":L"Master: разрешаю адрес для публикации…");return true;
+}
+static void DirectoryState()
+{
+    std::wstring json=L"{\"servers\":[";
+    for(size_t offset=0;offset<serverRows.size();offset+=DM_ROW)
+    {
+        const auto row=serverRows.data()+offset;const auto info=row+24;
+        std::wstring name,map;for(unsigned i=0;i<64&&info[i];++i)name+=info[i];for(unsigned i=116;i<124&&info[i];++i)map+=info[i];
+        if(offset)json+=L",";
+        json+=L"{\"name\":"+Quote(name)+L",\"map\":"+Quote(map)+L",\"address\":"
+            +Quote(std::to_wstring(row[16])+L"."+std::to_wstring(row[17])+L"."+std::to_wstring(row[18])+L"."+std::to_wstring(row[19]))
+            +L",\"port\":"+std::to_wstring(DM_Get16(info+124))+L",\"skill\":"+std::to_wstring(info[126])
+            +L",\"flags\":"+std::to_wstring(info[127])+L",\"ttl\":"+std::to_wstring(DM_Get32(row+20))+L"}";
+    }
+    Send(json+L"]}");
 }
 
 // Bridge is a versioned, bounded list of encodeURIComponent fields. No JS
@@ -109,7 +206,7 @@ static bool Parse(const wchar_t *message, std::vector<std::wstring> &fields)
         if(end==std::wstring::npos)break;
         start=end+1;
     }
-    return fields.size()>=17 && fields[0]==L"1";
+    return (fields.size()>=17 && fields[0]==L"1") || (fields.size()==6 && fields[0]==L"M1");
 }
 static bool Read(const std::vector<std::wstring> &f)
 {
@@ -153,7 +250,10 @@ static bool SaveProfile()
         {std::wstring value=L"."+std::wstring(path+base.size());wcscpy(path,value.c_str());}
     };
     if(portable){relative(stored.executable);relative(stored.iwad);for(unsigned i=0;i<stored.mod_count;++i)relative(stored.mods[i]);}
-    return LP_Save(ini.c_str(),slot,&stored)!=FALSE;
+    if(!LP_Save(ini.c_str(),slot,&stored))return false;
+    return WritePrivateProfileStringW(L"Master",L"Endpoint",masterEndpoint.c_str(),ini.c_str())
+        &&WritePrivateProfileStringW(L"Master",L"Publish",publishHost?L"1":L"0",ini.c_str())
+        &&WritePrivateProfileStringW(L"Master",L"SessionName",sessionName.c_str(),ini.c_str());
 }
 static void OpenLog()
 {
@@ -175,8 +275,23 @@ static bool DataPathSupported(const std::wstring &path)
 static void Launch()
 {
     if(child)return;
+    if(profile.mode==1&&publishHost&&!masterSettingsValid){Status(L"Исправь настройки master перед публикацией.",true);return;}
+    if(profile.mode==1&&publishHost&&resolvedMaster.empty())
+    {
+        pendingLaunchProfile=profile;pendingLaunchEndpoint=masterEndpoint;pendingLaunchName=sessionName;
+        launchAfterResolve=StartDirectory(false);return;
+    }
     wchar_t error[512], command[LP_COMMAND];
     if(!LP_ValidateFiles(&profile,error,512)||!LP_Build(&profile,command,LP_COMMAND,error,512)){Status(error,true);return;}
+    if(profile.mode==1&&publishHost)
+    {
+        std::string endpoint(masterEndpoint.begin(),masterEndpoint.end());char host[254];unsigned port;
+        if(!MC_Endpoint(endpoint.c_str(),host,&port))return;
+        std::wstring numeric(resolvedMaster.begin(),resolvedMaster.end());numeric+=L":"+std::to_wstring(port);
+        if(!LP_QuoteAppend(command,LP_COMMAND,L"-master")||!LP_QuoteAppend(command,LP_COMMAND,numeric.c_str())
+            ||!LP_QuoteAppend(command,LP_COMMAND,L"-session-name")||!LP_QuoteAppend(command,LP_COMMAND,sessionName.c_str()))
+        {Status(L"Слишком длинная команда.",true);return;}
+    }
     State();
     if(profile.mode==1&&profile.lan&&MessageBoxW(window,L"Разрешить подключения со всех IPv4-интерфейсов?\n\nТолько доверенная LAN: без пароля, шифрования и NAT traversal. Не открывайте порт в публичный Интернет.",L"DPT.DOOM — LAN host",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)!=IDYES)return;
     workDir=data+L"\\game";
@@ -222,6 +337,30 @@ static void Message(const wchar_t *text)
     std::vector<std::wstring> f;
     if(!Parse(text,f)){Status(L"Отклонено некорректное сообщение интерфейса.",true);return;}
     const auto &action=f[1];
+    if(f[0]==L"M1")
+    {
+        if(!MasterFields(f)){masterSettingsValid=false;masterSettingsMessageFailed=action==L"settings"&&f[3]==L"1";Status(L"Проверь master IP/домен:порт и имя сессии (ASCII 1–63).",true);return;}
+        masterSettingsMessageFailed=false;
+        masterSettingsValid=true;
+        if(action==L"settings")return;
+        if(action==L"masterSave"){bool ok=SaveProfile();Status(ok?L"Настройки master сохранены.":L"Не удалось сохранить master.",!ok);return;}
+        if(action==L"refresh"){StartDirectory(true);return;}
+        if(action==L"select")
+        {
+            unsigned value;
+            if(!LP_Number(f[5].c_str(),0,DM_MAX_SERVERS-1,&value)||value*DM_ROW>=serverRows.size())return;
+            const auto row=serverRows.data()+value*DM_ROW;const auto info=row+24;
+            if(GetTickCount64()-rowsReceived>=static_cast<ULONGLONG>(DM_Get32(row+20))*1000)
+            {Status(L"Запись устарела. Обнови список.",true);return;}
+            profile.mode=2;profile.port=DM_Get16(info+124);profile.skill=info[126];profile.dmflags=info[127]&3;
+            profile.nomonsters=(info[127]&4)!=0;profile.fast=(info[127]&8)!=0;profile.respawn=(info[127]&16)!=0;
+            swprintf(profile.address,64,L"%u.%u.%u.%u",row[16],row[17],row[18],row[19]);
+            if(info[116]=='M'){profile.commercial=1;profile.map=(info[119]-'0')*10+info[120]-'0';}
+            else{profile.commercial=0;profile.episode=info[117]-'0';profile.map=info[119]-'0';}
+            State();Status(L"Сессия выбрана. Проверь IWAD/PWAD/порядок и нажми запуск. Доступность порта не проверена.");return;
+        }
+        Status(L"Неизвестная команда master.",true);return;
+    }
     unsigned int selected;
     if(!LP_Number(f[2].c_str(),1,3,&selected))return;
     if(action==L"ready")
@@ -237,14 +376,14 @@ static void Message(const wchar_t *text)
                 LoadProfile();
             }
         }
-        State();Status(L"Выбери ресурсы и запускай. Серверный браузер — следующий этап.");return;
+        State();Status(L"Выбери ресурсы и запускай. Список серверов обновляется только по запросу.");return;
     }
     if(action==L"load"){slot=selected;LoadProfile();State();Status(L"Профиль загружен.");return;}
     if(action==L"log"){OpenLog();return;}
     if(!Read(f)){Status(L"Проверь числа: эпизод 1–4, карта 1–32, сложность 1–5, порт 1–65535.",true);return;}
     if(action==L"preview"){State(false);return;}
     if(action==L"save"){bool ok=SaveProfile();Status(ok?L"Профиль сохранён.":L"Не удалось сохранить профиль.",!ok);return;}
-    if(action==L"launch"){Launch();return;}
+    if(action==L"launch"){if(masterSettingsMessageFailed&&profile.mode==1)return;Launch();return;}
     if(action==L"browseExe"||action==L"browseIwad"||action==L"addMod")
     {
         wchar_t path[LP_PATH]=L"";
@@ -330,9 +469,34 @@ static LRESULT CALLBACK WindowProc(HWND hwnd,UINT message,WPARAM wparam,LPARAM l
     case WM_SIZE:if(controller){RECT rect;GetClientRect(hwnd,&rect);controller->put_Bounds(rect);}return 0;
     case WM_GETMINMAXINFO:{auto info=reinterpret_cast<MINMAXINFO*>(lparam);info->ptMinTrackSize.x=850;info->ptMinTrackSize.y=650;return 0;}
     case WM_TIMER:
+        if(directoryThread)
+        {
+            if(WaitForSingleObject(directoryThread,0)==WAIT_OBJECT_0)
+            {
+                CloseHandle(directoryThread);directoryThread=nullptr;
+                auto job=directoryJob;directoryJob=nullptr;
+                bool launch=launchAfterResolve;launchAfterResolve=false;
+                if(!directoryTimedOut&&job->ok)
+                {
+                    resolvedMaster=job->ip;
+                    if(job->list){serverRows=std::move(job->rows);rowsReceived=GetTickCount64();DirectoryState();Status(L"Список получен: "+std::to_wstring(serverRows.size()/DM_ROW)+L". Все записи unverified; ресурсы проверяет игра.");}
+                    delete job;
+                    if(launch)
+                    {
+                        if(memcmp(&pendingLaunchProfile,&profile,sizeof(profile))||pendingLaunchEndpoint!=masterEndpoint
+                            ||pendingLaunchName!=sessionName||!publishHost)
+                            Status(L"Настройки изменились во время DNS-запроса. Нажми запуск заново.");
+                        else Launch();
+                    }
+                }
+                else{delete job;Status(L"Master недоступен: DNS/таймаут/неверный ответ. Direct-connect доступен; для хоста можно отключить публикацию.",true);}
+            }
+            else if(!directoryTimedOut&&GetTickCount64()>=directoryDeadline)
+            {directoryTimedOut=true;launchAfterResolve=false;Status(L"Master: истёк срок запроса; DNS ещё завершается. Интерфейс/direct-connect доступны.",true);}
+        }
         if(child&&WaitForSingleObject(child,0)==WAIT_OBJECT_0){DWORD code=0;GetExitCodeProcess(child,&code);CloseHandle(child);child=nullptr;CloseHandle(gameLock);gameLock=nullptr;Status(L"Игра завершена · код "+std::to_wstring(code)+(code?L". Проверь лог сессии.":L". Настройки сохранены."),code!=0);}return 0;
     case WM_CLOSE:if(child&&MessageBoxW(hwnd,L"Закрыть лаунчер? Игра продолжит работать.",L"DPT.DOOM",MB_YESNO|MB_DEFBUTTON2)!=IDYES)return 0;DestroyWindow(hwnd);return 0;
-    case WM_DESTROY:if(controller)controller->Close();if(child)CloseHandle(child);if(gameLock)CloseHandle(gameLock);PostQuitMessage(0);return 0;
+    case WM_DESTROY:if(controller)controller->Close();if(child)CloseHandle(child);if(gameLock)CloseHandle(gameLock);if(directoryThread)CloseHandle(directoryThread);PostQuitMessage(0);return 0;
     }
     return DefWindowProcW(hwnd,message,wparam,lparam);
 }
@@ -357,6 +521,9 @@ int WINAPI wWinMain(HINSTANCE app,HINSTANCE,PWSTR,int show)
     {Error(L"Каталог данных недоступен для записи. Portable требует user рядом с EXE. Переместите лаунчер в доступный каталог; скрытого перехода в AppData нет.");return 1;}
     if(!overrideDir.empty())portable=FALSE;
     data=directory;ini=data+L"\\launcher.ini";
+    {wchar_t endpoint[261],name[64];GetPrivateProfileStringW(L"Master",L"Endpoint",LP_MASTER_ENDPOINT,endpoint,261,ini.c_str());masterEndpoint=endpoint;
+     GetPrivateProfileStringW(L"Master",L"SessionName",L"DPT.DOOM COOP",name,64,ini.c_str());sessionName=name;
+     publishHost=GetPrivateProfileIntW(L"Master",L"Publish",0,ini.c_str())!=0;}
     SetCurrentDirectoryW(base.c_str());LoadProfile();
     if(FAILED(CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED)))return 1;
     HMODULE loader=LoadLibraryExW((base+L"\\WebView2Loader.dll").c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);

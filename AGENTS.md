@@ -113,12 +113,15 @@ ctest --preset windows-headless
   CreateProcessW без shell; 3 профиля LocalAppData или `portable.txt` → `user/`
   рядом с EXE. Game CWD постоянный `game/profileN`, logs — `sessions/`.
   `launcher-model` — data-free; `launcher-windows` — interactive + IWAD/Runtime.
-  Server browser/master ещё не готов; MinGW engine: DPTDOOM_LAUNCHER=OFF.
+  Server browser: native TCP query worker, IP/domain endpoint, explicit refresh,
+  select→form (не auto launch), unverified rows. MinGW: DPTDOOM_LAUNCHER=OFF.
 - Master и будущий игровой сервер по требованию владельца — native C/C++, не
   Python-сервисы. `master/` → `dptdoom-master`, опция DPTDOOM_MASTER default ON;
   протокол/limits — `docs/MASTER.md`. Windows MSVC/MinGW tests: master-model,
   master-loopback (Python только клиент теста). Не называть directory игровым
-  server: публикации игры/browser/query-reachability пока нет, TLS/auth тоже нет.
+  server: публикация waiting host opt-in `-master IPv4:port -session-name ASCII`,
+  heartbeat/accept-remove; query-reachability/TLS/auth нет. Shared bounded client
+  `master/client.*`; тесты master-client(-wire), master-publish с IWAD, UI browser.
   Default master TCP port 25135; launcher.ini [Master] Endpoint по умолчанию
   play.dartpower.xyz:25135 (не перезаписывать пользовательский адрес).
   По просьбе владельца допустим тестовый --bind 0.0.0.0:25135, но не создавать
@@ -127,6 +130,11 @@ ctest --preset windows-headless
   `dpt_debug_console.c`; Release/RelWithDebInfo/headless без него. --version тихий.
   debug-console test interactive. Master `--log`, `--log-max-bytes`: 1MiB + .1,
   event suppression 4/type/5s; токены/packet strings не логировать.
+- CI run #11/6061a13 подтверждён success GitHub API/владельцем: data-free
+  Windows/Linux/macOS SDL/headless + Windows ASan; ручная игра Unix не проверена.
+  Новые publication/browser изменения требуют следующего remote run.
+- P2P — план: PWAD, PK3 после загрузчика, без commercial IWAD; точный hash
+  allowlist только Freedoom 1/2 + shareware DOOM1.WAD (не full Doom I).
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.

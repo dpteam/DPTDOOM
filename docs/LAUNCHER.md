@@ -86,12 +86,13 @@ portable-профиле. Ресурсы вне него остаются абс�
   не поддерживается валидатором. Проверка directory не гарантирует безопасность
   любых недоверенных WAD и не заменяет engine-side parsing audit.
 - Нет PK3/ZIP/DECORATE, drag/drop/search, nickname/color/voice profiles.
-- Server browser и player разделы **явно недоступны**, не рабочие заглушки.
-  Список серверов и редактируемый IP/домен master запланированы в `docs/IDEAS.md`.
-  Standalone C-directory теперь есть (`docs/MASTER.md`), но launcher не
-  регистрирует/не загружает объявления до следующего этапа интеграции.
-  При Save/Launch в launcher.ini добавляется `[Master] Endpoint=play.dartpower.xyz:25135`
-  (если ещё не задан); это пока клиентский default, без неявного сетевого запроса.
+- Раздел «Серверы» работает с native directory: IP/домен:порт master,
+  «Обновить», выбор объявления, opt-in публикация waiting host и ASCII session name.
+  Default `play.dartpower.xyz:25135`; сохраняется в `[Master]` launcher.ini.
+  Запросы native TCP, не fetch из HTML; DNS/query в worker, UI остаётся доступным.
+  Никаких auto refresh/download. Все записи UNVERIFIED; выбор только заполняет
+  форму, окончательная совместимость — handshake. Подробнее `docs/MASTER.md`.
+  Раздел «Игрок» по-прежнему недоступен; ping/favorites/filter пока нет.
 - Закрытие launcher не завершает игру. «Лог сессии» открывает фиксированный
   системный Notepad, не файловые ассоциации/shell. Ошибки игры идут в лог (`-nogui`).
 
@@ -119,6 +120,8 @@ SDK pinned `Microsoft.Web.WebView2 1.0.3537.50`, SHA-256 проверяется 
 настоящий WebView2 bridge, portable из другого CWD, профили/escaping/bad input,
 SP дважды с постоянным config, host/join через HTML-кнопки, blocked navigation,
 light/dark tokens, неизменная компоновка и сохранение темы после перезагрузки.
+Также настоящий master EXE, DNS localhost, waiting-host publication/list/select,
+HTML-like session name как текст, remove после join и понятная ошибка outage.
 Для автоматизации только дочерним тестовым процессам задаётся локальный CDP-port
 через environment; обычный launcher не включает remote debugging.
 Оконный тест может кратко показать окна, затем скрывает их; звук dummy.

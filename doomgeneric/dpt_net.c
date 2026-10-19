@@ -36,6 +36,79 @@ typedef int SOCKET;
 #include <limits.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include "../master/client.h"
+
+static dm_client_query_t master_query;
+static boolean master_initialized, master_enabled, master_waiting, master_removing;
+static char master_ip[64];
+static unsigned int master_port;
+static byte master_info[DM_INFO], master_auth[DM_AUTH];
+static boolean master_has_lease;
+static uint32_t master_next;
+static unsigned int master_interval=20;
+
+static void MasterPoll(void)
+{
+    uint32_t now=DG_GetTicksMs();
+    int result;
+    if(!master_enabled)return;
+    if(!master_waiting && (int32_t)(now-master_next)>=0)
+    {
+        MC_Begin(&master_query,master_ip,master_port,master_has_lease?DM_HEARTBEAT:DM_REGISTER,
+            master_has_lease?master_auth:master_info,master_has_lease?DM_AUTH:DM_INFO,now);
+        master_waiting=true;
+    }
+    if(!master_waiting)return;
+    result=MC_Poll(&master_query,now);
+    if(!result)return;
+    master_waiting=false; master_next=now+10000;
+    if(result<0 || master_query.status)
+    {
+        if(result>0 && master_query.status==DM_UNAUTHORIZED)master_has_lease=false;
+        puts("Master: directory unavailable/rejected; direct host still waiting"); fflush(stdout);
+    }
+    else
+    {
+        if(!master_has_lease)
+        {
+            memcpy(master_auth,master_query.response+DM_HEADER,DM_AUTH); master_has_lease=true;
+            master_interval=DM_Get32(master_query.response+DM_HEADER+44);
+            puts("Master: waiting coop host published (game-port reachability unverified)"); fflush(stdout);
+        }
+        master_next=now+master_interval*1000;
+    }
+    MC_Close(&master_query);
+}
+static void MasterRemove(void)
+{
+    uint32_t start;
+    if(!master_initialized || master_removing)return;
+    master_removing=true; master_enabled=false;
+    // A pending registration may have committed remotely before its response.
+    // Give it a bounded chance to return the lease, then remove; otherwise TTL.
+    start=DG_GetTicksMs();
+    if(master_waiting && !master_has_lease)
+    {
+        int result=0;
+        while(!result && (uint32_t)(DG_GetTicksMs()-start)<250)
+        { result=MC_Poll(&master_query,DG_GetTicksMs()); if(!result)DG_SleepMs(1); }
+        if(result>0 && !master_query.status)
+        { memcpy(master_auth,master_query.response+DM_HEADER,DM_AUTH); master_has_lease=true; }
+    }
+    MC_Close(&master_query);
+    if(master_has_lease)
+    {
+        int result=0;
+        start=DG_GetTicksMs();
+        MC_Begin(&master_query,master_ip,master_port,DM_REMOVE,master_auth,DM_AUTH,start);
+        while(!result && (uint32_t)(DG_GetTicksMs()-start)<250)
+        { result=MC_Poll(&master_query,DG_GetTicksMs()); if(!result)DG_SleepMs(1); }
+        puts(result>0 && !master_query.status?"Master: advertisement removed":"Master: remove not confirmed; advertisement expires by TTL");
+        fflush(stdout); MC_Close(&master_query);
+    }
+    memset(master_auth,0,sizeof(master_auth)); master_has_lease=false; master_waiting=false;
+    master_removing=false;
+}
 
 static SOCKET connection = INVALID_SOCKET, listener = INVALID_SOCKET;
 static boolean active, sockets_started;
@@ -181,6 +254,8 @@ static char *Argument(char *name)
 
 boolean DPT_NetRequested(void)
 {
+    if((M_ParmExists("-master")||M_ParmExists("-session-name")) && !M_ParmExists("-net-host"))
+        I_Error("Master publication requires -net-host");
     return M_ParmExists("-net-host") || M_ParmExists("-net-join");
 }
 boolean DPT_NetActive(void) { return active; }
@@ -188,6 +263,7 @@ boolean DPT_NetPeerPresent(void) { return active && !alone; }
 
 void DPT_NetShutdown(void)
 {
+    MasterRemove();
     active = false;
     alone = false;
     disconnect_requested = false;
@@ -231,6 +307,7 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
 {
     char *host = Argument("-net-host"), *join = Argument("-net-join");
     char *bind_ip = Argument("-net-bind"), *timeout = Argument("-net-timeout");
+    char *master=Argument("-master"), *session_name=Argument("-session-name");
     struct sockaddr_in address;
     byte hello[DPT_NET_HELLO_SIZE] = {0}, remote[DPT_NET_HELLO_SIZE];
     sha1_context_t context;
@@ -240,6 +317,8 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     disconnect_requested = false;
     alone = false;
     if ((host != NULL) == (join != NULL)) I_Error("Use exactly one of -net-host or -net-join");
+    if((master || session_name) && !host)I_Error("Master publication requires -net-host");
+    if(session_name && !master)I_Error("-session-name requires -master");
     if (M_ParmExists("-playdemo") || M_ParmExists("-timedemo") || M_ParmExists("-record")
         || M_ParmExists("-loadgame") || M_ParmExists("-turbo") || M_ParmExists("-solo-net")
         || M_ParmExists("-left") || M_ParmExists("-right") || M_ParmExists("-drone")
@@ -257,6 +336,28 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     { WSADATA data; if (WSAStartup(MAKEWORD(2, 2), &data)) I_Error("WSAStartup failed"); }
 #endif
     sockets_started = true;
+    if(master)
+    {
+        char parsed[254]; struct in_addr numeric;
+        const char *name=session_name?session_name:"DPT.DOOM COOP";
+        size_t length=strlen(name);
+        MC_Init(&master_query); master_initialized=true;
+        if(!MC_Endpoint(master,parsed,&master_port) || strlen(parsed)>=sizeof(master_ip)
+            || inet_pton(AF_INET,parsed,&numeric)!=1)I_Error("-master requires numeric IPv4:port (launcher resolves master domains)");
+        strcpy(master_ip,parsed);
+        memset(master_info,0,sizeof(master_info));
+        if(!length || length>63)I_Error("Session name must be 1..63 printable ASCII characters");
+        memcpy(master_info,name,length);
+        SHA1_Init(&context); SHA1_UpdateString(&context,PACKAGE_STRING " direct-coop-v2 " DPT_NET_BUILD_ID);
+        SHA1_Final(master_info+64,&context); ResourceDigest(master_info+84);
+        if(gamemode==commercial)snprintf((char*)master_info+116,8,"MAP%02d",settings->map);
+        else snprintf((char*)master_info+116,8,"E%dM%d",settings->episode,settings->map);
+        DM_Put16(master_info+124,Number(host,1,65535)); master_info[126]=(byte)(settings->skill+1);
+        master_info[127]=(byte)(dpt_dmflags | (settings->nomonsters?4:0) | (settings->fast_monsters?8:0) | (settings->respawn_monsters?16:0));
+        master_info[128]=2;
+        if(!DM_ValidInfo(master_info))I_Error("Invalid master session metadata/name");
+        master_enabled=true; master_waiting=false; master_has_lease=false; master_next=DG_GetTicksMs();
+    }
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     if (host)
@@ -275,9 +376,11 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
         while ((connection = accept(listener, NULL, NULL)) == INVALID_SOCKET)
         {
             if (!WouldBlock()) I_Error("Network: accept failed");
+            MasterPoll();
             Wait(start, "accept");
         }
         net_close(listener); listener = INVALID_SOCKET;
+        MasterRemove();
         local_player = 0;
     }
     else

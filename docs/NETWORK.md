@@ -2,12 +2,16 @@
 
 Первый игровой прототип: **ровно два игрока**, TCP lockstep на 35 тиках/с.
 Это отдельный DPT.DOOM protocol v2, **не** Chocolate Doom/csDoom protocol.
-Не dedicated server, нет интеграции master/browser, prediction, rollback, NAT traversal,
+Не dedicated server, нет prediction, rollback, NAT traversal,
 reconnect, late join, аутентификации или шифрования. Только доверенная LAN/loopback.
 Не выставлять порт в публичный Интернет как готовый защищённый сервер.
 
 Нативное standalone directory-ядро (`dptdoom-master`) описано в [MASTER.md](MASTER.md).
-Оно пока не публикует игру автоматически и не меняет direct protocol/lifecycle.
+Оно поддерживает opt-in публикацию waiting host и выбор в launcher browser,
+не меняя direct protocol/lifecycle. CLI `-master IPv4:port -session-name "Name"`
+только для host. Имя ASCII 1..63; launcher разрешает master DNS в IPv4.
+Объявление снимается при accept/shutdown, иначе TTL. Ошибка master не ломает
+direct accept; см. ограничения reachability/privacy в MASTER.md.
 
 ## Играть вдвоём
 

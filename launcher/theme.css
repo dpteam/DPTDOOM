@@ -138,4 +138,7 @@ input[type=checkbox] { accent-color: var(--blue); }
 #theme-toggle { width: 100%; font-size: 12px; text-align: left; }
 #theme-toggle[aria-pressed=true] { border-color: var(--edge); color: var(--soft-ink); }
 ::selection { color: var(--accent-ink); background: var(--accent); }
+.server-list { margin-top: 16px; display: grid; gap: 10px; font-size: 12px; }
+.server-card { padding: 12px; border: 1px solid var(--edge); border-radius: 5px; background: var(--input); }
+.server-card p { margin: 8px 0; color: var(--muted); overflow-wrap: anywhere; }
 @media(prefers-reduced-motion:reduce) { body, button, input, select { transition: none; } }

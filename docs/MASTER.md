@@ -7,8 +7,9 @@ Python используется только в автоматических т�
 
 Это **каталог объявлений**, не игровой dedicated server, relay или новая модель
 репликации. Текущая игра по-прежнему direct COOP на двоих, без late join.
-**Автоматическая публикация из игры/launcher и server browser пока не подключены.**
-Записи в тестах синтетические; их нельзя выдавать за опубликованные игровые сессии.
+Реализована публикация ожидающего хоста из игры и выбор объявления в Windows
+HTML launcher. Это не late join: объявление снимается сразу после accept игрока.
+`master-publish` и launcher test используют настоящие игровые процессы.
 
 ## Сборка и запуск
 
@@ -51,9 +52,48 @@ event loop: это локальная диагностика, не асинхр�
 Для ручного проброса: `dptdoom-master.exe --bind 0.0.0.0 --port 25135`.
 Пробрасывать **TCP**, не UDP. Это не игровой порт и не подтверждение внешней
 доступности/DNS; её нужно отдельно проверить с другой машины/сети.
-Launcher при сохранении профиля создаёт `[Master] Endpoint=play.dartpower.xyz:25135`
-в своём `launcher.ini`, не заменяя пользовательский адрес. Пока это сохранённый
-default для следующей browser-интеграции, не активное подключение к master.
+Launcher хранит `[Master] Endpoint=play.dartpower.xyz:25135`, `Publish=0|1`,
+`SessionName` в своём `launcher.ini`. Endpoint редактируется в разделе «Серверы»:
+numeric IPv4 **или DNS-домен** и порт; URL/пути/IPv6/Unicode host не принимаются.
+Без явного refresh или публикации подключения к master нет.
+
+## Публикация и browser
+
+В launcher: выбрать host, в «Серверы» включить «Публиковать мой ожидающий
+COOP-хост», задать endpoint/name, сохранить и запустить. Публикация выключена по
+умолчанию. LAN bind по-прежнему отдельное явное подтверждение; публикация
+localhost-only хоста не делает его доступным другой машине.
+
+CLI для numeric IPv4 master (домен асинхронно разрешает launcher):
+
+```powershell
+dptdoom.exe -iwad DOOM2.WAD -warp 1 -net-host 2342 -net-bind 0.0.0.0 `
+  -master 127.0.0.1:25135 -session-name "DPT.DOOM COOP" -net-timeout 120000
+```
+
+Имя — printable ASCII 1..63. Хост публикуется **после listen**, пока ждёт peer;
+metadata берётся из настоящих settings и тех же build/resource digest, что
+handshake. Nonblocking query обновляется в accept loop. Heartbeat берёт interval
+из lease response, а не предполагает TTL60. Ошибка master пишет предупреждение,
+не прекращает ожидание direct peer. Retry не чаще 10 секунд. Публикация только
+для `-net-host`; сочетания с SP/join отвергаются.
+
+При accept/штатном shutdown снимается lease; cleanup имеет бюджет до 250ms на
+pending register и до 250ms на remove. Если сеть недоступна/процесс убит, запись
+исчезнет по TTL. Игра/протокол v2 не превращаются в master-dependent сессию.
+
+В browser «Обновить» запрашивает bounded список в native worker. DNS не блокирует
+UI; через 5s запрос считается просроченным, поздний результат отбрасывается.
+Системный getaddrinfo может завершаться дольше: одновременно только один worker,
+он не убивается через TerminateThread; direct/SP остаются доступны. Берётся
+первый IPv4 DNS result, multi-address failover пока нет. Publication использует
+разрешённый IPv4 до следующей смены endpoint/перезапуска launcher.
+
+Выбор записи переносит IP/port/map/skill/rules в форму, **не запускает EXE** и не
+скачивает ресурсы. Сохраняются выбранные EXE/IWAD/PWAD; содержимое и порядок
+окончательно сверяет handshake. Карточки не утверждают совместимость сборки,
+ping или port reachability. Истёкшую по snapshot TTL запись нельзя выбрать:
+нужно refresh. Все строки выводятся textContent/JSON, не HTML.
 
 Windows runtime проверен MSVC и MinGW, модель/loopback также MSVC ASan.
 Unix socket/clock/entropy path предусмотрен, **Linux/macOS не запускались**.
@@ -71,7 +111,7 @@ CI build/test подключаются через CMake; наличие YAML н�
 - Проверка TCP/source **не доказывает доступность game port** и не является
   аутентификацией человека/build. Поля name/build/resources/map — claims клиента.
   Все записи подразумевают `reachability=unverified`, `coop/waiting/1 of 2`.
-  Host обязан удалить объявление, когда место занято; эта интеграция ещё впереди.
+  Host удаляет объявление, когда место занято; при аварийном завершении — TTL.
 - TTL идёт по монотонным часам, не по количеству idle-итераций. Prune выполняется
   и без запросов, поэтому поток трафика не замораживает старение записей.
 - Максимум 128 записей, 4 с одного IP; дубликат IP/game-port отвергается.
@@ -148,8 +188,8 @@ cleartext TCP, злонамеренных регистраций с собств
 Нельзя проверять нынешний direct-host произвольным TCP connect: это может занять
 его единственный accept вместо игрока. Для reachability нужен отдельный
 безопасный query/challenge путь в игре, затем фильтрация/явный статус в browser.
-IP/домен master в launcher будут настраиваемыми, direct-connect останется
-независимым. NAT traversal/relay и игровой dedicated server — отдельные задачи.
+IP/домен master настраиваются, direct-connect независим. NAT traversal/relay и
+игровой dedicated server — отдельные задачи.
 
 Старый `refs/csDoomMaster` изучен, код не скопирован: ошибки `bAddServer` после
 выхода index за массив, доверие входящим UDP registrations/remote list и
@@ -168,6 +208,12 @@ malformed headers/info, slow/truncated peers, rate/capacity и startup/bind erro
 Временный loopback port и рабочий каталог; ни IWAD, ни окно не нужны.
 `master-log` отдельно проверяет ограничение повторов, размер/backup rotation
 и отказ при недоступном пути/ошибке ротации.
+`master-client` / `master-client-wire` — grammar/response bounds, hostile headers,
+fragmentation, timeout/truncation против настоящего C query client.
+`master-publish` (headless + IWAD) — настоящие engine/master/guest: metadata,
+heartbeat > TTL, remove on join/timeout и direct при master outage.
+`launcher-windows` — DNS endpoint, publish/list/select/escaping/remove/outage
+через настоящий HTML bridge с игровым COOP.
 
 На платформах без настроенных loopback aliases тест не создаёт их с root:
 multi-source wire cases пропускаются с явным сообщением (модель проверяется),

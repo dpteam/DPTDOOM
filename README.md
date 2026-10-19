@@ -44,8 +44,9 @@ cmake --build --preset windows
 В текущем этапе есть Win32-сборка, брендинг/иконка и headless для автоматических
 проверок. Есть **экспериментальный direct coop для двух игроков** на доверенной
 LAN/loopback; это ещё не готовый Internet multiplayer. Есть Windows HTML launcher
-и отдельный нативный master directory-прототип. Автопубликация/список серверов
-в launcher, игровой dedicated server, PK3 и DECORATE **ещё не реализованы**.
+и нативный master directory-прототип: opt-in публикация waiting host и список
+серверов с IP/доменом master в launcher. Записи UNVERIFIED, без port/NAT proof.
+Игровой dedicated server, P2P/PK3 и DECORATE **ещё не реализованы**.
 Нативный Win32 backend пока без звука; для звука использовать SDL backend.
 Для игры со звуком есть проверенная Windows SDL2-сборка:
 

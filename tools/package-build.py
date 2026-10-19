@@ -77,9 +77,9 @@ Use --version to check startup without game data.
 Native directory prototype: bin/dptdoom-master[.exe] --help
 Default: loopback TCP 25135, directory protocol v1, experimental LAN only.
 Launcher config seeds [Master] Endpoint=play.dartpower.xyz:25135 on profile save;
-this does not connect automatically until browser integration is implemented.
-This is NOT a dedicated game server. Launcher listing/automatic publication
-are not integrated yet. No TLS, game-port reachability proof or NAT traversal.
+Use the Servers page to refresh the list or opt in to publishing a waiting host.
+This is NOT a dedicated game server. Waiting-host publication is opt-in;
+directory rows are UNVERIFIED. No TLS, game-port reachability proof or NAT traversal.
 
 Direct coop is experimental, exactly 2 players, trusted LAN only (TCP).
 Both peers need the same build, IWAD/PWAD contents/order and skill/map flags.
