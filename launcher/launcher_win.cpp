@@ -6,6 +6,7 @@
 #include <ws2tcpip.h>
 #include "launch_model.h"
 #include "storage.h"
+#include "iwad_search.h"
 #include "../master/client.h"
 #include <commdlg.h>
 #include <shlobj.h>
@@ -267,6 +268,7 @@ static void LoadProfile()
 {
     LP_Load(ini.c_str(),slot,&profile);
     if(!profile.executable[0])wcscpy(profile.executable,L".\\dptdoom.exe");
+    LI_Find(&profile,base.c_str(),TRUE);
     // Relative profile paths are anchored to the launcher, not its caller's CWD.
 }
 static bool SaveProfile()
@@ -443,6 +445,7 @@ static void Message(const wchar_t *text)
             if(action==L"browseExe")wcscpy(profile.executable,path);
             else if(action==L"browseIwad")wcscpy(profile.iwad,path);
             else wcscpy(profile.mods[profile.mod_count++],path);
+            if(action==L"browseExe")LI_Find(&profile,base.c_str(),TRUE);
             State();
         }
         return;

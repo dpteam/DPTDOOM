@@ -1,6 +1,7 @@
 // Data-free model/storage tests. GPL-2.0-or-later; see LICENSE.
 #include "launch_model.h"
 #include "storage.h"
+#include "iwad_search.h"
 #include <shellapi.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +39,7 @@ int main(void)
     REQUIRE(LP_Build(&p,command,LP_COMMAND,error,512));REQUIRE(!wcsstr(command,L"-net-"));REQUIRE(!wcsstr(command,L"-dmflags"));
     p.mode=1;p.dmflags=3;p.lan=1;
     REQUIRE(LP_Build(&p,command,LP_COMMAND,error,512));REQUIRE(wcsstr(command,L"-net-host"));REQUIRE(wcsstr(command,L"0.0.0.0"));
+    REQUIRE(wcsstr(command,L"-net-wait-forever"));
     p.mode=2;REQUIRE(LP_Build(&p,command,LP_COMMAND,error,512));REQUIRE(wcsstr(command,L"-net-join"));REQUIRE(!wcsstr(command,L"-net-bind"));
     wcscpy(p.address,L"bad");REQUIRE(!LP_Build(&p,command,LP_COMMAND,error,512));wcscpy(p.address,L"127.0.0.1");
     p.mod_count=2;wcscpy(p.mods[0],L"first.wad");wcscpy(p.mods[1],L"second.wad");
@@ -70,5 +72,21 @@ int main(void)
     REQUIRE(GetFileAttributesW(L"destination\\game\\profile1\\private.wad")==INVALID_FILE_ATTRIBUTES);
     {char text[8]={0};DWORD n;HANDLE f=CreateFileW(L"destination\\launcher.ini",GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);REQUIRE(ReadFile(f,text,7,&n,NULL));CloseHandle(f);REQUIRE(!strcmp(text,"keep"));}
     REQUIRE(LS_Import(from,to));File(L"unwritable","file");REQUIRE(!LS_Writable(L"unwritable"));
+    REQUIRE(LS_Writable(L"engine-dir"));REQUIRE(LS_Writable(L"launcher-dir"));
+    Wad(L"engine-dir\\doom2.wad",0);Wad(L"launcher-dir\\doom.wad",0);
+    LP_Defaults(&p);wcscpy(p.executable,L"engine-dir\\dptdoom.exe");
+    swprintf(to,LP_PATH,L"%ls\\launcher-dir",cwd);REQUIRE(LI_Find(&p,to,FALSE));REQUIRE(wcsstr(p.iwad,L"engine-dir\\doom2.wad"));
+    wcscpy(p.iwad,L"explicit-but-missing.wad");REQUIRE(!LI_Find(&p,to,FALSE));REQUIRE(!wcscmp(p.iwad,L"explicit-but-missing.wad"));
+    p.iwad[0]=0;p.executable[0]=0;REQUIRE(LI_Find(&p,to,FALSE));REQUIRE(wcsstr(p.iwad,L"launcher-dir\\doom.wad"));
+    REQUIRE(LS_Writable(L"steam"));REQUIRE(LS_Writable(L"steam\\steamapps"));
+    REQUIRE(LS_Writable(L"library"));REQUIRE(LS_Writable(L"library\\steamapps"));REQUIRE(LS_Writable(L"library\\steamapps\\common"));
+    REQUIRE(LS_Writable(L"library\\steamapps\\common\\Doom 2"));REQUIRE(LS_Writable(L"library\\steamapps\\common\\Doom 2\\base"));
+    Wad(L"library\\steamapps\\common\\Doom 2\\base\\doom2.wad",0);
+    {char path[LP_PATH],escaped[LP_PATH*2],vdf[LP_PATH*3];unsigned n=0;size_t j;
+     swprintf(from,LP_PATH,L"%ls\\library",cwd);REQUIRE(WideCharToMultiByte(CP_UTF8,0,from,-1,path,sizeof(path),NULL,NULL));
+     for(j=0;path[j];++j){if(path[j]=='\\')escaped[n++]='\\';escaped[n++]=path[j];}escaped[n]=0;
+     snprintf(vdf,sizeof(vdf),"\"libraryfolders\" { \"0\" { \"path\" \"%s\" } }",escaped);File(L"steam\\steamapps\\libraryfolders.vdf",vdf);}
+    LP_Defaults(&p);swprintf(from,LP_PATH,L"%ls\\steam",cwd);REQUIRE(LI_SearchSteam(&p,from));REQUIRE(wcsstr(p.iwad,L"library\\steamapps"));
+    p.iwad[0]=0;File(L"steam\\steamapps\\libraryfolders.vdf","\"path\" \"unterminated");REQUIRE(!LI_SearchSteam(&p,from));
     puts("Launcher model: quoting, arguments, WAD bounds, profiles, portable selection/import/no-overwrite OK");return 0;
 }

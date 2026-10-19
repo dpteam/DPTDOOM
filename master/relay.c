@@ -82,7 +82,7 @@ unsigned int MR_Attach(dm_directory_t *d,uintptr_t socket,unsigned int op,const 
         ML_Detail(ML_RELAY,source,0,now,"relay-host-attached; waiting for guest; payload/auth omitted");return DM_OK;
     }
     if(i==MR_SESSIONS||sessions[i].paired)return DM_CONFLICT;
-    s=&sessions[i];s->peer[1].socket=(SOCKET)socket;s->paired=1;s->activity=now;
+    s=&sessions[i];s->peer[1].socket=(SOCKET)socket;s->paired=1;s->began=s->activity=now;
     for(i=0;i<2;++i){s->peer[i].allowance=MR_RATE;DM_Header(s->peer[i].reply,i?DM_RELAY_JOIN:DM_RELAY_HOST,0,DM_OK);}
     // The listing is consumed atomically with pairing. Raw game handshake still
     // validates build/resources/rules; no other guest may enter this pair.
@@ -100,7 +100,9 @@ void MR_Prepare(dm_directory_t *d,fd_set *reads,fd_set *writes,uintptr_t *maximu
         entry=Entry(d,s->id);
         if(!s->paired && !entry){Drop(i,"lease-removed/expired",now);continue;}
         if(!s->paired&&entry)entry->relay_available=1;
-        if(now-s->activity>=120000 || now-s->began>=21600000){Drop(i,"idle/lifetime-limit",now);continue;}
+        // A waiting authenticated host is kept alive by its directory lease,
+        // not by game data. Its idle/lifetime clock starts only after pairing.
+        if(s->paired&&(now-s->activity>=120000 || now-s->began>=21600000)){Drop(i,"idle/lifetime-limit",now);continue;}
         if(s->paired && s->peer[0].eof && s->peer[1].eof && !s->peer[0].have && !s->peer[1].have)
         {Drop(i,"both-peers-finished",now);continue;}
         if(now-s->window>=1000){s->window=now;for(j=0;j<2;++j)s->peer[j].allowance=MR_RATE;}

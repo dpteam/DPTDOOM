@@ -112,6 +112,7 @@ BOOL LP_Build(const launch_profile_t *p, wchar_t *command, size_t capacity, wcha
         ARG(L"-net-timeout"); ARG(L"120000");
         if (p->mode == 1)
         {
+            ARG(L"-net-wait-forever");
             ARG(L"-net-host"); NUM(p->port);
             if (p->lan) { ARG(L"-net-bind"); ARG(L"0.0.0.0"); }
         }

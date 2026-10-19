@@ -60,7 +60,7 @@ static void RelayHostPoll(void)
     if(!relay_pending && (int32_t)(now-relay_retry)>=0)
     {
         MC_Begin(&relay_query,master_ip,master_port,DM_RELAY_HOST,master_auth,DM_AUTH,now);
-        relay_query.deadline=(uint64_t)now+120000;relay_pending=true;
+        relay_query.deadline=UINT64_MAX;relay_pending=true;
         puts("Relay: attaching outgoing host channel to master (no game-port forwarding needed for relay)");fflush(stdout);
     }
     if(!relay_pending)return;
@@ -154,6 +154,7 @@ static boolean active, sockets_started;
 static boolean alone;
 static int local_player;
 static uint32_t timeout_ms = 10000;
+static boolean host_wait_forever;
 static void (*pump_events)(void);
 static uint32_t last_pump;
 extern int prndindex;
@@ -212,7 +213,7 @@ static void Nonblocking(SOCKET sock)
 static boolean Wait(uint32_t start, const char *operation)
 {
     uint32_t now = DG_GetTicksMs();
-    if ((uint32_t)(now - start) >= timeout_ms)
+    if (!(host_wait_forever&&!active&&!strcmp(operation,"accept")) && (uint32_t)(now - start) >= timeout_ms)
     {
         if (active) return PeerLost("Network timeout: peer no longer responding");
         if(!strcmp(operation,"accept"))
@@ -400,6 +401,8 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
         || settings->map < 1 || settings->map > (gamemode == commercial ? 32 : 9))
         I_Error("Network: invalid skill/episode/map");
     if (timeout) timeout_ms = Number(timeout, 100, 120000);
+    host_wait_forever=M_ParmExists("-net-wait-forever");
+    if(host_wait_forever&&!host)I_Error("-net-wait-forever requires -net-host");
     pump_events = pump;
     I_AtExit(DPT_NetShutdown, true);
 #ifdef _WIN32
@@ -447,6 +450,7 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
         if (bind(listener, (struct sockaddr *)&address, sizeof(address)) == SOCKET_ERROR
             || listen(listener, 1) == SOCKET_ERROR) I_Error("Network: cannot bind/listen on requested address/port");
         printf("Direct coop: listening on %s:%s, waiting for one player\n", bind_ip ? bind_ip : "127.0.0.1", host);
+        if(host_wait_forever)puts("Host wait: unlimited until player joins or game window is closed; connection/game timeouts remain bounded");
         printf("Direct coop diagnostic: accept_timeout_ms=%u master=%s build=%s\n",timeout_ms,master?master:"disabled",DPT_NET_BUILD_ID);
         fflush(stdout);
         start = DG_GetTicksMs();
