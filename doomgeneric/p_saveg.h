@@ -58,5 +58,10 @@ void P_UnArchiveSpecials (void);
 extern FILE *save_stream;
 extern boolean savegame_error;
 
+// archive-fnv1a-v1: save header/body with addresses and traversal stamps zeroed;
+// cached object floor/ceiling heights normalized to subsector sector bounds.
+// Does not cover state the vanilla format omits (RNG, target/tracer, etc.).
+unsigned int P_ArchiveChecksum(void);
+
 
 #endif

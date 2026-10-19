@@ -40,6 +40,12 @@ FILE *save_stream;
 int savegamelength;
 boolean savegame_error;
 
+// A versioned diagnostic projection of the existing archive, not a new save
+// format. Hash endian-defined bytes without writing a file or process pointers.
+static boolean checksum_active;
+static uint32_t checksum_value;
+static unsigned int checksum_bytes;
+
 // Get the filename of a temporary file to write the savegame to.  After
 // the file has been successfully saved, it will be renamed to the 
 // real file.
@@ -80,17 +86,12 @@ char *P_SaveGameFile(int slot)
 
 static byte saveg_read8(void)
 {
-    byte result;
+    byte result = 0;
 
     if (fread(&result, 1, 1, save_stream) < 1)
     {
-        if (!savegame_error)
-        {
-            fprintf(stderr, "saveg_read8: Unexpected end of file while "
-                            "reading save game\n");
-
-            savegame_error = true;
-        }
+        savegame_error = true;
+        I_Error("Unexpected end of file while reading savegame");
     }
 
     return result;
@@ -98,6 +99,12 @@ static byte saveg_read8(void)
 
 static void saveg_write8(byte value)
 {
+    if (checksum_active)
+    {
+        checksum_value = (checksum_value ^ value) * 16777619u;
+        ++checksum_bytes;
+        return;
+    }
     if (fwrite(&value, 1, 1, save_stream) < 1)
     {
         if (!savegame_error)
@@ -127,12 +134,12 @@ static void saveg_write16(short value)
 
 static int saveg_read32(void)
 {
-    int result;
+    uint32_t result;
 
     result = saveg_read8();
     result |= saveg_read8() << 8;
     result |= saveg_read8() << 16;
-    result |= saveg_read8() << 24;
+    result |= (uint32_t)saveg_read8() << 24;
 
     return result;
 }
@@ -169,7 +176,7 @@ static void saveg_write_pad(void)
     int padding;
     int i;
 
-    pos = ftell(save_stream);
+    pos = checksum_active ? checksum_bytes : ftell(save_stream);
 
     padding = (4 - (pos & 3)) & 3;
 
@@ -189,7 +196,15 @@ static void *saveg_readp(void)
 
 static void saveg_writep(void *p)
 {
-    saveg_write32((intptr_t) p);
+    saveg_write32(checksum_active ? 0 : (int)(uintptr_t)p);
+}
+
+static sector_t *saveg_read_sector(void)
+{
+    int index = saveg_read32();
+    if (index < 0 || index >= numsectors)
+        I_Error("Invalid sector index in savegame");
+    return &sectors[index];
 }
 
 // Enum values are 32-bit integers.
@@ -300,7 +315,7 @@ static void saveg_write_thinker_t(thinker_t *str)
 
 static void saveg_read_mobj_t(mobj_t *str)
 {
-    int pl;
+    int pl, state;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
@@ -364,6 +379,8 @@ static void saveg_read_mobj_t(mobj_t *str)
 
     // mobjtype_t type;
     str->type = saveg_read_enum();
+    if (str->type < 0 || str->type >= NUMMOBJTYPES)
+        I_Error("Invalid mobj type in savegame");
 
     // mobjinfo_t* info;
     str->info = saveg_readp();
@@ -372,7 +389,10 @@ static void saveg_read_mobj_t(mobj_t *str)
     str->tics = saveg_read32();
 
     // state_t* state;
-    str->state = &states[saveg_read32()];
+    state = saveg_read32();
+    if (state < 0 || state >= NUMSTATES)
+        I_Error("Invalid mobj state in savegame");
+    str->state = &states[state];
 
     // int flags;
     str->flags = saveg_read32();
@@ -397,6 +417,8 @@ static void saveg_read_mobj_t(mobj_t *str)
 
     // struct player_s* player;
     pl = saveg_read32();
+    if (pl < 0 || pl > MAXPLAYERS)
+        I_Error("Invalid player index in savegame");
 
     if (pl > 0)
     {
@@ -457,10 +479,12 @@ static void saveg_write_mobj_t(mobj_t *str)
     saveg_writep(str->subsector);
 
     // fixed_t floorz;
-    saveg_write32(str->floorz);
+    // Load reconstructs these cached heights from the sector. Normalize only
+    // the diagnostic projection; retain the original bytes in real saves.
+    saveg_write32(checksum_active ? str->subsector->sector->floorheight : str->floorz);
 
     // fixed_t ceilingz;
-    saveg_write32(str->ceilingz);
+    saveg_write32(checksum_active ? str->subsector->sector->ceilingheight : str->ceilingz);
 
     // fixed_t radius;
     saveg_write32(str->radius);
@@ -478,7 +502,8 @@ static void saveg_write_mobj_t(mobj_t *str)
     saveg_write32(str->momz);
 
     // int validcount;
-    saveg_write32(str->validcount);
+    // Collision traversal stamp is process-local and not gameplay data.
+    saveg_write32(checksum_active ? 0 : str->validcount);
 
     // mobjtype_t type;
     saveg_write_enum(str->type);
@@ -592,6 +617,8 @@ static void saveg_read_pspdef_t(pspdef_t *str)
 
     // state_t* state;
     state = saveg_read32();
+    if (state < 0 || state >= NUMSTATES)
+        I_Error("Invalid weapon state in savegame");
 
     if (state > 0)
     {
@@ -647,6 +674,8 @@ static void saveg_read_player_t(player_t *str)
 
     // playerstate_t playerstate;
     str->playerstate = saveg_read_enum();
+    if (str->playerstate < PST_LIVE || str->playerstate > PST_REBORN)
+        I_Error("Invalid player state in savegame");
 
     // ticcmd_t cmd;
     saveg_read_ticcmd_t(&str->cmd);
@@ -695,9 +724,13 @@ static void saveg_read_player_t(player_t *str)
 
     // weapontype_t readyweapon;
     str->readyweapon = saveg_read_enum();
+    if (str->readyweapon < 0 || str->readyweapon >= NUMWEAPONS)
+        I_Error("Invalid ready weapon in savegame");
 
     // weapontype_t pendingweapon;
     str->pendingweapon = saveg_read_enum();
+    if (str->pendingweapon < 0 || str->pendingweapon > wp_nochange)
+        I_Error("Invalid pending weapon in savegame");
 
     // boolean weaponowned[NUMWEAPONS];
     for (i=0; i<NUMWEAPONS; ++i)
@@ -907,7 +940,6 @@ static void saveg_write_player_t(player_t *str)
 
 static void saveg_read_ceiling_t(ceiling_t *str)
 {
-    int sector;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
@@ -916,8 +948,7 @@ static void saveg_read_ceiling_t(ceiling_t *str)
     str->type = saveg_read_enum();
 
     // sector_t* sector;
-    sector = saveg_read32();
-    str->sector = &sectors[sector];
+    str->sector = saveg_read_sector();
 
     // fixed_t bottomheight;
     str->bottomheight = saveg_read32();
@@ -980,7 +1011,6 @@ static void saveg_write_ceiling_t(ceiling_t *str)
 
 static void saveg_read_vldoor_t(vldoor_t *str)
 {
-    int sector;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
@@ -989,8 +1019,7 @@ static void saveg_read_vldoor_t(vldoor_t *str)
     str->type = saveg_read_enum();
 
     // sector_t* sector;
-    sector = saveg_read32();
-    str->sector = &sectors[sector];
+    str->sector = saveg_read_sector();
 
     // fixed_t topheight;
     str->topheight = saveg_read32();
@@ -1041,7 +1070,6 @@ static void saveg_write_vldoor_t(vldoor_t *str)
 
 static void saveg_read_floormove_t(floormove_t *str)
 {
-    int sector;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
@@ -1053,8 +1081,7 @@ static void saveg_read_floormove_t(floormove_t *str)
     str->crush = saveg_read32();
 
     // sector_t* sector;
-    sector = saveg_read32();
-    str->sector = &sectors[sector];
+    str->sector = saveg_read_sector();
 
     // int direction;
     str->direction = saveg_read32();
@@ -1108,14 +1135,12 @@ static void saveg_write_floormove_t(floormove_t *str)
 
 static void saveg_read_plat_t(plat_t *str)
 {
-    int sector;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
 
     // sector_t* sector;
-    sector = saveg_read32();
-    str->sector = &sectors[sector];
+    str->sector = saveg_read_sector();
 
     // fixed_t speed;
     str->speed = saveg_read32();
@@ -1193,14 +1218,12 @@ static void saveg_write_plat_t(plat_t *str)
 
 static void saveg_read_lightflash_t(lightflash_t *str)
 {
-    int sector;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
 
     // sector_t* sector;
-    sector = saveg_read32();
-    str->sector = &sectors[sector];
+    str->sector = saveg_read_sector();
 
     // int count;
     str->count = saveg_read32();
@@ -1248,14 +1271,12 @@ static void saveg_write_lightflash_t(lightflash_t *str)
 
 static void saveg_read_strobe_t(strobe_t *str)
 {
-    int sector;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
 
     // sector_t* sector;
-    sector = saveg_read32();
-    str->sector = &sectors[sector];
+    str->sector = saveg_read_sector();
 
     // int count;
     str->count = saveg_read32();
@@ -1303,14 +1324,12 @@ static void saveg_write_strobe_t(strobe_t *str)
 
 static void saveg_read_glow_t(glow_t *str)
 {
-    int sector;
 
     // thinker_t thinker;
     saveg_read_thinker_t(&str->thinker);
 
     // sector_t* sector;
-    sector = saveg_read32();
-    str->sector = &sectors[sector];
+    str->sector = saveg_read_sector();
 
     // int minlight;
     str->minlight = saveg_read32();
@@ -1349,7 +1368,7 @@ void P_WriteSaveGameHeader(char *description)
     char name[VERSIONSIZE]; 
     int i; 
 	
-    for (i=0; description[i] != '\0'; ++i)
+    for (i=0; i<SAVESTRINGSIZE-1 && description[i] != '\0'; ++i)
         saveg_write8(description[i]);
     for (; i<SAVESTRINGSIZE; ++i)
         saveg_write8(0);
@@ -1393,15 +1412,25 @@ boolean P_ReadSaveGameHeader(void)
 
     memset(vcheck, 0, sizeof(vcheck));
     M_snprintf(vcheck, sizeof(vcheck), "version %i", G_VanillaVersionCode());
-    if (strcmp(read_vcheck, vcheck) != 0)
+    if (memcmp(read_vcheck, vcheck, VERSIONSIZE) != 0)
 	return false;				// bad version 
 
     gameskill = saveg_read8();
     gameepisode = saveg_read8();
     gamemap = saveg_read8();
+    if (gameskill < sk_baby || gameskill > sk_nightmare
+        || gameepisode < 1 || gameepisode > 4 || gamemap < 1
+        || gamemap > (gamemode == commercial ? 32 : 9))
+        I_Error("Invalid skill, episode or map in savegame");
 
     for (i=0 ; i<MAXPLAYERS ; i++) 
-	playeringame[i] = saveg_read8();
+    {
+        playeringame[i] = saveg_read8();
+        if (playeringame[i] > 1)
+            I_Error("Invalid player flag in savegame");
+    }
+    if (!playeringame[consoleplayer])
+        I_Error("Savegame has no local player");
 
     // get the times 
     a = saveg_read8();
@@ -1432,6 +1461,21 @@ boolean P_ReadSaveGameEOF(void)
 void P_WriteSaveGameEOF(void)
 {
     saveg_write8(SAVEGAME_EOF);
+}
+
+unsigned int P_ArchiveChecksum(void)
+{
+    checksum_active = true;
+    checksum_bytes = 0;
+    checksum_value = 2166136261u;
+    P_WriteSaveGameHeader("");
+    P_ArchivePlayers();
+    P_ArchiveWorld();
+    P_ArchiveThinkers();
+    P_ArchiveSpecials();
+    P_WriteSaveGameEOF();
+    checksum_active = false;
+    return checksum_value;
 }
 
 //

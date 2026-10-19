@@ -28,6 +28,7 @@
 boolean M_WriteFile(char *name, void *source, int length);
 int M_ReadFile(char *name, byte **buffer);
 void M_MakeDirectory(const char *dir);
+boolean M_ReplaceFile(const char *source, const char *destination);
 char *M_TempFile(char *s);
 boolean M_FileExists(char *file);
 long M_FileLength(FILE *handle);

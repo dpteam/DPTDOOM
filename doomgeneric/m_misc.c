@@ -61,6 +61,17 @@ void M_MakeDirectory(const char *path)
 #endif
 }
 
+// Commit a completed save without deleting the old slot first. Both paths
+// are in the same directory; on failure the previous slot survives.
+boolean M_ReplaceFile(const char *source, const char *destination)
+{
+#ifdef _WIN32
+    return MoveFileExA(source, destination, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+    return rename(source, destination) == 0;
+#endif
+}
+
 // Check if a file exists
 
 boolean M_FileExists(char *filename)

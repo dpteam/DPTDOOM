@@ -71,6 +71,7 @@
 
 
 #include "g_game.h"
+#include "d_diagnostics.h"
 
 
 #define SAVEGAMESIZE	0x2c000
@@ -1022,7 +1023,8 @@ void G_Ticker (void)
       case GS_DEMOSCREEN: 
 	D_PageTicker (); 
 	break;
-    }        
+    }
+    D_DiagnosticsTic();
 } 
  
  
@@ -1555,7 +1557,7 @@ void G_DoLoadGame (void)
 
     if (save_stream == NULL)
     {
-    	return;
+        I_Error("Cannot open savegame: %s", savename);
     }
 
     savegame_error = false;
@@ -1563,7 +1565,8 @@ void G_DoLoadGame (void)
     if (!P_ReadSaveGameHeader())
     {
         fclose(save_stream);
-        return;
+        save_stream = NULL;
+        I_Error("Incompatible savegame version: %s", savename);
     }
 
     savedleveltime = leveltime;
@@ -1583,6 +1586,8 @@ void G_DoLoadGame (void)
 	I_Error ("Bad savegame");
 
     fclose(save_stream);
+    save_stream = NULL;
+    D_DiagnosticsLoaded();
     
     if (setsizeneeded)
     	R_ExecuteSetViewSize ();
@@ -1602,8 +1607,10 @@ G_SaveGame
 ( int	slot,
   char*	description )
 {
+    if (slot < 0 || slot > 7)
+        I_Error("Invalid savegame slot: %d", slot);
     savegameslot = slot;
-    M_StringCopy(savedescription, description, sizeof(savedescription));
+    M_StringCopy(savedescription, description, SAVESTRINGSIZE);
     sendsave = true;
 }
 
@@ -1657,7 +1664,11 @@ void G_DoSaveGame (void)
     
     // Finish up, close the savegame file.
 
-    fclose(save_stream);
+    if (fclose(save_stream) != 0)
+        savegame_error = true;
+    save_stream = NULL;
+    if (savegame_error)
+        I_Error("Failed writing savegame; original slot was preserved");
 
     if (recovery_savegame_file != NULL)
     {
@@ -1672,8 +1683,8 @@ void G_DoSaveGame (void)
     // Now rename the temporary savegame file to the actual savegame
     // file, overwriting the old savegame if there was one there.
 
-    remove(savegame_file);
-    rename(temp_savegame_file, savegame_file);
+    if (!M_ReplaceFile(temp_savegame_file, savegame_file))
+        I_Error("Failed replacing savegame '%s'; original slot was preserved", savegame_file);
     
     gameaction = ga_nothing;
     M_StringCopy(savedescription, "", sizeof(savedescription));

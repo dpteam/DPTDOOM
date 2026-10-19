@@ -1,0 +1,13 @@
+{
+  "schema": "dptdoom-state-v1",
+  "iwads": {
+    "10d67824b11025ddd9198e8cfc87ca335ee6e2d3e63af4180fa9b8a471893255": {
+      "label": "Owner's Doom II IWAD; Windows x64 MSVC 19.44 and GCC 16.1 Release",
+      "demos": {
+        "DEMO1": {"gametics": 1205, "rows": 1205, "trace_sha256": "02d1ee99f158a30132f4d0017901b027ab98b1c13f83bb68ca1c39b9c5426837", "last_archive": "1955b210", "last_sim": "8de0ff6b"},
+        "DEMO2": {"gametics": 2001, "rows": 2001, "trace_sha256": "ad47d4dd23885c5e3bd6f1cdf44fdc32bfdf0b2bfe1488d4ebe1a0d8c8aaeb8a", "last_archive": "c5fba919", "last_sim": "1c5e8fe4"},
+        "DEMO3": {"gametics": 4471, "rows": 4471, "trace_sha256": "7808b4d344730ebb9e058ef86944814ad0b6b02fbe3796c869d5903b5e13090a", "last_archive": "52a3f495", "last_sim": "e6b21b98"}
+      }
+    }
+  }
+}

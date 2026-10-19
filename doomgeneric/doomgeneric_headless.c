@@ -12,6 +12,7 @@
 #include "doomgeneric.h"
 #include "i_system.h"
 #include "m_argv.h"
+#include "d_diagnostics.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -110,6 +111,7 @@ void DG_Init(void)
         dump_path = myargv[p + 1];
     }
     I_AtExit(FinishHeadless, true);
+    D_DiagnosticsInit();
     puts("Headless: no window, keyboard or audio output");
 }
 

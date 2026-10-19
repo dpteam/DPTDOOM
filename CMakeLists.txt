@@ -55,7 +55,8 @@ elseif(DPTDOOM_BACKEND STREQUAL "sdl")
             copy_if_different $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:dptdoom>)
     endif()
 elseif(DPTDOOM_BACKEND STREQUAL "headless")
-    target_sources(dptdoom PRIVATE doomgeneric/doomgeneric_headless.c)
+    target_sources(dptdoom PRIVATE doomgeneric/doomgeneric_headless.c doomgeneric/d_diagnostics.c)
+    target_compile_definitions(dptdoom PRIVATE DPTDOOM_DIAGNOSTICS)
     set_target_properties(dptdoom PROPERTIES OUTPUT_NAME dptdoom-headless)
 else()
     message(FATAL_ERROR "Unknown DPTDOOM_BACKEND: ${DPTDOOM_BACKEND}")
@@ -141,6 +142,10 @@ if(BUILD_TESTING)
         add_test(NAME headless-smoke COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/headless-smoke.py" ${smoke_args})
         set_tests_properties(headless-smoke PROPERTIES TIMEOUT 120)
+        add_test(NAME state-smoke COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/state-smoke.py"
+            --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+        set_tests_properties(state-smoke PROPERTIES TIMEOUT 180)
     endif()
     if(DPTDOOM_BACKEND STREQUAL "sdl")
         add_executable(sdl-input-test tests/sdl-input.c doomgeneric/doomgeneric_sdl.c
