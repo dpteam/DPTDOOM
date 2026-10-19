@@ -21,12 +21,20 @@ cmake --build --preset windows-sdl --target dptdoom-master
 & ./build/windows-sdl/Release/dptdoom-master.exe
 ```
 
-По умолчанию слушает **только `127.0.0.1:2343` TCP**, lease TTL 60 секунд.
+По умолчанию слушает **только `127.0.0.1:25135` TCP**, lease TTL 60 секунд.
 Для осознанной LAN-проверки можно задать `--bind 192.168.1.10` либо `0.0.0.0`.
 Аргументы: `--port 1..65535`, `--lease-seconds 3..300`, `--help`.
 Короткий TTL полезен для тестов; heartbeat interval возвращается как TTL/3.
 Ctrl+C завершает цикл. Закрытие/перезапуск master теряет все записи — базы нет.
 Никакие firewall rules, автозапуск, службы или настройки роутера не создаются.
+
+По просьбе владельца тестовый внешний адрес — `play.dartpower.xyz:25135`.
+Для ручного проброса: `dptdoom-master.exe --bind 0.0.0.0 --port 25135`.
+Пробрасывать **TCP**, не UDP. Это не игровой порт и не подтверждение внешней
+доступности/DNS; её нужно отдельно проверить с другой машины/сети.
+Launcher при сохранении профиля создаёт `[Master] Endpoint=play.dartpower.xyz:25135`
+в своём `launcher.ini`, не заменяя пользовательский адрес. Пока это сохранённый
+default для следующей browser-интеграции, не активное подключение к master.
 
 Windows runtime проверен MSVC и MinGW, модель/loopback также MSVC ASan.
 Unix socket/clock/entropy path предусмотрен, **Linux/macOS не запускались**.

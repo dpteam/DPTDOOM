@@ -75,7 +75,9 @@ Headless: dptdoom-headless[.exe] -iwad /path/to/doom2.wad -headless-frames 70
 Use --version to check startup without game data.
 
 Native directory prototype: bin/dptdoom-master[.exe] --help
-Default: loopback TCP 2343, directory protocol v1, experimental LAN only.
+Default: loopback TCP 25135, directory protocol v1, experimental LAN only.
+Launcher config seeds [Master] Endpoint=play.dartpower.xyz:25135 on profile save;
+this does not connect automatically until browser integration is implemented.
 This is NOT a dedicated game server. Launcher listing/automatic publication
 are not integrated yet. No TLS, game-port reachability proof or NAT traversal.
 

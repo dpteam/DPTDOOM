@@ -268,7 +268,7 @@ static void Stop(int event) { (void)event; stopping=1; }
 int main(int argc, char **argv)
 {
     const char *host="127.0.0.1";
-    unsigned int port=2343,i;
+    unsigned int port=25135,i;
     struct sockaddr_in address;
     SOCKET listener;
     int result;
@@ -277,7 +277,7 @@ int main(int argc, char **argv)
     {
         if(!strcmp(argv[i],"--version")) { puts("DPT.DOOM master 0.1.0-dev"); return 0; }
         if(!strcmp(argv[i],"--help"))
-        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\nExperimental TCP directory v1; default loopback:2343, TTL 60s; no TLS, game relay or port probing."); return 0; }
+        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\nExperimental TCP directory v1; default loopback:25135, TTL 60s; no TLS, game relay or port probing."); return 0; }
         if(i+1>=(unsigned int)argc)goto usage;
         if(!strcmp(argv[i],"--bind"))host=argv[++i];
         else if(!strcmp(argv[i],"--port")) { if(!Number(argv[++i],1,65535,&port))goto usage; }

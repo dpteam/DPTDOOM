@@ -281,6 +281,13 @@ BOOL LP_Save(const wchar_t *ini, int slot, const launch_profile_t *p)
         else if (GetLastError() != ERROR_FILE_EXISTS && GetLastError() != ERROR_ALREADY_EXISTS) return FALSE;
     }
     Section(slot, section);
+    {
+        wchar_t endpoint[256];
+        GetPrivateProfileStringW(L"Master", L"Endpoint", L"", endpoint, 256, ini);
+        // Seed the editable client default, never overwrite the owner's value.
+        // Browser integration is not implemented yet; no background connection.
+        if (!endpoint[0] && !WritePrivateProfileStringW(L"Master", L"Endpoint", LP_MASTER_ENDPOINT, ini)) return FALSE;
+    }
 #define WRITE_TEXT(keyname, text) do { if (!WritePrivateProfileStringW(section, keyname, text, ini)) return FALSE; } while (0)
 #define SAVE(field, keyname) do { swprintf(value, 64, L"%u", (unsigned int)p->field); WRITE_TEXT(keyname, value); } while (0)
     WRITE_TEXT(L"Executable", p->executable); WRITE_TEXT(L"IWAD", p->iwad); WRITE_TEXT(L"Address", p->address);

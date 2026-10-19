@@ -42,6 +42,14 @@ int main(void)
     wcscpy(p.address,L"bad");REQUIRE(!LP_Build(&p,command,LP_COMMAND,error,512));wcscpy(p.address,L"127.0.0.1");
     p.mod_count=2;wcscpy(p.mods[0],L"first.wad");wcscpy(p.mods[1],L"second.wad");
     for(i=1;i<=3;++i){p.skill=i;REQUIRE(LP_Save(ini,i,&p));}
+    { wchar_t endpoint[256];
+      GetPrivateProfileStringW(L"Master",L"Endpoint",L"",endpoint,256,ini);
+      REQUIRE(!wcscmp(endpoint,LP_MASTER_ENDPOINT));
+      REQUIRE(WritePrivateProfileStringW(L"Master",L"Endpoint",L"localhost:9999",ini));
+      p.skill=1;
+      REQUIRE(LP_Save(ini,1,&p));
+      GetPrivateProfileStringW(L"Master",L"Endpoint",L"",endpoint,256,ini);
+      REQUIRE(!wcscmp(endpoint,L"localhost:9999")); }
     for(i=1;i<=3;++i){REQUIRE(LP_Load(ini,i,&loaded));REQUIRE(loaded.skill==i&&loaded.mod_count==2&&!wcscmp(loaded.mods[1],L"second.wad"));}
     p.mod_count=0;REQUIRE(LP_Save(ini,1,&p));REQUIRE(LP_Load(ini,1,&loaded));REQUIRE(!loaded.mod_count);
     REQUIRE(!LP_Load(ini,4,&loaded));

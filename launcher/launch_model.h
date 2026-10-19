@@ -9,6 +9,7 @@
 #define LP_PATH 2048
 #define LP_MODS 16
 #define LP_COMMAND 32768
+#define LP_MASTER_ENDPOINT L"play.dartpower.xyz:25135"
 typedef struct
 {
     wchar_t executable[LP_PATH], iwad[LP_PATH];
