@@ -37,10 +37,12 @@ int main(int argc,char **argv)
             {struct timespec delay={0,1000000};nanosleep(&delay,NULL);}
 #endif
         }
+        // Always print transport diagnostics before checking expectations, so
+        // CI logs identify the failed native stage even on a success-case fail.
+        {char diagnostic[1024];MC_Diagnostic(&query,diagnostic,sizeof(diagnostic));puts(diagnostic);fflush(stdout);}
         if(!strcmp(argv[2],"ok"))REQUIRE(result==1&&!query.status);
         else if(!strcmp(argv[2],"reject"))REQUIRE(result==1&&query.status);
         else REQUIRE(result<0);
-        {char diagnostic[1024];MC_Diagnostic(&query,diagnostic,sizeof(diagnostic));puts(diagnostic);}
         MC_Close(&query);puts("Master client wire probe OK");return 0;
     }
     REQUIRE(MC_Endpoint("play.dartpower.xyz:25135",host,&port)&&port==25135);

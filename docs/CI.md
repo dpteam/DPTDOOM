@@ -21,6 +21,27 @@ Headless/SDL Windows/Linux/macOS и Windows ASan в этом run прошли. �
 именно той ревизии и data-free сценариев; новые browser/publication изменения
 ещё требуют следующего remote run. Ручная игра Linux/macOS не проверена.
 
+Поздний remote run [#17, cd497cc](https://github.com/dpteam/DPTDOOM/actions/runs/39292636104)
+подтвердил: Windows SDL/headless/ASan и Ubuntu SDL/headless зелёные, падали только
+macOS SDL/headless. Его job logs без GitHub authentication недоступны (API отдаёт
+403); annotations показывают только `ctest` exit 8. Причина этого нового падения
+**пока не установлена**: предыдущие loopback-alias guards/pacing уже входили в
+6061a13 и не объясняют автоматически failure более позднего cd497cc. Нужен
+traceback из macOS LastTest.log/Actions и новый remote run после исправления.
+Локальные Windows suites не являются подтверждением исправленного macOS.
+
+Node warning про actions, которые таргетят Node 20 и forced runner Node 24, не
+является падением теста. Pinned action revisions пока не менять без отдельной
+проверки release notes/actionlint; GitHub уже выполняет их на Node 24.
+
+Владелец уточнил test failure macOS: **master-client-wire**, не master-loopback
+и не compiler failure (96%, 1/24). Точный traceback ещё не предоставлен. Устранена
+гонка самого slow-peer fixture: вместо fixed sleep 3s vs native deadline 2.5s
+сервер ждёт фактического выхода клиента, сохраняя соединение открытым; deadline
+клиента не увеличен. Добавлены имена каждого сценария, EOF guard в request read
+и native diagnostics до assertion. Это test-hardening, не подтверждённый root
+cause/fix macOS до получения traceback/нового remote run.
+
 ## Матрица
 
 | Job | Runner | Проверки без игровых данных |

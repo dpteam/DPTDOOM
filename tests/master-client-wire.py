@@ -12,6 +12,9 @@ exe = str(Path(sys.argv[1]).resolve(strict=True))
 
 def case(response, expected="bad", slow=False, diagnostic=None):
     errors = []
+    finished = threading.Event()
+    label = f"expected={expected} slow={slow} header={response[:16].hex()} diagnostic={diagnostic}"
+    print("master-client-wire case:", label, flush=True)
     with socket.socket() as server:
         server.bind(("127.0.0.1", 0))
         server.listen(1)
@@ -22,10 +25,15 @@ def case(response, expected="bad", slow=False, diagnostic=None):
                     sock.settimeout(5)
                     request = b""
                     while len(request) < 16:
-                        request += sock.recv(16-len(request))
+                        part = sock.recv(16-len(request))
+                        assert part, "native client closed before full request"
+                        request += part
                     assert request[:4] == b"DPTM"
                     if slow:
-                        time.sleep(3)
+                        # Keep the peer open until the native client has actually
+                        # exited on its own deadline. A fixed 3s sleep competes
+                        # with its 2.5s timer under loaded/suspended CI runners.
+                        assert finished.wait(12), "native deadline did not finish"
                     else:
                         for start in range(0, len(response), 3):
                             sock.sendall(response[start:start+3])
@@ -36,10 +44,13 @@ def case(response, expected="bad", slow=False, diagnostic=None):
                 errors.append(e)
         worker = threading.Thread(target=peer)
         worker.start()
-        result = subprocess.run([exe, str(server.getsockname()[1]), expected], capture_output=True, timeout=12)
-        worker.join(10)
-        assert not worker.is_alive() and not errors, errors
-        assert result.returncode == 0, (result.stdout, result.stderr)
+        try:
+            result = subprocess.run([exe, str(server.getsockname()[1]), expected], capture_output=True, timeout=12)
+        finally:
+            finished.set()
+            worker.join(12)
+        assert not worker.is_alive() and not errors, (label, errors)
+        assert result.returncode == 0, (label, result.stdout, result.stderr)
         if diagnostic:
             assert diagnostic.encode() in result.stdout, result.stdout
         for field in (b'endpoint=127.0.0.1:', b'local=', b'stage=', b'os_error=', b'elapsed_ms=', b'sent=', b'received='):
