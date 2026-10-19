@@ -73,6 +73,7 @@
 #include "g_game.h"
 #include "d_diagnostics.h"
 #include "dpt_net.h"
+#include "dpt_rules.h"
 
 
 #define SAVEGAMESIZE	0x2c000
@@ -224,7 +225,64 @@ static boolean *joybuttons = &joyarray[1];		// allow [-1]
 static int      savegameslot; 
 static char     savedescription[32]; 
 static boolean demo_save_pending;
+static boolean direct_game_ended;
+static boolean direct_fast_states_saved;
+static int direct_base_tics[S_SARG_PAIN2 - S_SARG_RUN1 + 1];
+static fixed_t direct_base_projectile_speeds[3];
 static void G_StopDemoForLoad(void);
+
+void G_ReturnFromDirectGame(void)
+{
+    int i;
+    if (automapactive) AM_Stop();
+    if (gamestate == GS_INTERMISSION) WI_End();
+    S_StopAllSounds();
+    S_StopMusic();
+    HU_Stop();
+    netgame = netdemo = demoplayback = demorecording = false;
+    timingdemo = singledemo = singletics = lowres_turn = false;
+    paused = sendpause = sendsave = demo_save_pending = false;
+    usergame = viewactive = automapactive = false;
+    deathmatch = timelimit = 0;
+    // G_InitNew modifies shared monster-state durations/speeds for fast or
+    // nightmare games. Undo once before leaving that mode, not on every SP tic.
+    if (direct_fast_states_saved)
+    {
+        for (i = S_SARG_RUN1; i <= S_SARG_PAIN2; ++i)
+            states[i].tics = direct_base_tics[i - S_SARG_RUN1];
+        mobjinfo[MT_BRUISERSHOT].speed = direct_base_projectile_speeds[0];
+        mobjinfo[MT_HEADSHOT].speed = direct_base_projectile_speeds[1];
+        mobjinfo[MT_TROOPSHOT].speed = direct_base_projectile_speeds[2];
+        direct_fast_states_saved = false;
+    }
+    gameskill = sk_medium;
+    nomonsters = fastparm = respawnparm = respawnmonsters = false;
+    dpt_dmflags = 0;
+    consoleplayer = displayplayer = 0;
+    for (i = 0; i < MAXPLAYERS; ++i)
+    {
+        memset(&players[i], 0, sizeof(players[i]));
+        players[i].playerstate = PST_REBORN;
+        playeringame[i] = i == 0;
+        turbodetected[i] = false;
+    }
+    memset(consistancy, 0, sizeof(consistancy));
+    memset(gamekeydown, 0, sizeof(gamekeydown));
+    memset(mousearray, 0, sizeof(mousearray));
+    memset(joyarray, 0, sizeof(joyarray));
+    mousex = mousey = joyxmove = joyymove = joystrafemove = 0;
+    turnheld = next_weapon = dclicktime = dclicktime2 = dclicks = dclicks2 = 0;
+    dclickstate = dclickstate2 = false;
+    memset(savedescription, 0, sizeof(savedescription));
+    netcmds = NULL;
+    { extern void I_InitInput(void); I_InitInput(); }
+    direct_game_ended = true;
+    // Keep level allocations until P_SetupLevel's normal teardown. No renderer
+    // or sound path may dereference them while displaying the title/menu.
+    D_StartTitle();
+    D_DoAdvanceDemo();
+    gamestate = oldgamestate = GS_DEMOSCREEN;
+}
  
 #define	BODYQUESIZE	32
 
@@ -1745,7 +1803,7 @@ G_DeferedInitNew
 } 
 
 
-void G_DoNewGame (void) 
+void G_DoNewGame (void)
 {
     demoplayback = false; 
     netdemo = false;
@@ -1758,6 +1816,12 @@ void G_DoNewGame (void)
     consoleplayer = 0;
     G_InitNew (d_skill, d_episode, d_map); 
     gameaction = ga_nothing; 
+    if (direct_game_ended)
+    {
+        puts("Single-player game started after disconnect (player 1, vanilla rules).");
+        fflush(stdout);
+        direct_game_ended = false;
+    }
 } 
 
 
@@ -1849,6 +1913,15 @@ G_InitNew
 
     if (fastparm || (skill == sk_nightmare && gameskill != sk_nightmare) )
     {
+        if (DPT_NetActive() && !direct_fast_states_saved)
+        {
+            for (i = S_SARG_RUN1; i <= S_SARG_PAIN2; ++i)
+                direct_base_tics[i - S_SARG_RUN1] = states[i].tics;
+            direct_base_projectile_speeds[0] = mobjinfo[MT_BRUISERSHOT].speed;
+            direct_base_projectile_speeds[1] = mobjinfo[MT_HEADSHOT].speed;
+            direct_base_projectile_speeds[2] = mobjinfo[MT_TROOPSHOT].speed;
+            direct_fast_states_saved = true;
+        }
 	for (i=S_SARG_RUN1 ; i<=S_SARG_PAIN2 ; i++)
 	    states[i].tics >>= 1;
 	mobjinfo[MT_BRUISERSHOT].speed = 20*FRACUNIT;

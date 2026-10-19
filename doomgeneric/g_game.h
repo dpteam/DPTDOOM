@@ -44,6 +44,8 @@ void G_DeferedPlayDemo (char* demo);
 void G_LoadGame (char* name);
 
 void G_DoLoadGame (void);
+// Only at a loop boundary after the direct transport has closed.
+void G_ReturnFromDirectGame(void);
 
 // Called by M_Responder.
 void G_SaveGame (int slot, char* description);

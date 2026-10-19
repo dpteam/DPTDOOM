@@ -69,6 +69,7 @@ boolean S_MusicPlaying(void);
 
 // Stops the music fer sure.
 void S_StopMusic(void);
+void S_StopAllSounds(void);
 
 // Stop and resume music, during game PAUSE.
 void S_PauseSound(void);

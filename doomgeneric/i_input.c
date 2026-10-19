@@ -275,6 +275,7 @@ static void UpdateShiftStatus(int pressed, unsigned char key)
 
     if (key == KEY_RSHIFT) {
         shiftdown += change;
+        if (shiftdown < 0) shiftdown = 0;
     }
 }
 
@@ -342,5 +343,6 @@ void I_GetEvent(void)
 
 void I_InitInput(void)
 {
+    shiftdown = 0;
 }
 

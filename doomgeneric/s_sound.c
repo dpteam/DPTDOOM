@@ -239,7 +239,15 @@ void S_Start(void)
     }        
 
     S_ChangeMusic(mnum, true);
-}        
+}
+
+void S_StopAllSounds(void)
+{
+    int cnum;
+    for (cnum = 0; cnum < snd_channels; ++cnum)
+        S_StopChannel(cnum);
+    mus_paused = false;
+}
 
 void S_StopSound(mobj_t *origin)
 {

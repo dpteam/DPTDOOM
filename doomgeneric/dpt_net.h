@@ -7,12 +7,15 @@
 boolean DPT_NetRequested(void);
 boolean DPT_NetActive(void);
 void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void));
-void DPT_NetExchange(ticcmd_t *commands, unsigned int tic);
+boolean DPT_NetExchange(ticcmd_t *commands, unsigned int tic);
+void DPT_NetRequestDisconnect(void);
+const char *DPT_NetDisconnectReason(void);
 void DPT_NetShutdown(void);
 unsigned int DPT_NetStateChecksum(void);
 #else
 #define DPT_NetRequested() false
 #define DPT_NetActive() false
 #define DPT_NetShutdown() ((void)0)
+#define DPT_NetRequestDisconnect() ((void)0)
 #endif
 #endif

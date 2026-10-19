@@ -14,6 +14,10 @@ def main():
     parser.add_argument("--exe", type=Path, required=True)
     parser.add_argument("--iwad", type=Path, required=True)
     parser.add_argument("--dmflags", choices=("0", "1", "2", "3"), default="0")
+    parser.add_argument("--local-end", action="store_true", help="Confirm/cancel F7 disconnect instead of closing host")
+    parser.add_argument("--fast", action="store_true", help="Verify fast monster state does not leak into SP")
+    parser.add_argument("--audio", action="store_true", help="Exercise initialized SFX teardown (honors SDL_AUDIODRIVER)")
+    parser.add_argument("--nightmare", action="store_true", help="Use nightmare instead of medium skill")
     args = parser.parse_args()
     exe, iwad = args.exe.resolve(strict=True), args.iwad.resolve(strict=True)
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -46,8 +50,11 @@ def main():
             number = reservation.getsockname()[1]
         logs = [(path / "game.log").open("w") for path in dirs]
         try:
-            base = [str(exe), "-iwad", str(iwad), "-warp", "1", "-net-timeout", "5000", "-nosound", "-nogui",
+            base = [str(exe), "-iwad", str(iwad), "-warp", "1", "-net-timeout", "5000", "-nogui",
                     "-dmflags", args.dmflags, "-chat-debug"]
+            base += ["-nomusic"] if args.audio else ["-nosound"]
+            if args.fast: base += ["-fast"]
+            if args.nightmare: base += ["-skill", "5"]
             processes.append(subprocess.Popen(base + ["-net-host", str(number)], cwd=dirs[0], stdout=logs[0], stderr=logs[0]))
             deadline = time.monotonic() + 15
             while "listening on" not in (dirs[0] / "game.log").read_text():
@@ -97,13 +104,62 @@ def main():
             tap(0, ord('T')); tap(0, 0x1B)
             time.sleep(3)  # longer than BACKUPTICS, catches legacy consistency handling
             assert all(p.poll() is None for p in processes), [(path / "game.log").read_text() for path in dirs]
-            assert user32.PostMessageW(handles[processes[0].pid], 0x0010, 0, 0)
-            assert processes[0].wait(timeout=10) == 0
-            assert processes[1].wait(timeout=10) in (255, -1, 0xFFFFFFFF)
+            # Disconnection while chat is open and the game is paused must not
+            # carry pause/chat into the title or the next single-player game.
+            tap(1, 0x13)  # Pause
+            tap(1, ord('T'))
+            tap(1, ord('X'))
+            if args.local_end:
+                tap(0, 0x76)  # F7 End Game
+                tap(0, ord('N'))
+                time.sleep(0.3)
+                assert all(p.poll() is None for p in processes)
+                assert "returned to menu" not in (dirs[0] / "game.log").read_text()
+                tap(0, 0x76); tap(0, ord('Y'))
+                survivors = (0, 1)
+            else:
+                assert user32.PostMessageW(handles[processes[0].pid], 0x0010, 0, 0)
+                assert processes[0].wait(timeout=10) == 0
+                survivors = (1,)
+            deadline = time.monotonic() + 10
+            while not all("returned to menu" in (dirs[i] / "game.log").read_text() for i in survivors):
+                assert all(processes[i].poll() is None for i in survivors), [(path / "game.log").read_text() for path in dirs]
+                assert time.monotonic() < deadline
+                time.sleep(0.05)
+            # Former guest must reset slot 1 -> slot 0 and safely start SP.
+            tap(1, 0x0D)  # dismiss reason -> main menu
+            tap(1, 0x0D)  # New Game
+            tap(1, 0x0D)  # Doom II skill
+            deadline = time.monotonic() + 10
+            while "Single-player game started after disconnect" not in (dirs[1] / "game.log").read_text():
+                assert processes[1].poll() is None, (dirs[1] / "game.log").read_text()
+                assert time.monotonic() < deadline
+                time.sleep(0.05)
+            time.sleep(0.5)
+            tap(1, 0x26)
+            tap(1, 0x71)  # F2, save a real SP game after teardown
+            tap(1, 0x0D)
+            for char in "AFTER NET": tap(1, ord(char))
+            tap(1, 0x0D)
+            save = dirs[1] / ".savegame/doomsav0.dsg"
+            deadline = time.monotonic() + 5
+            while not save.is_file():
+                assert processes[1].poll() is None
+                assert time.monotonic() < deadline, (dirs[1] / "game.log").read_text()
+                time.sleep(0.05)
+            saved = save.read_bytes()
+            assert saved[43:47] == b"\x01\0\0\0", saved[43:47]  # no ghost player 2
+            assert int.from_bytes(saved[47:50], "big") > 0  # SP is not stuck paused
+            tap(1, 0x72); tap(1, 0x0D)  # F3 reload after SP reset
+            time.sleep(0.5)
+            for i in survivors:
+                assert user32.PostMessageW(handles[processes[i].pid], 0x0010, 0, 0)
+                assert processes[i].wait(timeout=10) == 0
             output = [(path / "game.log").read_text() for path in dirs]
             assert all("Network desync" not in log and "consistency failure" not in log for log in output), output
-            assert "Network:" in output[1], output[1]
-            print("Window coop: movement/fire, T/chat/cancel/backspace in both directions, close/disconnect OK")
+            assert all("ERROR: AddressSanitizer:" not in log for log in output), output
+            assert "Network session ended:" in output[1], output[1]
+            print("Window coop: chat/gameplay, menu recovery, guest SP reset/save/load OK", "F7 cancel+confirm" if args.local_end else "peer close")
         finally:
             for process in processes:
                 if process.poll() is None: process.kill(); process.wait()

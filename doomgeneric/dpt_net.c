@@ -35,6 +35,7 @@ typedef int SOCKET;
 #include "w_file.h"
 #include <limits.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 static SOCKET connection = INVALID_SOCKET, listener = INVALID_SOCKET;
 static boolean active, sockets_started;
@@ -43,6 +44,23 @@ static uint32_t timeout_ms = 10000;
 static void (*pump_events)(void);
 static uint32_t last_pump;
 extern int prndindex;
+static boolean disconnect_requested;
+static char disconnect_reason[192];
+
+static boolean SessionFailure(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vsnprintf(disconnect_reason, sizeof(disconnect_reason), format, args);
+    va_end(args);
+    if (!active || M_ParmExists("-net-fail-fast"))
+        I_Error("%s", disconnect_reason);
+    // Caller unwinds to TryRunTics before changing game/loop state.
+    return false;
+}
+
+void DPT_NetRequestDisconnect(void) { if (active) disconnect_requested = true; }
+const char *DPT_NetDisconnectReason(void) { return disconnect_reason; }
 
 static boolean WouldBlock(void)
 {
@@ -66,11 +84,11 @@ static void Nonblocking(SOCKET sock)
 #endif
 }
 
-static void Wait(uint32_t start, const char *operation)
+static boolean Wait(uint32_t start, const char *operation)
 {
     uint32_t now = DG_GetTicksMs();
     if ((uint32_t)(now - start) >= timeout_ms)
-        I_Error("Network timeout during %s", operation);
+        return SessionFailure("Network timeout during %s", operation);
     if ((uint32_t)(now - last_pump) >= 20)
     {
         last_pump = now;
@@ -78,15 +96,17 @@ static void Wait(uint32_t start, const char *operation)
         DG_DrawFrame();
     }
     DG_SleepMs(1);
+    return true;
 }
 
-static void Transfer(byte *buffer, int size, boolean sending)
+static boolean Transfer(byte *buffer, int size, boolean sending)
 {
     int done = 0;
     uint32_t start = DG_GetTicksMs();
     while (done < size)
     {
         int result;
+        if (disconnect_requested) return SessionFailure("Disconnected by local player");
         if (sending)
         {
 #ifdef MSG_NOSIGNAL
@@ -97,10 +117,14 @@ static void Transfer(byte *buffer, int size, boolean sending)
         }
         else result = (int)recv(connection, (char *)buffer + done, size - done, 0);
         if (result > 0) done += result;
-        else if (!result) I_Error("Network: peer disconnected");
-        else if (WouldBlock()) Wait(start, sending ? "send" : "receive");
-        else I_Error("Network: connection failed during %s", sending ? "send" : "receive");
+        else if (!result) return SessionFailure("Network: peer disconnected");
+        else if (WouldBlock())
+        {
+            if (!Wait(start, sending ? "send" : "receive")) return false;
+        }
+        else return SessionFailure("Network: connection failed during %s", sending ? "send" : "receive");
     }
+    return true;
 }
 
 static unsigned int Number(const char *text, unsigned int minimum, unsigned int maximum)
@@ -136,6 +160,7 @@ boolean DPT_NetActive(void) { return active; }
 void DPT_NetShutdown(void)
 {
     active = false;
+    disconnect_requested = false;
     if (connection != INVALID_SOCKET) { net_close(connection); connection = INVALID_SOCKET; }
     if (listener != INVALID_SOCKET) { net_close(listener); listener = INVALID_SOCKET; }
 #ifdef _WIN32
@@ -181,6 +206,8 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     sha1_context_t context;
     int values[11], i;
     uint32_t start;
+    disconnect_reason[0] = 0;
+    disconnect_requested = false;
     if ((host != NULL) == (join != NULL)) I_Error("Use exactly one of -net-host or -net-join");
     if (M_ParmExists("-playdemo") || M_ParmExists("-timedemo") || M_ParmExists("-record")
         || M_ParmExists("-loadgame") || M_ParmExists("-turbo") || M_ParmExists("-solo-net")
@@ -311,20 +338,21 @@ unsigned int DPT_NetStateChecksum(void)
         ^ (dpt_dmflags * 0x85ebca6bu);
 }
 
-void DPT_NetExchange(ticcmd_t *commands, unsigned int tic)
+boolean DPT_NetExchange(ticcmd_t *commands, unsigned int tic)
 {
     byte packet[DPT_NET_TIC_SIZE] = {0}, remote[DPT_NET_TIC_SIZE];
     unsigned int checksum = tic ? DPT_NetStateChecksum() : 0;
     memcpy(packet, "TIC1", 4); DPT_Put32(packet + 4, tic); DPT_Put32(packet + 8, checksum);
     DPT_EncodeCommand(packet + 12, &commands[local_player]);
-    Transfer(packet, sizeof(packet), true); Transfer(remote, sizeof(remote), false);
+    if (!Transfer(packet, sizeof(packet), true) || !Transfer(remote, sizeof(remote), false)) return false;
     if (memcmp(remote, "TIC1", 4) || DPT_Get32(remote + 4) != tic || DPT_Get32(remote + 20))
-        I_Error("Network: malformed/out-of-order tic packet");
+        return SessionFailure("Network: malformed/out-of-order tic packet");
     if (DPT_Get32(remote + 8) != checksum)
-        I_Error("Network desync before tic %u (%08x vs %08x)", tic, checksum, DPT_Get32(remote + 8));
+        return SessionFailure("Network desync before tic %u (%08x vs %08x)", tic, checksum, DPT_Get32(remote + 8));
     if (!DPT_DecodeCommand(remote + 12, &commands[1 - local_player]))
-        I_Error("Network: invalid player command");
+        return SessionFailure("Network: invalid player command");
     if ((commands[1 - local_player].buttons & BT_SPECIAL)
         && commands[1 - local_player].buttons != (BT_SPECIAL | BTS_PAUSE))
-        I_Error("Network: unsupported special command");
+        return SessionFailure("Network: unsupported special command");
+    return true;
 }

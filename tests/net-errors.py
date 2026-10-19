@@ -21,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", type=Path, required=True)
     parser.add_argument("--iwad", type=Path, required=True)
+    parser.add_argument("--recover", action="store_true", help="Post-handshake failures must return to menu, not exit with error")
     args = parser.parse_args()
     exe, iwad = args.exe.resolve(strict=True), args.iwad.resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="dptdoom-net-errors-") as temporary:
@@ -42,8 +43,10 @@ def main():
                                    ("resources", "resource content/order mismatch"), ("settings", "game settings mismatch"),
                                    ("dmflags", "dmflags mismatch"),
                                    ("disconnect", "Network:"), ("truncated", "Network:"),
-                                   ("silent", "Network timeout"), ("order", "out-of-order"),
+                                   ("silent", "Network timeout"), ("timeout", "Network timeout"), ("order", "out-of-order"),
                                    ("desync", "Network desync"), ("command", "invalid player command")):
+            if args.recover and scenario in ("version", "engine", "resources", "settings", "dmflags", "truncated", "silent"):
+                continue  # startup errors deliberately still fail fast
             work = root / scenario
             work.mkdir()
             with socket.socket() as reservation:
@@ -52,7 +55,8 @@ def main():
             path = work / "log.txt"
             with path.open("w") as log:
                 process = subprocess.Popen([str(exe), "-iwad", str(iwad), "-net-host", str(number),
-                                            "-net-timeout", "1500", "-headless-tics", "3"],
+                                            "-net-timeout", "1500", "-headless-tics", "3", "-dmflags", "3"]
+                                           + ([] if args.recover else ["-net-fail-fast"]),
                                            cwd=work, stdout=log, stderr=log)
                 try:
                     deadline = time.monotonic() + 10
@@ -74,6 +78,9 @@ def main():
                             # Fragment the real TCP stream deliberately.
                             for chunk in (hello[:7], hello[7:31], hello[31:]):
                                 peer.sendall(chunk)
+                            if scenario == "timeout":
+                                read_exact(peer, 24)
+                                time.sleep(2)
                             if scenario in ("order", "desync", "command"):
                                 tic = bytearray(read_exact(peer, 24))
                                 if scenario == "order":
@@ -87,7 +94,9 @@ def main():
                             code = process.wait(timeout=10)
                     code = process.wait(timeout=10)
                     output = path.read_text()
-                    assert code in (255, -1, 0xFFFFFFFF) and expected in output, (scenario, code, output)
+                    assert code in ((0,) if args.recover else (255, -1, 0xFFFFFFFF)) and expected in output, (scenario, code, output)
+                    if args.recover:
+                        assert "returned to menu" in output, output
                     assert "AddressSanitizer" not in output, output
                     print("Network error:", scenario, "OK")
                 finally:

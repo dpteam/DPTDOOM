@@ -221,6 +221,7 @@ int  M_StringWidth(char *string);
 int  M_StringHeight(char *string);
 void M_StartMessage(char *string,void *routine,boolean input);
 void M_StopMessage(void);
+static void M_NetDisconnectAcknowledged(int key);
 void M_ClearMenus (void);
 
 
@@ -1047,6 +1048,13 @@ void M_EndGameResponse(int key)
 {
     if (key != key_menu_confirm)
 	return;
+
+    if (DPT_NetActive())
+    {
+        M_ClearMenus();
+        DPT_NetRequestDisconnect();
+        return;
+    }
 		
     currentMenu->lastOn = itemOn;
     M_ClearMenus ();
@@ -1056,6 +1064,11 @@ void M_EndGameResponse(int key)
 void M_EndGame(int choice)
 {
     choice = 0;
+    if (DPT_NetActive())
+    {
+        M_StartMessage("DISCONNECT FROM THIS GAME?\n\nY/N", M_EndGameResponse, true);
+        return;
+    }
     if (!usergame)
     {
 	S_StartSound(NULL,sfx_oof);
@@ -1654,7 +1667,10 @@ boolean M_Responder (event_t* ev)
 	if (messageRoutine)
 	    messageRoutine(key);
 
-	menuactive = false;
+        // The disconnect notice acknowledges into the main menu, not back
+        // into a stale level. Other vanilla messages keep their behavior.
+        if (messageRoutine != M_NetDisconnectAcknowledged)
+	    menuactive = false;
 	S_StartSound(NULL,sfx_swtchx);
 	return true;
     }
@@ -2059,6 +2075,41 @@ void M_ClearMenus (void)
     menuactive = 0;
     // if (!netgame && usergame && paused)
     //       sendpause = true;
+}
+
+static void M_NetDisconnectAcknowledged(int key)
+{
+    (void)key;
+    currentMenu = &MainDef;
+    itemOn = 0;
+    menuactive = true;
+}
+
+void M_NetDisconnected(const char *reason)
+{
+    static char notice[320];
+    size_t used;
+    unsigned int column = 0;
+    const unsigned char *p = (const unsigned char *)reason;
+    M_ClearMenus();
+    saveStringEnter = 0;
+    quickSaveSlot = -1;
+    messageToPrint = 0;
+    currentMenu = &MainDef;
+    itemOn = 0;
+    M_StringCopy(notice, "NETWORK SESSION ENDED\n\n", sizeof(notice));
+    used = strlen(notice);
+    // Local fixed English reason, bounded/wrapped for the vanilla HUD font.
+    while (*p && used + 3 < sizeof(notice))
+    {
+        if (column >= 30) { notice[used++] = '\n'; column = 0; }
+        notice[used++] = *p >= 32 && *p < 127 ? (char)*p : ' ';
+        ++p; ++column;
+    }
+    notice[used] = 0;
+    M_StringConcat(notice, "\n\nPRESS A KEY FOR MENU", sizeof(notice));
+    menuactive = true;
+    M_StartMessage(notice, M_NetDisconnectAcknowledged, false);
 }
 
 

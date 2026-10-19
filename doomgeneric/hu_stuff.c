@@ -104,6 +104,7 @@ static int		message_counter;
 extern int		showMessages;
 
 static boolean		headsupactive = false;
+static boolean altdown;
 static void HU_ResetChat(void);
 
 //
@@ -304,6 +305,8 @@ void HU_Init(void)
 
 void HU_Stop(void)
 {
+    chat_on = false;
+    HU_ResetChat();
     headsupactive = false;
 }
 
@@ -495,6 +498,7 @@ static void HU_ResetChat(void)
 {
     head = tail = 0;
     memset(chat_dest, 0, sizeof(chat_dest));
+    altdown = false;
 }
 
 
@@ -534,7 +538,6 @@ boolean HU_Responder(event_t *ev)
     static char		lastmessage[HU_MAXLINELENGTH+1];
     char*		macromessage;
     boolean		eatkey = false;
-    static boolean	altdown = false;
     unsigned char 	c;
     int			i;
     int			numplayers;

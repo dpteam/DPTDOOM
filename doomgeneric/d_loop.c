@@ -26,6 +26,8 @@
 #include "d_ticcmd.h"
 #include "dpt_net.h"
 #include "d_diagnostics.h"
+#include "g_game.h"
+#include "m_menu.h"
 
 #include "i_system.h"
 #include "i_timer.h"
@@ -81,6 +83,8 @@ boolean singletics = false;
 // Index of the local player.
 
 static int localplayer;
+static int direct_next_tic_time = -1;
+static int oldentertics;
 
 // Used for original sync code.
 
@@ -734,7 +738,6 @@ void TryRunTics (void)
     int	i;
     int	lowtic;
     int	entertic;
-    static int oldentertics;
     int realtics;
     int	availabletics;
     int	counts;
@@ -744,18 +747,40 @@ void TryRunTics (void)
     {
         ticcmd_t commands[NET_MAXPLAYERS];
         boolean ingame[NET_MAXPLAYERS] = {true, true, false, false, false, false, false, false};
-        static int next_tic_time = -1;
         int now = I_GetTime();
         I_StartTic();
         loop_interface->ProcessEvents();
-        if (next_tic_time < 0) next_tic_time = now;
-        if (now < next_tic_time) { I_Sleep(1); return; }
-        next_tic_time = now + 1;
+        if (direct_next_tic_time < 0) direct_next_tic_time = now;
+        if (now < direct_next_tic_time) { I_Sleep(1); return; }
+        direct_next_tic_time = now + 1;
         loop_interface->RunMenu();
         memset(commands, 0, sizeof(commands));
         loop_interface->BuildTiccmd(&commands[localplayer], gametic);
         D_DiagnosticsCommand(&commands[localplayer], gametic);
-        DPT_NetExchange(commands, (unsigned int)gametic);
+        if (!DPT_NetExchange(commands, (unsigned int)gametic))
+        {
+            char reason[192];
+            snprintf(reason, sizeof(reason), "%s", DPT_NetDisconnectReason());
+            DPT_NetShutdown();
+            // Drop ALL buffered net state before returning to the SP loop.
+            memset(ticdata, 0, sizeof(ticdata));
+            memset(local_playeringame, 0, sizeof(local_playeringame));
+            localplayer = 0;
+            local_playeringame[0] = true;
+            gametic = maketic = recvtic = 0;
+            ticdup = 1;
+            offsetms = skiptics = 0;
+            new_sync = true;
+            direct_next_tic_time = -1;
+            frameon = oldnettics = 0;
+            memset(frameskip, 0, sizeof(frameskip));
+            lasttime = oldentertics = GetAdjustedTime();
+            G_ReturnFromDirectGame();
+            M_NetDisconnected(reason);
+            printf("Network session ended: %s; returned to menu\n", reason);
+            fflush(stdout);
+            return;
+        }
         loop_interface->RunTic(commands, ingame);
         ++gametic;
         return;
