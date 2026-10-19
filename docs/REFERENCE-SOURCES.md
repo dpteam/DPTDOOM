@@ -67,3 +67,5 @@
 5. Boom/MBF mechanics оценить отдельно; наличие parser не включает их само собой.
 
 Пока из этих новых csDoom деревьев **ничего в движок не перенесено**.
+
+Detailed compatibility/parser plan: `docs/DEHACKED-MBF-AUDIT.md`.

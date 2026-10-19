@@ -319,6 +319,9 @@ partition может породить две отдельные локальны
 
 - [ ] DeHackEd: `.deh` + `DEHACKED` lump, порядок patches, parsing bounds,
   vanilla regression и сверка модификаций в сети. FEATURE_DEHACKED сейчас OFF.
+- [x] Подробный pre-implementation аудит DeHackEd/BEX/Boom/MBF/MBF21,
+  csDoomNew/Old07 и ACE: `docs/DEHACKED-MBF-AUDIT.md`. Следующий срез —
+  bounded classic parser, не включение ACE exploit или всей чужой архитектуры.
 - [ ] Аудит DOOM ACE `engine/dehacked.*`; альтернативно игровой csDoom, если
   конкретная реализация проще/подходит. Проверить licenses/provenance и зависимости;
   локальный csDoomMaster — не игровой порт и не источник DeHackEd/MBF.
