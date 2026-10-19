@@ -1,0 +1,133 @@
+name: Build and data-free tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headless:
+    name: Headless / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+      - name: Configure (no IWAD, no display dependencies)
+        run: cmake -S . -B build/ci -DDPTDOOM_BACKEND=headless -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/ci --config Release --parallel 4
+      - name: Test
+        run: ctest --test-dir build/ci -C Release --output-on-failure
+      - name: Test report on failure (no game data)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: headless-logs-${{ matrix.os }}
+          path: build/ci/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+  windows-sdl:
+    name: Windows SDL2 / audio
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+      - name: Fetch official SDL packages (SHA-256 verified)
+        shell: pwsh
+        run: ./tools/fetch-sdl.ps1
+      - name: Configure
+        run: cmake --preset windows-sdl
+      - name: Build
+        run: cmake --build --preset windows-sdl --parallel 4
+      - name: Test without visible windows or physical audio
+        run: ctest --preset windows-sdl -LE interactive
+      - name: Test report on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-sdl-logs
+          path: build/windows-sdl/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+  unix-sdl:
+    name: SDL2 / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+      - name: Linux development packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev libx11-dev
+      - name: macOS development packages
+        if: runner.os == 'macOS'
+        run: brew install sdl2 sdl2_mixer
+      - name: Configure SDL
+        run: cmake -S . -B build/ci-sdl -DDPTDOOM_BACKEND=sdl -DDPTDOOM_SOUND=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Build SDL
+        run: cmake --build build/ci-sdl --parallel 4
+      - name: Test (dummy SDL drivers, no IWAD)
+        run: ctest --test-dir build/ci-sdl --output-on-failure
+      - name: Configure/build X11 on Linux
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S . -B build/ci-x11 -DDPTDOOM_BACKEND=x11 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/ci-x11 --parallel 4
+          ctest --test-dir build/ci-x11 --output-on-failure
+      - name: Test report on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unix-sdl-logs-${{ matrix.os }}
+          path: |
+            build/ci-sdl/Testing/Temporary/LastTest.log
+            build/ci-x11/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+  windows-asan:
+    name: Windows ASan / allocator probes
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+      - name: Configure
+        run: cmake --preset windows-asan
+      - name: Build (including runtime DLL deployment)
+        run: cmake --build --preset windows-asan --parallel 4
+      - name: Runtime preflight
+        run: ./build/windows-asan/RelWithDebInfo/dptdoom-headless.exe --version
+      - name: Test
+        run: ctest --preset windows-asan
+      - name: Test report on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-asan-logs
+          path: build/windows-asan/Testing/Temporary/LastTest.log
+          retention-days: 7

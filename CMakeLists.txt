@@ -163,6 +163,13 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME startup-smoke COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/startup-smoke.py"
+            $<TARGET_FILE:dptdoom> "${DPTDOOM_BACKEND}")
+        set_tests_properties(startup-smoke PROPERTIES TIMEOUT 30)
+    endif()
     add_executable(timer-test tests/timer.c doomgeneric/i_timer.c)
     target_include_directories(timer-test PRIVATE doomgeneric)
     add_test(NAME timer COMMAND timer-test)

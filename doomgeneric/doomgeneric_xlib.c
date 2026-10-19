@@ -1,6 +1,7 @@
 #include "doomkeys.h"
 
 #include "doomgeneric.h"
+#include "i_system.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -84,6 +85,8 @@ void DG_Init()
     // window creation
 
     s_Display = XOpenDisplay(NULL);
+    if (s_Display == NULL)
+        I_Error("Cannot open X11 display (check DISPLAY or use headless)");
 
     s_Screen = DefaultScreen(s_Display);
 
@@ -121,7 +124,9 @@ void DG_Init()
         }
     }
 
-    s_Image = XCreateImage(s_Display, DefaultVisual(s_Display, s_Screen), depth, ZPixmap, 0, (char *)DG_ScreenBuffer, DOOMGENERIC_RESX, DOOMGENERIC_RESX, 32, 0);
+    s_Image = XCreateImage(s_Display, DefaultVisual(s_Display, s_Screen), depth, ZPixmap, 0, (char *)DG_ScreenBuffer, DOOMGENERIC_RESX, DOOMGENERIC_RESY, 32, 0);
+    if (s_Image == NULL)
+        I_Error("XCreateImage failed");
 }
 
 
