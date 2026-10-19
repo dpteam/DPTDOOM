@@ -41,9 +41,21 @@ OPL-синтез, мышь/геймпады. Дефолтный native Win32 bac
 
 ## Ближайшее
 
-1. CI на Windows/Linux/macOS без распространения коммерческих IWAD.
+1. Первый реальный GitHub Actions run после разрешённого push; проверить Linux/macOS.
 2. Продолжить 64-битный/UB-аудит (не все legacy warnings устранены),
    расширить sanitizer coverage на SDL, другие IWAD/карты и платформы.
+
+## Этап 1.4 — data-free CI (подготовлен, remote run ожидается)
+
+- [x] Workflow Windows/Linux/macOS headless, SDL2 и Windows ASan.
+- [x] Startup/error smoke без IWAD; тесты timer/zone/input/audio не требуют игры.
+- [x] Actions pinned SHA, read-only token, timeout/cancel, failure logs без build tree.
+- [x] Workflow прошёл actionlint; Windows data-free build проверен с чистого дерева сборки.
+- [x] Исправлены X11 null display handling и неверная высота XImage (runtime не проверен).
+- [ ] Выполнить workflow на GitHub и устранить реальные cross-platform failures.
+
+WSL-инструменты по решению владельца не устанавливались. Linux/macOS пока не
+считаются проверенными; см. `docs/CI.md`. Коммерческие IWAD в CI не передаются.
 
 ## Этап 1.3 — ASan и demo snapshots
 

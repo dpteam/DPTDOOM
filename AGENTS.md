@@ -74,6 +74,11 @@ ctest --preset windows-headless
   single-player. Тест `demo-snapshot` открывает окно (метка `interactive`).
 - Будущая сеть: разрешить online snapshot; load только в SP с подтверждением
   отключения от сервера. Сейчас netcode отсутствует, заглушку не изображать.
+- CI подготовлен в `.github/workflows/ci.yml`, прошёл actionlint, но remote run
+  ещё не выполнен. См. `docs/CI.md`: не называть Linux/macOS проверенными до
+  реального успешного запуска. Коммерческие IWAD в CI не передавать.
+- Владелец отказался от установки build tools/SDL в локальный WSL Debian на
+  текущем этапе; не устанавливать их без нового разрешения.
 
 - `FEATURE_MULTIPLAYER` выключен, `net_*.c` отсутствуют. Заголовки не означают,
   что сеть работает. В `refs/csDoomMaster` — только мастер-сервер, не netcode.

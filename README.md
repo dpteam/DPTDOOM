@@ -38,6 +38,7 @@ SDL2 2.32.10 и SDL2_mixer 2.8.2 скачиваются из официальн�
 - [План и текущее состояние](docs/ROADMAP.md)
 - [Потиковая диагностика и тесты сохранений](docs/STATE-TESTING.md)
 - [AddressSanitizer и найденные ошибки](docs/SANITIZERS.md)
+- [CI-матрица и границы автоматических проверок](docs/CI.md)
 - [Разбор upstream PR](docs/UPSTREAM.md)
 - [Требования владельца](PROMPT.md)
 
