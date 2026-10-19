@@ -97,6 +97,10 @@ ctest --preset headless
 | `-playdemo file.lmp` | Обычное воспроизведение и успешный выход после демо. |
 | `--version` | Версия без IWAD и без инициализации окна (в любом backend). |
 
+Потиковая диагностика, checkpoint/save-load и закреплённые эталоны описаны в
+[STATE-TESTING.md](STATE-TESTING.md). `-headless-save-tic` перезаписывает слот 0;
+использовать только в отдельном тестовом рабочем каталоге.
+
 При выходе печатается `Headless: frames=... rgb-fnv1a=...`. FNV-1a считается по
 RGB-байтам; alpha/padding не участвуют. Это диагностический checksum изображения,
 а не полного игрового состояния. Без лимита/демо игра работает до внешней остановки.
@@ -128,6 +132,7 @@ python tests/headless-smoke.py --exe build/headless/dptdoom-headless.exe --iwad 
 python tests/windows-smoke.py --exe build/msvc/Release/dptdoom.exe --iwad refs/iwads/doom2.wad
 ```
 
-Тесты пока не проверяют save/load игровых сохранений, gameplay input replay,
-сеть или совместимость модов. GCC/MSVC сохраняют ряд legacy-предупреждений Doom;
+`state-smoke` проверяет save/load и повторяемость трёх демо по каждому тику.
+Тесты пока не проверяют сетевую сессию, меню save/load через ввод и совместимость
+модов. GCC/MSVC сохраняют ряд legacy-предупреждений Doom;
 успешная сборка не означает, что они все исправлены.
