@@ -86,15 +86,15 @@ def main():
         things=root/'thing.deh';thing_copy=root/'thing-copy.deh';map_wad=root/'thing-map.wad';patched_map=root/'thing-patched-map.wad'
         thing_map(iwad,map_wad)
         thing_map(iwad,patched_map,4000)
-        things.write_bytes(HEADER+b'Thing 31 (Barrel)\nID # = 4000\nBits = 2\nHit points = 123\nSpeed = 1\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 100\nReaction time = 20\n')
+        things.write_bytes(HEADER+b'Thing 31 (Barrel)\nID # = 4000\nBits = 2\nInitial frame = 806\nHit points = 123\nSpeed = 1\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 100\nReaction time = 20\n')
         thing_copy.write_bytes(things.read_bytes())
         _,plain_thing=run('plain-thing',['-file',str(map_wad),'-deh',str(first)])
-        assert 'Patch thing: type=30 id=2035 flags=524294 health=20 radius=655360 height=2752512' in plain_thing,plain_thing
+        assert 'Patch thing: type=30 id=2035 flags=524294 state=807 death=808 health=20 radius=655360 height=2752512' in plain_thing,plain_thing
         _,patched_thing=run('patched-thing',['-file',str(patched_map),'-deh',str(things)])
-        assert 'Patch thing: type=30 id=4000 flags=2 health=123 radius=1572864 height=3932160 speed=1 mass=250 damage=7 pain=100 reaction=20' in patched_thing,patched_thing
+        assert 'Patch thing: type=30 id=4000 flags=2 state=807 death=808 health=123 radius=1572864 height=3932160 speed=1 mass=250 damage=7 pain=100 reaction=20' in patched_thing,patched_thing
         embedded=root/'thing-lump.wad';wad(embedded,[things.read_bytes()])
         _,embedded_thing=run('thing-lump',['-file',str(patched_map),str(embedded),'-dehlump'])
-        assert 'type=30 id=4000 flags=2 health=123 radius=1572864 height=3932160' in embedded_thing,embedded_thing
+        assert 'type=30 id=4000 flags=2 state=807 death=808 health=123 radius=1572864 height=3932160' in embedded_thing,embedded_thing
         # Identical attack commands: standard pistol burns bullets; patched
         # pistol uses empty shell reserve and must not burn the 50 bullets.
         inputs=root/'attack.bin';inputs.write_bytes(b''.join(struct.pack('!bbhBBBB',0,0,0,1 if tic%30>=15 else 0,0,0,0) for tic in range(200)))
@@ -170,7 +170,7 @@ def main():
         pair('text-same',[text_patch,text_copy],True,'health=100 ammo=50')
         text_different=root/'text-different.deh';text_different.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(b'Other message!')).encode()+b'\n'+old+b'Other message!')
         pair('text-different',[text_patch,text_different],False)
-        pair('thing-same',[things,thing_copy],True,'type=30 id=4000 flags=2 health=123 radius=1572864',('-file',str(patched_map)))
+        pair('thing-same',[things,thing_copy],True,'type=30 id=4000 flags=2 state=',('-file',str(patched_map)))
         pair('thing-different',[things,first],False,extra=('-file',str(patched_map)))
         pair('duration-same',[duration,duration_copy],True,'health=100',('-headless-input',str(inputs)))
         pair('duration-different',[duration,first],False)

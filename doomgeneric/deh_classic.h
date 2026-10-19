@@ -1,10 +1,10 @@
-// Bounded Misc / Ammo / Text / Weapon-frame / Thing-numeric/flags / Frame graph subset.
+// Bounded Misc / Ammo / Text / Weapon-frame / Thing-numeric/flags/states / Frame graph subset.
 // GPL-2.0-or-later; see LICENSE.
 #ifndef DPT_DEH_CLASSIC_H
 #define DPT_DEH_CLASSIC_H
 #include "doomtype.h"
 #include "sha1.h"
-#define DPT_DEH_SUBSET "DPT-deh-thingflags-v8"
+#define DPT_DEH_SUBSET "DPT-deh-thingstates-v9"
 void DPT_DehReset(void);
 boolean DPT_DehLoadLump(int lump);
 boolean DPT_DehLoadFile(const char *path);

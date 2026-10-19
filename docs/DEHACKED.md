@@ -1,7 +1,7 @@
 # DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-thingflags-v8` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-thingstates-v9` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -130,6 +130,9 @@ actor/class name, не исполняется и не попадает в digest
 | Missile damage | 0..100, info damage для missile/skull столкновений, **не** глобальная замена hitscan/action damage |
 | ID # | -1..32767, DoomEd number; duplicate non-negative IDs запрещены |
 | Bits | bounded vanilla mobj flags; неизвестные/reserved bits запрещены |
+| Initial/First moving/Injury frame | существующий non-weapon state или `S_NULL` |
+| Close/Far attack frame | существующий non-weapon state или `S_NULL` |
+| Death/Exploding/Respawn frame | существующий non-weapon state или `S_NULL` |
 
 Категория Speed определяется исходной таблицей (исходная speed ≥65536 —
 fixed-point). Patches не меняют flags/actions и не могут переключить категорию.
@@ -150,10 +153,12 @@ Mass = 250
 `ID #` меняет DoomEd number, а `Bits` — только разрешённую vanilla flag mask;
 это влияет на последующие map spawns и collision/pickup/kill semantics. Duplicate
 non-negative IDs отклоняются, чтобы DoomEd lookup не стал неоднозначным. Полные
-state/sound/action substitutions через Thing по-прежнему не разрешены.
+State fields меняют только существующие non-weapon state references; `S_NULL`
+разрешён как конечное состояние, weapon-state pool и выход за таблицу запрещены.
+Sound/action substitutions через Thing по-прежнему не разрешены.
 `Thing 1 Hit points` меняет mobjinfo player, но стартовое `player.health` по-прежнему
 задаёт `Misc 0 Initial Health`, как в существующем engine path. Изменения `Bits`,
-map ID, звуков и любых state fields (`Initial frame` и т.п.) пока отклоняются.
+ map ID и state fields staged атомарно; звуковые и action substitutions по-прежнему отклоняются.
 Типы не добавляются, frame/action tables не меняются. Таблица Thing также
 staged: неверное поле в конце patch не меняет ни Things, ни Misc/Ammo/Weapon,
 ни digest/count. Reset восстанавливает все исходные таблицы.
@@ -180,7 +185,7 @@ Next frame = 15
 Меняются только `state.tics` и `state.nextstate`, не sprite/frame/misc/action.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v8, чтобы peers не путали разные semantics.
+обновлён до v9, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/

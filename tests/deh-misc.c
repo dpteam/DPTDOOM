@@ -116,6 +116,17 @@ int main(void)
     }
     REQUIRE(Load(HEADER "Thing 2\nID # = 4000\nBits = 38\n"));
     REQUIRE(mobjinfo[MT_POSSESSED].doomednum==4000&&mobjinfo[MT_POSSESSED].flags==38);
+    {char state_patch[512];
+     snprintf(state_patch,sizeof(state_patch),HEADER "Thing 2\nInitial frame = %d\nFirst moving frame = %d\nInjury frame = 0\nClose attack frame = %d\nFar attack frame = %d\nDeath frame = 0\nExploding frame = %d\nRespawn frame = 0\n",
+         S_BLOOD1,S_BLOOD2,S_BLOOD1,S_BLOOD2,S_BLOOD1);
+     REQUIRE(Load(state_patch));}
+    REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==S_BLOOD1&&mobjinfo[MT_POSSESSED].seestate==S_BLOOD2);
+    REQUIRE(mobjinfo[MT_POSSESSED].painstate==S_NULL&&mobjinfo[MT_POSSESSED].meleestate==S_BLOOD1);
+    REQUIRE(mobjinfo[MT_POSSESSED].missilestate==S_BLOOD2&&mobjinfo[MT_POSSESSED].deathstate==S_NULL);
+    REQUIRE(mobjinfo[MT_POSSESSED].xdeathstate==S_BLOOD1&&mobjinfo[MT_POSSESSED].raisestate==S_NULL);
+    REQUIRE(!Load(HEADER "Thing 2\nInitial frame = 13\n"));
+    REQUIRE(!Load(HEADER "Thing 2\nDeath frame = 999999\n"));
+    REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==S_BLOOD1);
     REQUIRE(!Load(HEADER "Thing 2\nID # = 9\n"));
     REQUIRE(!Load(HEADER "Thing 2\nID # = -2\n"));
     REQUIRE(!Load(HEADER "Thing 2\nBits = -1\n"));
@@ -125,7 +136,7 @@ int main(void)
     REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==123&&mobjinfo[MT_POSSESSED].speed==12);
     REQUIRE(mobjinfo[MT_POSSESSED].radius==24*FRACUNIT&&mobjinfo[MT_POSSESSED].mass==250);
     REQUIRE(mobjinfo[MT_ROCKET].speed==30*FRACUNIT);
-    REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==42&&mobjinfo[MT_POSSESSED].flags==38);
+    REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==S_BLOOD1&&mobjinfo[MT_POSSESSED].flags==38);
     DPT_DehChecksum(a);
     {const char *invalid[]={HEADER "Thing 0\nHit points = 1\n",HEADER "Thing 999\nHit points = 1\n",
       HEADER "Thing 2 (Unclosed\nHit points = 1\n",HEADER "Thing 2 (OK) trailing\nHit points = 1\n",
@@ -133,7 +144,7 @@ int main(void)
       HEADER "Thing 2\nSpeed = 0\n",HEADER "Thing 2\nSpeed = 129\n",HEADER "Thing 34\nSpeed = 4194305\n",
       HEADER "Thing 2\nWidth = -1\n",HEADER "Thing 2\nHeight = 2147483647\n",
       HEADER "Thing 2\nMissile damage = 101\n",HEADER "Thing 2\nPain chance = 256\n",
-      HEADER "Thing 2\nInitial frame = 0\n",HEADER "Thing 2\nHit points = 999999999999999999999999\n"};
+       HEADER "Thing 2\nInitial frame = 13\n",HEADER "Thing 2\nHit points = 999999999999999999999999\n"};
      for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i){REQUIRE(!Load(invalid[i]));REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==123&&mobjinfo[MT_POSSESSED].mass==250);
       REQUIRE(deh_initial_health==100&&clipammo[0]==10);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
     REQUIRE(Load(HEADER "thing 2\nHit points = 234\n"));REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==234);

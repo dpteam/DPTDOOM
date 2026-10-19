@@ -342,7 +342,7 @@ partition может породить две отдельные локальны
 - [x] Следующий subset `DPT-deh-thing-v3`: 1-based Thing numeric fields,
   optional inert label, bounded health/reaction/pain/speed/size/mass/damage,
   transactional rollback и reset всех таблиц. Real barrel mobj file/lump tests,
-  patch order и matching/mismatch two-peer traces; Thing states/flags/sounds
+  patch order и matching/mismatch two-peer traces; Thing sounds/action pointers
   и полный Text/[STRINGS]/BEX остаются неподдерживаемыми.
 - [x] `DPT-deh-framegraph-v5`: Frame Duration 1..32767 плюс ограниченный
   `Next frame` для существующих состояний; без S_NULL source/fast-transformed
@@ -359,7 +359,11 @@ partition может породить две отдельные локальны
 - [x] `DPT-deh-thingflags-v8`: Thing `ID #` and bounded vanilla `Bits` flags,
   duplicate DoomEd rejection, real barrel diagnostics/spawn coverage and
   transactional rollback/reset. Thing state/sound/action substitutions remain
-  outside this safe slice.
+  outside this flags-only slice.
+- [x] `DPT-deh-thingstates-v9`: eight bounded Thing state references mapped to
+  existing non-weapon mobj states, with `S_NULL`/bounds/domain checks, real
+  barrel spawn transition and synthetic rollback tests. Sound/action references
+  remain outside this slice.
 - [x] Предыдущий Thing slice: полные MinGW headless 33/33 и MSVC SDL 35/35,
   целевые MSVC ASan parser/engine/baselines 3/3.
 - [x] Actions run 39304002144/ddd69cc success: macOS master-client-wire fixture

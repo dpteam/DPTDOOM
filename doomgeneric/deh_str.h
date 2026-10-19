@@ -24,7 +24,6 @@
 
 // DPT.DOOM bounded classic subset keeps string lookup available even while
 // the upstream FEATURE_DEHACKED implementation remains disabled.
-char *DPT_DehString(const char *s);
 
 // Used to do dehacked text substitutions throughout the program
 
@@ -39,7 +38,16 @@ void DEH_AddStringReplacement(char *from_text, char *to_text);
 
 #else
 
+#ifdef DPT_DEH_CLASSIC
+char *DPT_DehString(const char *s);
 #define DEH_String(x) DPT_DehString((x))
+#else
+static char *DPT_DehStringIdentity(const char *s)
+{
+    return (char *)s;
+}
+#define DEH_String(x) DPT_DehStringIdentity((x))
+#endif
 #define DEH_printf printf
 #define DEH_fprintf fprintf
 #define DEH_snprintf snprintf

@@ -176,6 +176,7 @@ static boolean ThingIndex(char *text,int *index)
 static boolean ApplyThing(int index,const char *field,int value,unsigned int line)
 {
     unsigned int i;
+    int *state_destination=NULL;
     if(Equal(field,"Speed"))
     {
         // Vanilla actors use whole units for walking but fixed-point for
@@ -191,6 +192,22 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
             return Error(line,"Thing Bits contains unsupported or reserved flags");
         staged_things[index].flags=value;return true;
     }
+    if(Equal(field,"Initial frame"))state_destination=&staged_things[index].spawnstate;
+    else if(Equal(field,"First moving frame"))state_destination=&staged_things[index].seestate;
+    else if(Equal(field,"Injury frame"))state_destination=&staged_things[index].painstate;
+    else if(Equal(field,"Close attack frame"))state_destination=&staged_things[index].meleestate;
+    else if(Equal(field,"Far attack frame"))state_destination=&staged_things[index].missilestate;
+    else if(Equal(field,"Death frame"))state_destination=&staged_things[index].deathstate;
+    else if(Equal(field,"Exploding frame"))state_destination=&staged_things[index].xdeathstate;
+    else if(Equal(field,"Respawn frame"))state_destination=&staged_things[index].raisestate;
+    if(state_destination)
+    {
+        if(value<0||value>=NUMSTATES)
+            return Error(line,"Thing state frame outside the state table");
+        if(value!=S_NULL&&base_weapon_state[value])
+            return Error(line,"Thing state frame points into the weapon-state pool");
+        *state_destination=value;return true;
+    }
     for(i=0;i<sizeof(thing_fields)/sizeof(thing_fields[0]);++i)
     {
         const thing_field_t *f=&thing_fields[i];
@@ -200,7 +217,7 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
             *(int*)((unsigned char*)&staged_things[index]+f->offset)=value;return true;
         }
     }
-    return Error(line,"unsupported Thing field (states/flags/sounds/IDs are not supported)");
+    return Error(line,"unsupported Thing field (sounds/IDs/state fields are not supported)");
 }
 static boolean ValidateThingIds(const mobjinfo_t *things,unsigned int line)
 {
