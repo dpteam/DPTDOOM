@@ -253,7 +253,7 @@ void D_DiagnosticsTic(void)
                     p->maxammo[0],p->maxammo[1],p->maxammo[2],p->maxammo[3],
                     p->ammo[0],p->ammo[1],p->ammo[2],p->ammo[3],
                     clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
-                printf("Patch text: armor=%s saved=%s\n",DPT_DehString(GOTARMOR),DPT_DehString(GGSAVED));
+                printf("Patch text: armor=%s saved=%s msgon=%s\n",DPT_DehString(GOTARMOR),DPT_DehString(GGSAVED),DPT_DehString(MSGON));
                 printf("Patch misc: infight=%d\n",deh_species_infighting);
                 if(p->psprites[ps_weapon].state)
                     printf("Patch weapon visual: sprite=%d frame=%d sx=%d sy=%d\n",

@@ -21,7 +21,7 @@
 #include <limits.h>
 
 enum { MAX_LINE=2047, MAX_SOURCE=262144, MAX_PATCHES=16, FIELD_COUNT=16,
-       TEXT_MAX=2047, TEXT_COUNT=16 };
+       TEXT_MAX=2047, TEXT_COUNT=25 };
 #define MISC_FIELDS(X) \
     X("Initial Health",initial_health,100,1,10000) \
     X("Initial Bullets",initial_bullets,50,0,200) \
@@ -69,10 +69,20 @@ static int base_misc2[NUMSTATES],staged_misc2[NUMSTATES];
 static boolean base_weapon_state[NUMSTATES];
 static weaponinfo_t staged_weapons[NUMWEAPONS];
 typedef struct { const char *original; char replacement[TEXT_MAX+1]; boolean present; } text_replacement_t;
+// Classic Text matches the original bytes; BEX [STRINGS] matches these names.
+static const char *const text_names[TEXT_COUNT]={
+    "GOTARMOR","GOTMEGA","GOTHTHBONUS","GOTARMBONUS","GOTSTIM","GOTMEDINEED",
+    "GOTMEDIKIT","GOTSUPER","GOTBLUECARD","GOTYELWCARD","GOTREDCARD","GOTBLUESKUL",
+    "GOTYELWSKUL","GOTREDSKULL","GGSAVED","HUSTR_MSGU","MSGON","MSGOFF",
+    "DETAILHI","DETAILLO","GAMMALVL0","GAMMALVL1","GAMMALVL2","GAMMALVL3",
+    "GAMMALVL4"
+};
 static const char *const text_originals[TEXT_COUNT]={
     GOTARMOR,GOTMEGA,GOTHTHBONUS,GOTARMBONUS,GOTSTIM,GOTMEDINEED,
     GOTMEDIKIT,GOTSUPER,GOTBLUECARD,GOTYELWCARD,GOTREDCARD,GOTBLUESKUL,
-    GOTYELWSKUL,GOTREDSKULL,GGSAVED,HUSTR_MSGU
+    GOTYELWSKUL,GOTREDSKULL,GGSAVED,HUSTR_MSGU,MSGON,MSGOFF,
+    DETAILHI,DETAILLO,GAMMALVL0,GAMMALVL1,GAMMALVL2,GAMMALVL3,
+    GAMMALVL4
 };
 static text_replacement_t text_replacements[TEXT_COUNT],staged_text[TEXT_COUNT];
 typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
@@ -170,6 +180,29 @@ static boolean ValidTextBytes(const unsigned char *text,int length)
     for(i=0;i<length;++i)
         if(text[i]=='%'||(text[i]<32&&text[i]!='\n'&&text[i]!='\r'&&text[i]!='\t')||text[i]>126)
             return false;
+    return true;
+}
+// BEX [STRINGS] assignment: NAME = value, value already trimmed in place.
+static boolean ApplyBexString(const char *name,const char *value,
+    text_replacement_t *targets,unsigned int line)
+{
+    unsigned int i;
+    size_t length=strlen(value);
+    for(i=0;i<TEXT_COUNT;++i)
+        if(Equal(name,text_names[i]))break;
+    if(i==TEXT_COUNT)return Error(line,"unknown [STRINGS] name (not in the bounded whitelist)");
+    if(length>TEXT_MAX)return Error(line,"[STRINGS] value exceeds 2047 bytes");
+    // BEX allows a trailing backslash to continue the value on the next line.
+    // This parser is line-oriented, so reject it instead of storing a stray
+    // backslash that would silently differ from the reference behaviour.
+    if(length&&value[length-1]=='\\')
+        return Error(line,"[STRINGS] multi-line continuation is not supported");
+    if(!ValidTextBytes((const unsigned char *)value,(int)length))
+        return Error(line,"[STRINGS] value contains unsafe bytes or format marker");
+    memset(targets[i].replacement,0,sizeof(targets[i].replacement));
+    memcpy(targets[i].replacement,value,length);
+    targets[i].original=text_originals[i];
+    targets[i].present=true;
     return true;
 }
 char *DPT_DehString(const char *s)
@@ -382,7 +415,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     boolean text_changed[TEXT_COUNT];
     int staged_max[NUMAMMO],staged_clip[NUMAMMO];
     size_t offset=0;boolean signature=false,doom=false,format=false;
-    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME, TEXT } section=NONE;
+    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME, TEXT, STRINGS } section=NONE;
     int index=0;
     char line[MAX_LINE+1];
     if(!initialized)DPT_DehReset();
@@ -422,6 +455,13 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         {
             if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before Misc 0");
             section=MISC;continue;
+        }
+        if(Equal(text,"[STRINGS]"))
+        {
+            // BEX extension. Same whitelist and bounds as classic Text, but the
+            // key is the string identifier instead of its original bytes.
+            if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before [STRINGS]");
+            section=STRINGS;continue;
         }
         if(IsToken(text,"Text"))
         {
@@ -470,11 +510,16 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
                     section=ammo?AMMO:WEAPON;continue;
                 }
             }
-            return Error(line_number,"unsupported section (Misc, Ammo, Weapon-ammo/frames, Thing-numeric, Frame graph only)");
+            return Error(line_number,"unsupported section (Misc, Ammo, Weapon-ammo/frames, Thing-numeric, Frame graph, [STRINGS] only)");
         }
         equals=strchr(text,'=');
         if(!equals)return Error(line_number,"unsupported section");
         *equals=0;text=Trim(text);
+        if(section==STRINGS)
+        {
+            if(!ApplyBexString(text,Trim(equals+1),staged_text,line_number))return false;
+            ++assignments;continue;
+        }
         if(!Number(Trim(equals+1),&value))return Error(line_number,"invalid decimal integer / overflow");
         if(!section)
         {

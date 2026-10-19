@@ -92,6 +92,17 @@ def main():
         text_lump=root/'text-lump.wad';wad(text_lump,[text_patch.read_bytes()])
         _,text=run('text-lump',['-file',str(text_lump),'-dehlump'])
         assert 'Patch text: armor=DPT armor message! saved=game saved.' in text,text
+        bex=root/'bex-strings.deh';bex_copy=root/'bex-strings-copy.deh'
+        bex.write_bytes(HEADER+b'[STRINGS]\nMSGON = BEX messages on\nDETAILHI = BEX high detail\nGOTARMOR = BEX armor pickup\n')
+        bex_copy.write_bytes(bex.read_bytes())
+        _,text=run('bex-strings',['-deh',str(bex)])
+        assert 'armor=BEX armor pickup saved=game saved. msgon=BEX messages on' in text,text
+        bex_lump=root/'bex-strings.wad';wad(bex_lump,[bex.read_bytes()])
+        _,text=run('bex-strings-lump',['-file',str(bex_lump),'-dehlump'])
+        assert 'msgon=BEX messages on' in text,text
+        bex_bad=root/'bex-bad.deh';bex_bad.write_bytes(HEADER+b'[STRINGS]\nNOSUCHSTRING = value\n')
+        _,text=run('bex-unknown',['-deh',str(bex_bad)],False)
+        assert 'unknown [STRINGS] name' in text,text
         things=root/'thing.deh';thing_copy=root/'thing-copy.deh';map_wad=root/'thing-map.wad';patched_map=root/'thing-patched-map.wad'
         thing_map(iwad,map_wad)
         thing_map(iwad,patched_map,4000)
@@ -273,6 +284,8 @@ def main():
         text_different=root/'text-different.deh'
         text_different.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(b'Other message!')).encode()+b'\n'+old+b'Other message!')
         pair('text-different',[text_patch,text_different],False)
+        pair('bex-strings-same',[bex,bex_copy],True,'msgon=BEX messages on')
+        pair('bex-strings-different',[bex,first],False)
         pair('infight-same',[infight,infight_copy],True,'infight=1')
         pair('infight-different',[infight,first],False)
         pair('thing-same',[things,thing_copy],True,'Patch visual: type=30 sprite=0 frame=32768',('-file',str(patched_map)))

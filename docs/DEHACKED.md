@@ -1,7 +1,7 @@
-# DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
+# DeHackEd: classic-срез + BEX `[STRINGS]`
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-demomanifest-v15` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-bexstrings-v16` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -15,8 +15,9 @@
 
 Пока принимается classic signature v3.0, `Doom version = 19`, `Patch format = 6`
 и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, `Thing 1..NUMMOBJTYPES`,
-`Frame 1..NUMSTATES-1` (с ограничениями ниже), не выдуманная `[Misc]`
-и не BEX `[STRINGS]`.
+`Frame 1..NUMSTATES-1` (с ограничениями ниже), `Text`, а также BEX
+**`[STRINGS]`** (bounded whitelist). Не выдуманная `[Misc]`, не `[PARS]`
+и не `[CODEPTR]`.
 
 ```text
 Patch File for DeHackEd v3.0
@@ -63,20 +64,45 @@ patches или их поиска на диске; launcher пока не име�
 Понижение bullet capacity ниже Initial Bullets отклоняет весь источник.
 
 `Text` принимает classic `Text old-length new-length` только для заранее
-зарегистрированных vanilla messages. Разрешены pickup/save/chat strings из
-текущего whitelist; старые bytes должны совпасть полностью. Новый payload —
-до 2047 bytes, printable ASCII с `\\n`/`\\r`/`\\t`; `%`, NUL, другие control и
-non-ASCII bytes запрещены. `[STRINGS]`, неизвестные old strings и format strings
+зарегистрированных vanilla messages. Разрешены pickup/save/chat/gamma strings из
+текущего whitelist (25 записей); старые bytes должны совпасть полностью. Новый
+payload — до 2047 bytes, printable ASCII с `\\n`/`\\r`/`\\t`; `%`, NUL, другие
+control и non-ASCII bytes запрещены. Неизвестные old strings и format strings
 не поддерживаются.
 
 ```text
-Text 19 18
-Picked up the armor.DPT armor message!
+Text 20 10
+Picked up the armor.BEX armor!
 ```
 
 Payload — ровно `old-length` bytes, затем `new-length` bytes; line endings внутри
 payload не нормализуются. Замена применяется через DPT `DEH_String`; rollback и
 reset возвращают исходные строки.
+
+### BEX `[STRINGS]`
+
+BEX-секция `[STRINGS]` реализована поверх той же таблицы замен, но ключ — имя
+строки, а не её исходные bytes:
+
+```text
+[STRINGS]
+MSGON = BEX messages on
+DETAILHI = BEX high detail
+GOTARMOR = BEX armor pickup
+```
+
+- Имена чувствительны к регистру только в смысле ASCII case-insensitive, как и
+  остальные поля; допустимы только имена из bounded whitelist (те же 25 строк,
+  что и для classic `Text`: pickup-сообщения, `GGSAVED`, `HUSTR_MSGU`, `MSGON`,
+  `MSGOFF`, `DETAILHI`, `DETAILLO`, `GAMMALVL0..4`).
+- Значение — до 2047 bytes, те же ограничения на `%`/NUL/control/non-ASCII.
+- **Multi-line continuation через trailing `\\` отклоняется** явно: parser
+  line-oriented, и молча сохранить обратный слэш было бы расхождением с
+  reference behaviour. `\\n`/escape-последовательности не интерпретируются —
+  bytes используются как есть.
+- Неизвестное имя — ошибка с номером строки и полным откатом источника.
+- Classic `Text` и BEX `[STRINGS]` пишут в одну таблицу, поэтому позднее
+  присваивание того же имени/строки побеждает в общем порядке источников.
 
 `Weapon N`: индексы 0=fist, 1=pistol, 2=shotgun, 3=chaingun, 4=rocket launcher,
 5=plasma, 6=BFG, 7=chainsaw, 8=super shotgun. Поддержаны `Ammo type = 0..3`
@@ -189,7 +215,7 @@ Next frame = 15
 и (для weapon states) `state.misc1/misc2`.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v13, чтобы peers не путали разные semantics.
+обновлён до v16, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -246,7 +272,7 @@ Sprite subnumber = 32769
   `sx/sy`, поэтому offset на них не виден; для постоянного смещения используют
   firing/raising состояния без bob-перезаписи. Это тоже vanilla-поведение, не
   ошибка parser-а.
-- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v12.
+- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v16.
 
 ```text
 Frame 12
@@ -259,8 +285,8 @@ Unknown 2 = 64
 graph/resources/action compatibility.
 
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-`Sound/Sprite/Pointer/Cheat`, `[STRINGS]`, неподдерживаемые Frame/Thing fields,
-BEX, include directives и executable offsets пока **отклоняются**, а не молча
+`Sound/Sprite/Pointer/Cheat`, `[PARS]`, `[CODEPTR]`, неподдерживаемые Frame/Thing fields,
+include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
 после ведущих пробелов считаются комментариями. CRLF/LF поддерживаются.
@@ -269,8 +295,8 @@ Classic `Sound`/`Sprite`/`Pointer` не планируются к реализа
 виде: `Sound` в современных портах помечен как unsupported, а `Sprite`/`Pointer`
 адресуют таблицы DOS-EXE (`Offset`, `toff[dversion]`, `OrgActionPtrs`). Это
 противоречит правилу «никаких executable offsets/произвольных function
-pointers». Современные эквиваленты — BEX `[STRINGS]`/`[PARS]`/`[CODEPTR]` с
-allowlist действий, отдельный compatibility level. Подробности и ссылки на
+pointers». BEX `[STRINGS]` реализован; `[PARS]`/`[CODEPTR]` — отдельный
+compatibility level с allowlist действий. Подробности и ссылки на
 проверенные места reference source — `DEHACKED-MBF-AUDIT.md`.
 
 Ограничения: максимум 16 источников, суммарно 256 KiB, строка до 2047 bytes,
@@ -322,8 +348,10 @@ section/field дают ошибку с номером строки до игро
 ## Проверки
 
 `deh-misc`: synthetic grammar/ranges/overflow/NUL/line/size/count limits, Text
-old/new exact bytes and unsafe payload rejection, atomic rollback, digest
-repeatability и load order, без IWAD/окна/Internet.
+old/new exact bytes and unsafe payload rejection, BEX `[STRINGS]` whitelist,
+case-insensitive names, value bounds, rejected continuation and shared
+classic/BEX table, atomic rollback, digest repeatability и load order, без
+IWAD/окна/Internet.
 
 `deh-engine` (headless + локальный Doom II): реальные player health/ammo/capacity,
 per-ammo/type в patch report, attack commands обычного/переназначенного pistol, внешний
@@ -342,8 +370,9 @@ info.c и игровой spawn проверяет deh-engine. Все patch/WAD f
 Duration/Frame/Weapon-frame tests проверяют реальный firing cadence (по расходу ammo с
 одинаковыми attack commands), file/lump equivalence, rollback нескольких
 секций/digest, index/range/overflow/fast exclusion, неизменные action pointers и
-reset. Text проверяется через engine report, file/lump equivalence и same/different
-patch peers. Отдельно проверяются Next frame, пропуск pistol action, границы state
+reset. Text и BEX `[STRINGS]` проверяются через engine report, file/lump
+equivalence и same/different patch peers. Отдельно проверяются Next frame,
+пропуск pistol action, границы state
 table, zero-tic cycle, weapon action skip, same/different patch peers и matching
 traces с `-fast`.
 Frame visual tests: spawned barrel и psprite report, изменившийся framebuffer,

@@ -4,7 +4,7 @@
 #define DPT_DEH_CLASSIC_H
 #include "doomtype.h"
 #include "sha1.h"
-#define DPT_DEH_SUBSET "DPT-deh-demomanifest-v15"
+#define DPT_DEH_SUBSET "DPT-deh-bexstrings-v16"
 void DPT_DehReset(void);
 boolean DPT_DehLoadLump(int lump);
 boolean DPT_DehLoadFile(const char *path);

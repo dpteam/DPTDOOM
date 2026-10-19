@@ -71,8 +71,9 @@ classic-секции в современных портах **не реализ�
 произвольных function pointers, у нас закрыт** — это `Misc`, `Ammo`, `Weapon`,
 `Thing`, `Frame`, `Text`. Остальные classic-секции либо устарели, либо требуют
 исполнения/адресации чужого бинарника. Современные эквиваленты
-(`[STRINGS]`, `[PARS]`, `[CODEPTR]`) относятся к BEX-слою и реализуются отдельно,
-с allowlist действий и собственным compatibility level.
+(`[STRINGS]`, `[PARS]`, `[CODEPTR]`) относятся к BEX-слою. `[STRINGS]` уже
+реализован поверх той же bounded-таблицы замен; `[PARS]` и `[CODEPTR]`
+реализуются отдельно, с allowlist действий и собственным compatibility level.
 
 `Cheat` — отдельный класс: не parser-проблема, а сетевые/привилегированные
 изменения, поэтому он не входит в bounded classic subset.
@@ -83,7 +84,7 @@ classic-секции в современных портах **не реализ�
 |---|---|---|
 | `vanilla` | Текущие IWAD/PWAD без patches | Работает, baseline закреплены |
 | `deh-classic` | bounded `.deh`, `DEHACKED` lump; Misc/Ammo/Weapon/Thing/Frame/Text | Реализовано; `Sound`/`Sprite`/`Pointer` classic небезопасны (см. выше) |
-| `bex-basic` | `[STRINGS]`, безопасные `[PARS]`, ограниченные compatibility aliases | После classic tests |
+| `bex-basic` | `[STRINGS]` + безопасные `[PARS]` | `[STRINGS]` реализован (bounded whitelist); `[PARS]` — следующий шаг |
 | `bex-codeptr` | `[CODEPTR]` только allowlist существующих DPT action functions | Не исполнять произвольные pointers |
 | `boom` | generalized linedefs/sectors, Boom flags/specials, blockmap/physics cases | Отдельный map/runtime этап |
 | `mbf` | MBF things/flags/skies/AI semantics и demos | После Boom matrix |
@@ -137,6 +138,7 @@ vanilla messages, Thing ID/Bits/state/sound references, Frame Duration/Next fram
 `Misc 0 Monsters Infight` принимается как `0..1`. Патченные сохранения получают
 marker `DPTDEH1` и digest набора патчей; загрузка с другим набором отвергается.
 Патченные демо используют версию 120 с тем же manifest; vanilla `.lmp`
-байт-совместим. Action pointers,
-полный Text/[STRINGS], остальные Frame fields, произвольные
-weapon frames и BEX остаются очередью следующих срезов.
+байт-совместим. BEX `[STRINGS]` реализован поверх той же bounded-таблицы замен
+(имена из whitelist, значения до 2047 bytes, без continuation). Action pointers,
+`[PARS]`/`[CODEPTR]`, остальные Frame fields, произвольные
+weapon frames и остальной BEX/MBF остаются очередью следующих срезов.

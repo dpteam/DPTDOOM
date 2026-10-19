@@ -240,6 +240,34 @@ int main(void)
         REQUIRE(states[S_PISTOL1].misc1==0&&states[S_PISTOL1].misc2==-128);
         DPT_DehReset();REQUIRE(states[S_PISTOL1].misc1==0&&states[S_PISTOL1].misc2==0);
     }
+    {
+        const char *patch=HEADER "[STRINGS]\nMSGON = BEX messages on\nDETAILHI = BEX high detail\n";
+        REQUIRE(Load(patch));
+        REQUIRE(!strcmp(DPT_DehString(MSGON),"BEX messages on"));
+        REQUIRE(!strcmp(DPT_DehString(DETAILHI),"BEX high detail"));
+        REQUIRE(!strcmp(DPT_DehString(GAMMALVL2),GAMMALVL2));
+        DPT_DehChecksum(a);
+        {const char *invalid[]={HEADER "[STRINGS]\nNOSUCHSTRING = value\n",
+          HEADER "[STRINGS]\nMSGON = 100% bad\n",
+          HEADER "[STRINGS]\nMSGON = trailing \\\n",
+          HEADER "Initial Health = 5\n[STRINGS]\nMSGON = ok\nMSGOFF = bad%value\n"};
+         for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i)
+         {REQUIRE(!Load(invalid[i]));REQUIRE(!strcmp(DPT_DehString(MSGON),"BEX messages on"));
+          REQUIRE(deh_initial_health==100);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
+        {char long_value[4096];
+         size_t n=0;int k;
+         memcpy(long_value,HEADER "[STRINGS]\nMSGON = ",strlen(HEADER "[STRINGS]\nMSGON = "));
+         n=strlen(long_value);
+         for(k=0;k<2048;++k)long_value[n++]='x';
+         REQUIRE(!DPT_DehLoadBytes((const unsigned char*)long_value,n));
+         REQUIRE(!strcmp(DPT_DehString(MSGON),"BEX messages on"));}
+        // BEX and classic Text share one replacement table.
+        REQUIRE(Load(HEADER "Text 20 10\nPicked up the armor.BEX armor!"));
+        REQUIRE(!strcmp(DPT_DehString(GOTARMOR),"BEX armor!"));
+        REQUIRE(!strcmp(DPT_DehString(MSGON),"BEX messages on"));
+        DPT_DehReset();REQUIRE(!strcmp(DPT_DehString(MSGON),MSGON));
+        REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
+    }
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
     puts("DeHackEd Misc/Ammo/Weapon-frame/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
 }

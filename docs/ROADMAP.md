@@ -339,7 +339,11 @@ partition может породить две отдельные локальны
   **не реализуются** в историческом виде; `Cheat` — отдельный сетевой класс.
   Вывод: безопасно реализуемый classic-набор (Misc/Ammo/Weapon/Thing/Frame/Text)
   закрыт. Детали — `docs/DEHACKED-MBF-AUDIT.md`.
-- [ ] Следующий слой — BEX: `[STRINGS]`, безопасные `[PARS]`, затем ограниченный
+- [x] `DPT-deh-bexstrings-v16`: BEX `[STRINGS]` поверх общей таблицы замен,
+  ключ — имя строки из bounded whitelist (25 строк), значения до 2047 bytes с
+  теми же запретами; trailing `\` continuation отклоняется явно; неизвестное
+  имя — ошибка с полным откатом. Engine/file/lump/same-different peer tests.
+- [ ] Следующий слой BEX: безопасные `[PARS]`, затем ограниченный
   `[CODEPTR]` только с allowlist существующих DPT action functions. Не считать
   ограниченный subset полной совместимостью; arbitrary code pointers не принимать.
 - [x] Subset `DPT-deh-misc-ammo-v2`: Ammo Max ammo/Per ammo, Weapon Ammo type
