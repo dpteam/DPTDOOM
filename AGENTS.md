@@ -101,3 +101,9 @@ ctest --preset windows-headless
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
 - Upstream PR и решения по ним фиксируются в `docs/UPSTREAM.md`.
+- Идеи/цели: `docs/IDEAS.md`; реестр багов: `docs/BUGS.md`. Владелец сообщил
+  T-chat exit (BUG-001): network checksum должен исключать HUD-consumed chatchar,
+  а не отключать чат. `net-chat` и `net-windows` проверяют delivery/cancel/edit.
+- Team chat/voice, player profiles/colors/skins, launcher/browser/master и
+  Vulkan/3D floors/HD/voxels — план, не готовые фичи. Не включать микрофон без
+  явного согласия; Vulkan сам по себе не добавляет world/physics 3D floors.

@@ -64,6 +64,19 @@ handshake/state checksum. Ненулевой `-dmflags` вне direct coop за�
 нет расширенных save/demo formats: vanilla DSG не хранит эту маску.
 Protocol v1 build и v2 build несовместимы; обоим тестировщикам нужен один artifact.
 
+## Общий чат
+
+`T` — открыть общий vanilla чат; Enter отправляет, Backspace редактирует,
+Escape отменяет ввод. Пробелы поддерживаются. Сейчас это ASCII с ограниченным
+HUD font, не Unicode/командные каналы. Team chat/voice/player custom names
+находятся в плане (`IDEAS.md`). Содержимое чата не пишется в stdout по умолчанию;
+только явный `-chat-debug` включает локальную диагностику (осторожно с приватностью).
+
+BUG-001: первая версия direct coop ошибочно включала HUD-consumed chatchar в
+state checksum и завершала игру при T. Исправление нормализует только это
+transport/UI-поле, не отключая остальные проверки состояния. Чат сбрасывается
+при новом уровне/получателе, Escape отменяет накопленный текст.
+
 Меню не останавливает симуляцию в netgame. Закрытие/обрыв одного процесса
 завершает второго понятной сетевой ошибкой; возврата в меню/reconnect пока нет.
 На плохом канале TCP блокирует дальнейшие тики до доставки/таймаута: это
@@ -87,7 +100,7 @@ Attract-demo snapshots в single-player остаются доступными.
 - Проверяются размер/порядок чтения, движение -50..50, special commands, reserved
   bytes, ожидаемый tic index, state mismatch, EOF и bounded timeout.
 - Hash игры — нормализованный archive projection + gameplay RNG. Флаг ML_MAPPED,
-  зависящий от локальной камеры, исключён. Это **не полный snapshot** всей
+  зависящий от локальной камеры, и consumed chat byte исключены. Это **не полный snapshot** всей
   симуляции и не защита от читов. Подробные ограничения archive — STATE-TESTING.md.
 - TCP read/write поддерживают фрагментацию. После соединения NODELAY включён;
   главный поток ждёт peer. Оконный backend продолжает pump во время ожидания.
@@ -110,6 +123,9 @@ ctest --preset windows-asan -R 'net-' --output-on-failure
   комбинации маски, реальные spawned pickups и player movement clipping.
   Временные игровые ресурсы не попадают в Git/artifacts; без MAP01 тест skip.
 - `net-loopback-dmflags`: полные 210 тиков с маской 3 и сверкой трасс.
+- `net-chat`: две стороны отправляют общий чат, cancel/backspace/high-bit input,
+  210 тиков и совпадающие trace; сетевой GUI test также проверяет реальные T,
+  пробел/Backspace/Enter/Escape и input widget при уменьшенном viewport.
 - `net-windows`: два SDL-окна с различным движением/стрельбой/камерами,
   живое keyboard input и close/disconnect; interactive test с локальным IWAD.
   Для ручного запуска скрипта с новыми правилами добавить `--dmflags 3`.

@@ -41,9 +41,28 @@ OPL-синтез, мышь/геймпады. Дефолтный native Win32 bac
 
 ## Ближайшее
 
-1. Первый реальный GitHub Actions run после разрешённого push; проверить Linux/macOS.
-2. Продолжить 64-битный/UB-аудит (не все legacy warnings устранены),
+1. Graceful disconnect-to-menu и читабельная причина сетевой ошибки; затем
+   профили ресурсов/игрока и простое UI прямого подключения как основа launcher.
+2. Первый реальный GitHub Actions run после разрешённого push; проверить Linux/macOS.
+3. Продолжить 64-битный/UB-аудит (не все legacy warnings устранены),
    расширить sanitizer coverage на SDL, другие IWAD/карты и платформы.
+
+Предложения ассистента отделены от требований владельца в `docs/IDEAS.md`:
+mod manifests, administration/mute/rate-limits, сетевой HUD/diagnostic reports,
+доступность/ввод и расширенные save/demo форматы. Это не уже утверждённые фичи.
+
+## Исправление BUG-001 — общий чат
+
+- [x] Воспроизведён T-chat exit как false state desync после служебного chat byte.
+- [x] Network checksum исключает только локально consumed chatchar; SP/save
+  format и закреплённые game traces не изменены.
+- [x] Cancel/reset destination/input/queue; hidden receive font; typed Space и
+  приоритет Escape для чата, а не открытия меню.
+- [x] `net-chat`: 210 тиков, две стороны, доставка/cancel/backspace/high-bit input.
+- [x] Реальный T/Enter/Escape/пробел/Backspace test в двух SDL-окнах.
+- [x] Полные проверки: 15/15 headless, 17/17 ASan, 18/18 SDL зелёные.
+
+Реестр открытых/закрытых проблем — `docs/BUGS.md`. Team chat и voice — пока план.
 
 ## Этап 1.4 — data-free CI (подготовлен, remote run ожидается)
 
@@ -156,6 +175,21 @@ Chocolate Doom и не готовый публичный Internet server. UDP/pr
   В частности, в `bAddServer` есть обращение за пределами массива после цикла.
 - Клиентский/серверный launcher с выбором IWAD, модов, адреса и параметров.
 - Dedicated server — отдельная цель, не путать с графическим headless backend.
+- Удобный launcher с профилями ресурсов, server browser с фильтрами/избранным/
+  ping/version/модами, direct-connect fallback при недоступном master.
+- Перед публичным browser/voice: администрирование, moderation/mute/rate-limits
+  и понятная политика доверия/приватности. Подробности в `docs/IDEAS.md`.
+
+## Общение и профили игрока (план)
+
+- Общий текстовый чат как рабочая база (`T`), исправление BUG-001 и регрессия.
+- Team chat после явного team model/DM/TDM: routing, channel indicator,
+  история/scroll, mute, length/rate limits. Не считать текущий broadcast team chat.
+- In-game voice: PTT по умолчанию, устройства/громкость/mute/deafen/индикаторы,
+  отдельный от lockstep voice transport; без неявного доступа к микрофону.
+- Профиль игрока, цветной безопасный nickname format, цвет персонажа/команды,
+  cosmetic skins с preview/fallback и server policy. «Зомби/имп» сначала только
+  визуальная оболочка с Doomguy hitbox, не иной класс/преимущество.
 
 ## Среднесрочно / долгосрочно
 
@@ -165,9 +199,12 @@ Chocolate Doom и не готовый публичный Internet server. UDP/pr
   `refs/doom_ace-master` — материал для изучения, не готовая drop-in библиотека.
 - Профилирование hot paths, сравнение Release/MinSizeRel, затем PGO.
   CRT startup не удалять, пока движок использует malloc/stdio/exit и др.
+- Vulkan backend с сохранением software/headless paths; HD replacements и
+  voxels как отдельные ресурсные/рендерные возможности. 3D floors требуют
+  также world/map/physics/AI изменений, не только подключения Vulkan.
 
 ## Что не заявляется готовым
 
 Полноценный Internet multiplayer, мастер-сервер DPT.DOOM, launcher, PK3 и
-DECORATE ещё отсутствуют. Доступен только экспериментальный direct coop v1.
+DECORATE ещё отсутствуют. Доступен только экспериментальный direct coop (protocol v2).
 Первый этап не является реализацией всего ТЗ.

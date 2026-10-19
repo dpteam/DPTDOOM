@@ -1,0 +1,43 @@
+# Баги и ограничения
+
+Регистрировать факт, воспроизведение, причину и тест. «Исправлено локально»
+не означает, что уже опубликован GitHub Artifact/релиз.
+
+## BUG-001 — `T` (чат) завершает сетевую игру
+
+- **Сообщил владелец:** нажатие T вызывает вылет; T действительно является
+  стандартной клавишей общего чата Doom.
+- **Воспроизведено:** direct coop двух headless процессов — первый chat
+  destination byte вызывает `Network desync before tic 11`. Тот же путь
+  запускается при T в оконной игре. Это ошибочное завершение через `I_Error`,
+  не подтверждённое данным repro повреждение памяти.
+- **Причина:** `HU_Ticker` локально очищает remote `players[i].cmd.chatchar`, но
+  не local chatchar. Сетевой checksum включал это HUD/transport-поле как будто
+  оно должно совпадать в post-tic simulation state обоих клиентов.
+- **Исправление:** нормализовать только chatchar в network archive projection;
+  не отключать чат/не ослаблять остальные поля checksum. Vanilla save/SP
+  checksum и delivery через ticcmd остаются прежними.
+- **Смежные исправления:** reset destination/input после cancel/нового адресата,
+  reset очереди при HU_Start, валидный font у hidden receive widgets.
+- **Проверки:** `net-chat` (две стороны, 210 тиков, message/cancel/backspace/
+  high-bit input и сравнение трасс), `net-windows` (реальные T/ввод/Enter/Escape
+  в двух окнах, уменьшенный viewport). Результаты фиксируются в ROADMAP.
+- **Статус:** исправлено локально, регрессия подтверждена: 15/15 headless,
+  17/17 MSVC ASan, 18/18 SDL tests (включая два окна и реальный T/input).
+  Team chat/Unicode/voice этим исправлением не реализованы. Старые artifacts
+  до исправления остаются с багом; новый remote upload ещё не выполнялся.
+- **Смежный ввод:** Escape теперь доходит до HU_Responder и отменяет чат,
+  а typed Space остаётся ASCII-пробелом при сохранении игровой кнопки KEY_USE.
+
+## Открытые ограничения (не путать с реализованными фичами)
+
+- **NET-001:** direct peer disconnect/timeout закрывает процесс вместо возврата
+  в меню; планируется graceful disconnect/reconnect.
+- **NET-002:** только 2-player trusted LAN TCP, нет Internet hardening/NAT/late join.
+- **CHAT-001:** пока ASCII vanilla HUD, нет team routing, истории, mute/rate-limits
+  высокого уровня; общий чат не является защищённым/приватным каналом.
+- **DATA-001:** vanilla DSG не является полным snapshot; ограничения в STATE-TESTING.md.
+- **PORT-001:** Linux/macOS GitHub run ещё не подтверждён; не объявлять готовыми.
+- **AUDIT-001:** не все 64-bit warnings/UB paths исправлены; UBSan ещё не проверен.
+
+Большие пожелания не записывать как «баг Vulkan отсутствует» — они в IDEAS/ROADMAP.

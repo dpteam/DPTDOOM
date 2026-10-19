@@ -57,3 +57,85 @@
 - Attract-demo snapshot через F2 уже реализован; держать эту фичу.
 - Мастер-сервер, лаунчер клиента/сервера, PK3 с вложенными WAD, DECORATE — см.
   `PROMPT.md` и `ROADMAP.md`, отдельные большие этапы.
+
+## Лаунчер и серверная инфраструктура (владелец)
+
+- Удобный единый launcher: выбор IWAD/профиля модов, порядок ресурсов, параметры
+  клиента/хоста/сервера, понятные ошибки и запуск в один-два действия.
+- Server browser: режим/карта/число игроков/лимит, latency, версия/моды/flags,
+  поиск/фильтры, избранное/недавние, прямое подключение без мастер-сервера.
+- Master server: регистрация/heartbeat/TTL, проверка доступности, лимиты запросов,
+  защита от подмены/спама/amplification; локальное/прямое подключение не должно
+  требовать доступности master. Это не то же самое, что игровой dedicated server.
+- Браузер не должен обещать NAT traversal только потому, что сервер найден;
+  relay/NAT solution — отдельное решение с ресурсными затратами.
+
+## Общение в игре (владелец)
+
+- Общий текстовый чат, затем командный для будущих TDM/командных режимов.
+  Нужны явный channel label, team membership/маршрутизация, история/scroll,
+  лимиты длины/частоты, mute/ignore. Текущий общий vanilla chat на `T` — база,
+  не готовая система каналов. COOP автоматически не выдавать за TDM-команды.
+- In-game voice chat: push-to-talk по умолчанию, явный индикатор передачи/приёма,
+  выбор микрофона/устройства, громкость, mute/deafen, общий/командный routing,
+  optional proximity mode и server policy. Никогда не включать микрофон молча.
+- Voice — отдельный канал/очередь от детерминированных ticcmd: codec/jitter
+  buffer/bandwidth cap/packet loss, abuse/rate limits и privacy/security design.
+  Не засовывать аудиоданные в текущий lockstep, где они задержат симуляцию.
+- Unicode/кириллица и локализованный ввод требуют нового font/text-input пути;
+  цветные/управляющие последовательности из сети не должны становиться командами.
+
+## Unsorted: профиль и внешний вид игрока (владелец)
+
+- Настройки игрока: имя/цвета/клавиши/аудио/доступность, preview и отдельные
+  локальные профили; сверяемые сетевые поля отделить от личных предпочтений.
+- Цветные ники: ограниченный безопасный формат, длина, контраст/читабельность,
+  fallback без цвета, server moderation и запрет имитации системных сообщений.
+- Менять цвет персонажа независимо от сетевого слота; читаемая командная
+  идентификация/настройки server/team должны иметь приоритет.
+- Скины, включая базовые «как зомби/имп» для humanoid мобов близкого размера.
+  Сначала косметика Doomguy с неизменными hitbox/скоростью/оружием; настоящий
+  monster-class gameplay — другая фича, не скрытая привилегия скина.
+- Проверять frame/rotation/animation/цветовые диапазоны/звуки/размеры ресурсов,
+  fallback при отсутствии скина, лицензии ассетов и политику разрешённых пакетов.
+
+## Будущее: Vulkan и расширенная графика (владелец)
+
+- Vulkan renderer как optional backend при сохранении software fallback и
+  возможности headless-тестировать симуляцию без GPU.
+- 3D floors, HD replacement textures/sprites, voxel objects, дальнейшие
+  улучшения графики и материалов по отдельным проверяемым этапам.
+- **Vulkan сам не добавляет 3D floors**: нужны map/sector representation,
+  collision, hitscan/projectiles, AI/navigation, sight/sound и compatibility.
+  Сначала определить данные/семантику и отделить renderer от world simulation.
+- HD/voxel replacements: формат/приоритет/fallback/масштаб/память/GPU limits,
+  лицензии ассетов и явное разделение cosmetic vs gameplay-changing пакетов.
+- Visual features не должны случайно менять RNG/ticcmd/net state или делать
+  сетевую сессию зависимой от FPS/видеокарты. Диагностика GPU и RDP/software
+  fallback важны для текущей Windows-среды владельца.
+
+## Дополнительные предложения ассистента (ещё не утверждённые фичи)
+
+1. **Надёжный выход из сети**: disconnect-to-menu, reconnect/resync и сохранение
+   причины ошибки вместо закрытия всей игры; UI состояния подключения/таймаутов.
+2. **Профили модов и manifest ресурсов**: человекочитаемый mismatch report и
+   нужный порядок WAD/PK3; автоматические downloads только с подтверждением,
+   лимитами/хешами, sandbox paths и соблюдением прав на game data.
+3. **Server administration**: kick/ban/mute/vote, permissions, логирование и
+   rate limits до public server browser/voice; anti-abuse не равно обещанию anticheat.
+4. **Сетевые диагностики**: ping/jitter/loss/traffic HUD, воспроизводимый latency
+   proxy test, детект desync с first-bad-tic report; demos/replays/spectator позже
+   строить на версионированных форматах, не на сырых native structs.
+5. **Удобный ввод**: remapping, мышь/raw input, чувствительность, optional modern
+   controls, gamepad; явные compatibility presets и отдельные regression tests.
+6. **Доступность**: text scale/chat visibility, colorblind-friendly team colors,
+   subtitles/visual voice indicators, mute по умолчанию для незнакомых источников.
+7. **Crash/bug reports**: локальный диагностический пакет с версией/настройками/
+   ресурсными хешами, **без** IWAD, личных путей, токенов и содержимого чата/голоса
+   без отдельного согласия. `-chat-debug` не включать по умолчанию.
+8. **Versioned extended save/demo formats**: сохранить RNG/rules/references для
+   online snapshot/ботов/новых карт, явная миграция и сохранение vanilla paths.
+
+Приоритет предложения: сначала стабильный чат/соединение и профили, затем
+browser/master, командные режимы/боты/voice; масштабирование и Vulkan — крупные
+долгосрочные ветки. Это обсуждаемый порядок, не разрешение реализовать всё сразу.
