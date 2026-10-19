@@ -160,6 +160,12 @@ ctest --preset windows-headless
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
+- DeHackEd first slice: deh_classic.c, DPT_DEH_CLASSIC, **Misc 0 only** classic
+  v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
+  -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.
+  Raw bytes/order/subset digest в ResourceDigest; patched vanilla save/load/
+  record запрещены до manifest format. Tests deh-misc/deh-engine, docs/DEHACKED.md.
+  Thing/Frame/Text/BEX/MBF не объявлять готовыми; refs code не переносился.
 - Upstream PR и решения по ним фиксируются в `docs/UPSTREAM.md`.
 - Игровые csDoom references теперь доступны: `refs/csDoomNew`, `csDoomOld07`,
   плюс отдельный `csDoomMaster`. Source/license карта — `docs/REFERENCE-SOURCES.md`.

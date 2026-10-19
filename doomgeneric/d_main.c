@@ -27,6 +27,7 @@
 
 #include "config.h"
 #include "deh_main.h"
+#include "deh_classic.h"
 #include "doomdef.h"
 #include "doomstat.h"
 #include "dpt_rules.h"
@@ -1458,6 +1459,25 @@ void D_DoomMain (void)
         DEH_AddStringReplacement("M_GDLOW", "M_MSGOFF");
     }
 
+    // DPT's first strict subset is separate from the unimplemented full
+    // upstream FEATURE_DEHACKED API. Do not silently enable BEX/ACE behavior.
+    DPT_DehReset();
+    for (p = 1; p < myargc; ++p)
+    {
+        if (!strcmp(myargv[p], "-deh"))
+        {
+            int first = ++p;
+            while (p < myargc && myargv[p][0] != '-')
+            {
+                if (!DPT_DehLoadFile(myargv[p]))
+                    I_Error("DeHackEd file %s: %s", myargv[p], DPT_DehLastError());
+                printf("DeHackEd: loaded external patch %u (DPT-deh-misc-v1)\n", DPT_DehLoadedCount());
+                ++p;
+            }
+            if (p == first) I_Error("-deh requires at least one patch file");
+            --p;
+        }
+    }
 #ifdef FEATURE_DEHACKED
     // Load Dehacked patches specified on the command line with -deh.
     // Note that there's a very careful and deliberate ordering to how
@@ -1536,7 +1556,26 @@ void D_DoomMain (void)
     // Load DEHACKED lumps from WAD files - but only if we give the right
     // command line parameter.
 
-#if ORIGCODE
+#if defined(DPT_DEH_CLASSIC)
+    // Explicit opt-in for embedded patches until a broader compatibility level
+    // exists. Traverse in WAD load order, including IWAD then PWAD lumps here;
+    // external patches above take effect before this explicit lump pass.
+    if (M_ParmExists("-dehlump"))
+    {
+        unsigned int i;
+        for (i = 0; i < numlumps; ++i)
+        {
+            if (!strncmp(lumpinfo[i].name, "DEHACKED", 8))
+            {
+                if (!DPT_DehLoadLump((int)i))
+                    I_Error("DEHACKED lump %u: %s", i, DPT_DehLastError());
+                printf("DeHackEd: loaded lump patch %u (DPT-deh-misc-v1)\n", DPT_DehLoadedCount());
+            }
+        }
+    }
+    if (DPT_DehLoadedCount())
+        puts("DeHackEd: Misc-only subset active; vanilla save/load and recording disabled; no full DeHackEd/BEX/Boom/MBF compatibility");
+#elif ORIGCODE
     //!
     // @category mod
     //

@@ -77,12 +77,14 @@ def main():
 
             time.sleep(2)
             key(0, 0x26, True); key(1, 0x27, True)  # player1 walks, player2 turns
-            key(1, 0x11, True)  # fire
+            key(0, 0x11, True); key(1, 0x11, True)  # both players fire
             time.sleep(2)
-            key(0, 0x26, False); key(1, 0x27, False); key(1, 0x11, False)
+            key(0, 0x26, False); key(1, 0x27, False); key(0, 0x11, False); key(1, 0x11, False)
+            # Exercise USE input for both living players (not a death/reborn assertion).
             def tap(player, vk):
                 key(player, vk, True); time.sleep(0.06)
                 key(player, vk, False); time.sleep(0.06)
+            for player in (0, 1): tap(player, 0x20)  # Space / KEY_USE
 
             # T used to terminate both peers on the first chat destination
             # byte. Exercise real input/HUD, not only scripted ticcmd bytes.

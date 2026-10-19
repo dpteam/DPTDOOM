@@ -319,6 +319,17 @@ partition может породить две отдельные локальны
 
 - [ ] DeHackEd: `.deh` + `DEHACKED` lump, порядок patches, parsing bounds,
   vanilla regression и сверка модификаций в сети. FEATURE_DEHACKED сейчас OFF.
+- [x] Первый **Misc-only** `DPT-deh-misc-v1` slice: classic grammar, explicit
+  -deh/-dehlump, staged atomic assignments, byte/order digest в direct/relay
+  ResourceDigest, safe rejection unknowns, patched-save/record guards.
+  `docs/DEHACKED.md`, deh-misc/deh-engine tests; full FEATURE_DEHACKED пока OFF.
+- [x] Первый локальный полный прогон этого среза: 33/33 Windows MinGW headless,
+  35/35 MSVC headless ASan; vanilla state baselines прежние. В SDL первый
+  прогон 34/35: второй WebView2/CDP launcher startup превысил test deadline;
+  отдельная перепроверка deh-misc/master-client-wire/launcher-windows — 3/3.
+  Не относить первый WebView failure к DeHackEd/macOS без evidence.
+- [ ] Следующие sections: Thing/Frame/Ammo/Weapon/Text и BEX. Не считать Misc
+  срез полной совместимостью; parser не включает arbitrary code pointers.
 - [x] Подробный pre-implementation аудит DeHackEd/BEX/Boom/MBF/MBF21,
   csDoomNew/Old07 и ACE: `docs/DEHACKED-MBF-AUDIT.md`. Следующий срез —
   bounded classic parser, не включение ACE exploit или всей чужой архитектуры.

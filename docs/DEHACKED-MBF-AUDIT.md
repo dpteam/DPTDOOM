@@ -13,8 +13,9 @@
 - `DEH_LoadLump*`, `DEH_ParseCommandLine` и `DEH_Checksum` не являются рабочим
   runtime-path в текущем slim build. Нельзя включить один define и считать,
   что поддержка появилась.
-- Network handshake сейчас проверяет `DEH_Checksum`, но до реальной загрузки
-  patches это не полноценная сверка правил/изменённых states. При реализации
+- Старый network scaffold содержит вызов `DEH_Checksum` под выключенным ORIGCODE;
+  текущий direct v2 использует собственный ResourceDigest, не этот entrypoint.
+  До реальной загрузки patches это не сверка изменённых states. При реализации
   checksum/manifest нужно добавить applied patch bytes/order и compatibility level,
   не отправлять абсолютные пути.
 - Нет отдельного compatibility selector для vanilla/DeHackEd/BEX/Boom/MBF/MBF21.
@@ -101,3 +102,7 @@ demo сохранять applied patch identity или запрещать нес�
 
 Следующий кодовый этап после этого аудита — только `deh-classic` parser + tests.
 Boom/MBF/MBF21 не отмечать готовыми от наличия reference source.
+
+Первый реализованный срез теперь описан в `DEHACKED.md`: **Misc 0 only**,
+отдельный DPT_DEH_CLASSIC path, без включения полного FEATURE_DEHACKED.
+Thing/Frame/Ammo/Weapon/Text остаются очередью следующих срезов.

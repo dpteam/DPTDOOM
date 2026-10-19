@@ -39,6 +39,7 @@ typedef int SOCKET;
 #include <time.h>
 #include "../master/client.h"
 #include "dpt_connect_screen.h"
+#include "deh_classic.h"
 
 static dm_client_query_t master_query;
 static boolean master_initialized, master_enabled, master_waiting, master_removing;
@@ -333,6 +334,13 @@ static void ResourceDigest(byte *digest)
     byte buffer[8192];
     unsigned int i;
     SHA1_Init(&context);
+    if (DPT_DehLoadedCount())
+    {
+        sha1_digest_t patches;
+        DPT_DehChecksum(patches);
+        SHA1_UpdateString(&context, "DPT-deh-misc-v1 applied-patches");
+        SHA1_Update(&context, patches, sizeof(patches));
+    }
     // Hash effective content/order, not just lump names and sizes. Cache and
     // filenames/absolute paths are intentionally irrelevant across machines.
     for (i = 0; i < numlumps; ++i)

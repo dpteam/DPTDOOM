@@ -37,7 +37,7 @@
 #define DEH_DEFAULT_BFG_CELLS_PER_SHOT 40
 #define DEH_DEFAULT_SPECIES_INFIGHTING 0
 
-#ifdef FEATURE_DEHACKED
+#if defined(FEATURE_DEHACKED) || defined(DPT_DEH_CLASSIC)
 
 extern int deh_initial_health;             
 extern int deh_initial_bullets;            
