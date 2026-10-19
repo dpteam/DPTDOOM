@@ -41,8 +41,9 @@ OPL-синтез, мышь/геймпады. Дефолтный native Win32 bac
 
 ## Ближайшее
 
-1. Профили ресурсов/игрока и простое UI прямого подключения как основа launcher;
-   graceful startup/handshake failure UI, затем reconnect/re-host lifecycle.
+1. Довести HTML launcher по обратной связи владельца; затем master API/browser
+   с выбором IP/домена master. Player profiles пока план. Graceful engine
+   startup/handshake recovery, reconnect/re-host lifecycle — отдельный этап.
 2. Первый реальный GitHub Actions run после разрешённого push; проверить Linux/macOS.
 3. Продолжить 64-битный/UB-аудит (не все legacy warnings устранены),
    расширить sanitizer coverage на SDL, другие IWAD/карты и платформы.
@@ -206,6 +207,29 @@ partition может породить две отдельные локальны
   и не нужен для нынешнего headless. Не запускать скачанные скрипты без проверки.
 
 ## Этап 3 — мастер-сервер и лаунчеры
+
+### Этап 3.1 — Windows HTML launcher
+
+- [x] Локальный HTML/CSS/JS встроен в EXE, WebView2 + native CreateProcessW host;
+  прежний Win32-controls UI заменён по просьбе владельца.
+- [x] ANOM-style палитры/градиенты/объёмные controls без заимствования компоновки;
+  light/dark switch с persistent choice в выбранном WebView data directory.
+- [x] Три профиля, EXE/IWAD/PWAD chooser/order, map/skill/monster/rules,
+  command preview, single/host/join, LAN warning, session log/exit status.
+- [x] `portable.txt` → `user/` рядом с launcher, без silent AppData fallback;
+  copy с подтверждением/no-overwrite, browser cache тоже внутри user.
+- [x] Постоянные config/saves по profileN, unique logs; lock занятого game slot.
+- [x] Pinned SDK fetch + SHA-256, CMake install/package Loader DLL/LICENSE/NOTICE.
+- [x] Model data-free tests и реальный Windows/WebView2 SP/host/join UI test.
+- [x] Windows regression: 22/22 SDL, 18/18 MinGW headless, 20/20 MSVC headless
+  ASan; workflow actionlint зелёный. Remote GitHub run всё ещё не выполнен.
+- [ ] Browser/master endpoint IP/domain; player appearance profiles, Unicode
+  engine paths, drag/drop/search, launcher для Linux/macOS.
+
+См. `docs/LAUNCHER.md`. Это playtest, не installer/release. WebView2 Runtime
+требуется отдельно, сам launcher ничего не устанавливает.
+
+### Дальнейший master/server этап
 
 - После работающего игрового подключения: heartbeat, TTL, список серверов,
   challenge/проверка источника, лимиты и защита от UDP amplification.

@@ -22,3 +22,7 @@ refs/
 .savegame/
 default.cfg
 dptdoom-doom.cfg
+__pycache__/
+/user/
+/portable.txt
+/launcher.ini

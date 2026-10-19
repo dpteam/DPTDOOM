@@ -10,6 +10,7 @@ CI без игровых данных и его ограничения опис�
 Нужны CMake 3.21+ и Visual Studio 2022 с компонентами C++ и Windows SDK.
 
 ```powershell
+powershell -NoProfile -File tools/fetch-webview2.ps1
 cmake --preset windows -DDPTDOOM_TEST_IWAD="$PWD/refs/iwads/doom2.wad"
 cmake --build --preset windows
 ctest --preset windows
@@ -23,6 +24,7 @@ Win32 backend пока без звука. Тест окна проверяет �
 
 ```powershell
 powershell -NoProfile -File tools/fetch-sdl.ps1
+powershell -NoProfile -File tools/fetch-webview2.ps1
 cmake --preset windows-sdl -DDPTDOOM_TEST_IWAD="$PWD/refs/iwads/doom2.wad"
 cmake --build --preset windows-sdl
 ctest --preset windows-sdl
@@ -36,6 +38,11 @@ ctest --preset windows-sdl
 Нужны SDL2 2.0.7+ и, для звука, SDL2_mixer 2.6+.
 Сборка копирует `SDL2.dll` и `SDL2_mixer.dll` рядом с EXE. Опциональные codec DLL
 не копируются; уведомления о лицензиях — `docs/SDL-LICENSES.txt`.
+
+MSVC Windows-сборка также включает HTML launcher/WebView2Loader.dll, SDK берётся
+из отдельного проверяемого fetch. Runtime автоматически не устанавливается.
+Engine-only/MinGW: `-DDPTDOOM_LAUNCHER=OFF`. Подробности portable и tests —
+[LAUNCHER.md](LAUNCHER.md); `launcher-windows` имеет метку `interactive`.
 
 MUS конвертируется в MIDI в памяти, без общего временного `doom.mid`.
 Windows использует доступный native MIDI synth; для других платформ может

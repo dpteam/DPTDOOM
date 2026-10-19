@@ -63,6 +63,8 @@ jobs:
       - name: Fetch official SDL packages (SHA-256 verified)
         shell: pwsh
         run: ./tools/fetch-sdl.ps1
+      - name: Fetch verified WebView2 SDK (no runtime install)
+        run: ./tools/fetch-webview2.ps1
       - name: Configure
         run: cmake --preset windows-sdl
       - name: Build

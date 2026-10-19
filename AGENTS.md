@@ -104,6 +104,13 @@ ctest --preset windows-headless
   build использует static CRT. Пакеты только из allowlist CMake install и
   `git archive HEAD`; source должен совпадать с HEAD, не паковать dirty builds.
   Включать commit/source/licenses, не включать IWAD/config/save/screenshots.
+- Native Windows launcher в `launcher/`, документация `docs/LAUNCHER.md`.
+  HTML/CSS встроены в EXE; MSVC C++/WRL host + WebView2 Runtime, engine/model — C.
+  SDK: `tools/fetch-webview2.ps1` (pinned NuGet + SHA-256, без установки runtime).
+  CreateProcessW без shell; 3 профиля LocalAppData или `portable.txt` → `user/`
+  рядом с EXE. Game CWD постоянный `game/profileN`, logs — `sessions/`.
+  `launcher-model` — data-free; `launcher-windows` — interactive + IWAD/Runtime.
+  Server browser/master ещё не готов; MinGW engine: DPTDOOM_LAUNCHER=OFF.
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.

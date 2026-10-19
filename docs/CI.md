@@ -9,7 +9,7 @@ Workflow: `.github/workflows/ci.yml`. Запускается на push, pull req
 | Job | Runner | Проверки без игровых данных |
 |---|---|---|
 | headless | Windows 2022 / Ubuntu 24.04 / macOS 14 | Сборка, версия, запуск без IWAD, timer и zone allocator |
-| windows-sdl | Windows 2022 | Официальные SDL ZIP с SHA-256, сборка, dummy input/audio |
+| windows-sdl | Windows 2022 | SDL + WebView2 SDK с SHA-256, сборка, dummy input/audio, launcher-model |
 | unix-sdl | Ubuntu 24.04 / macOS 14 | SDL development packages, сборка, dummy input/audio |
 | unix-sdl/X11 | Ubuntu 24.04 | X11-сборка, версия и корректная ошибка без DISPLAY |
 | windows-asan | Windows 2022 | MSVC ASan runtime preflight, timer/allocator и probes |
@@ -38,6 +38,9 @@ Workflow: `.github/workflows/ci.yml`. Запускается на push, pull req
 Artifacts. GitHub обычно требует вход в аккаунт для скачивания artifacts.
 
 - `dptdoom-windows-x64-sdl-<commit>` — игровой ZIP, EXE + SDL DLL, без IWAD.
+  Также HTML launcher, WebView2Loader.dll и SDK LICENSE/NOTICE. Launcher требует
+  установленного WebView2 Evergreen Runtime; standalone engine от него не зависит.
+  Portable: `portable.txt` рядом с launcher → `user/`, см. [LAUNCHER.md](LAUNCHER.md).
 - `dptdoom-headless-<os>-<commit>` — диагностический tar.gz, без окна/аудио.
 - Срок хранения — 30 дней. Это CI playtest builds, **не релизы**.
 - Пакеты содержат `START-HERE.txt`, `BUILD.json`, `SHA256SUMS.txt`, лицензии и

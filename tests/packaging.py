@@ -25,9 +25,9 @@ def main():
         install = repo / "install"
         (install / "bin").mkdir(parents=True)
         (install / "share/dptdoom").mkdir(parents=True)
-        for name in ("dptdoom.exe", "SDL2.dll", "SDL2_mixer.dll"):
+        for name in ("dptdoom.exe", "dptdoom-launcher.exe", "WebView2Loader.dll", "SDL2.dll", "SDL2_mixer.dll"):
             (install / "bin" / name).write_bytes(b"synthetic fixture, not an executable")
-        for name in ("LICENSE", "SDL-LICENSES.txt"):
+        for name in ("LICENSE", "SDL-LICENSES.txt", "WebView2-LICENSE.txt", "WebView2-NOTICE.txt"):
             (install / "share/dptdoom" / name).write_text("test notice")
         (install / "bin/DOOM2.WAD").write_bytes(b"must not ship")
         (install / "bin/default.cfg").write_text("private settings")
@@ -40,6 +40,9 @@ def main():
         with zipfile.ZipFile(package) as zipped:
             names = zipped.namelist()
             assert "DPTDOOM/bin/dptdoom.exe" in names and "DPTDOOM/SOURCE.zip" in names
+            assert "DPTDOOM/bin/dptdoom-launcher.exe" in names
+            assert "DPTDOOM/bin/WebView2Loader.dll" in names
+            assert "DPTDOOM/share/dptdoom/WebView2-LICENSE.txt" in names
             assert not any(name.lower().endswith((".wad", ".cfg")) for name in names)
             assert len(json.loads(zipped.read("DPTDOOM/BUILD.json"))["commit"]) == 40
         assert subprocess.run(command, cwd=repo, capture_output=True).returncode != 0

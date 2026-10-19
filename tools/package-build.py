@@ -30,9 +30,11 @@ def main():
     expected_binary = "dptdoom.exe" if args.kind == "windows-sdl" else "dptdoom-headless" + (".exe" if os.name == "nt" else "")
     binaries = {expected_binary}
     if args.kind == "windows-sdl":
-        binaries |= {"SDL2.dll", "SDL2_mixer.dll"}
+        binaries |= {"SDL2.dll", "SDL2_mixer.dll", "dptdoom-launcher.exe", "WebView2Loader.dll"}
     files = {Path("bin") / name for name in binaries} | {
         Path("share/dptdoom/LICENSE"), Path("share/dptdoom/SDL-LICENSES.txt")}
+    if args.kind == "windows-sdl":
+        files |= {Path("share/dptdoom/WebView2-LICENSE.txt"), Path("share/dptdoom/WebView2-NOTICE.txt")}
     for file in files:
         if not (installed / file).is_file():
             raise SystemExit(f"Missing install payload: {file}")
@@ -65,6 +67,10 @@ The game data is NOT included. Supply your own legally obtained Doom IWAD.
 Extract the whole archive first. The executable and SDL DLLs are in bin/.
 
 Windows SDL: cd bin, then: dptdoom.exe -iwad C:\\path\\to\\DOOM2.WAD
+Or open bin/dptdoom-launcher.exe (local HTML UI; needs WebView2 Evergreen Runtime).
+No runtime installer is run automatically. WebView2Loader.dll is included.
+Portable: create an empty portable.txt NEXT TO the launcher; data goes to bin/user/.
+Otherwise launcher data stays in LocalAppData/DPTDOOM. Logs: sessions/; saves/config: game/profileN/.
 Headless: dptdoom-headless[.exe] -iwad /path/to/doom2.wad -headless-frames 70
 Use --version to check startup without game data.
 

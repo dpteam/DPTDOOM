@@ -1,0 +1,141 @@
+/* DPT.DOOM visual adaptation of the owner's ANOM_Style reference.
+   Palette, gradient headers and raised controls only; no ANOM layout/assets.
+   Snowstorm is not bundled: its redistribution license was not supplied.
+   GPL-2.0-or-later; see LICENSE. */
+:root {
+  --bg: #e6e6e6;
+  --panel: #fff;
+  --text: #28313b;
+  --muted: #58636f;
+  --line: #d4d4d4;
+  --edge: #9ca8b4;
+  --blue: #005dba;
+  --accent: #0088ff;
+  --accent-top: #69bcff;
+  --accent-edge: #006cc9;
+  --accent-ink: #071e34;
+  --accent-shine: #ffffff55;
+  --soft: #e8f3ff;
+  --soft-ink: #064a85;
+  --button-top: #f6f7f8;
+  --button-bottom: #dde1e6;
+  --button-border: #999;
+  --button-shine: #ffffffcc;
+  --input: #fff;
+  --footer: #f7f7f7;
+  --shadow: 0 2px 8px #00000026;
+  --focus: #005dba;
+  --orange: #9e3318;
+  --acid: var(--blue);
+  color-scheme: light;
+  font-family: Tahoma, Verdana, Arial, sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+html[data-theme=dark] {
+  --bg: #13151d;
+  --panel: #212430;
+  --text: #edf1fa;
+  --muted: #b2bed2;
+  --line: #424958;
+  --edge: #6c7d99;
+  --blue: #9fceff;
+  --accent: #000088;
+  --accent-top: #3030b6;
+  --accent-edge: #7272eb;
+  --accent-ink: #fff;
+  --accent-shine: #9fafff24;
+  --soft: #2b3356;
+  --soft-ink: #e3eaff;
+  --button-top: #42495b;
+  --button-bottom: #2d3444;
+  --button-border: #6a7790;
+  --button-shine: #c7d7ff26;
+  --input: #171c28;
+  --footer: #1b1f2b;
+  --shadow: 0 2px 10px #0000004d;
+  --focus: #acd6ff;
+  --orange: #ffbb9e;
+  color-scheme: dark;
+}
+body { transition: color .2s, background-color .2s; }
+button, input, select { font-family: inherit; }
+button, .nav button {
+  color: var(--text);
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  background: linear-gradient(var(--button-top), var(--button-bottom));
+  box-shadow: inset 0 1px var(--button-shine), 0 1px 2px #0000001a;
+  text-shadow: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+button:hover:not(:disabled), .nav button:hover:not(:disabled) {
+  color: var(--text);
+  background: linear-gradient(var(--button-top), var(--button-bottom));
+  border-color: var(--focus);
+}
+button:active:not(:disabled) {
+  background: var(--button-bottom);
+  box-shadow: inset 0 1px 3px #0003;
+}
+button:disabled { color: var(--muted); opacity: .55; box-shadow: none; }
+input, select {
+  color: var(--text);
+  background: var(--input);
+  border-color: var(--edge);
+  border-radius: 4px;
+  transition: border-color .2s, box-shadow .2s;
+}
+input::placeholder { color: var(--muted); opacity: .9; }
+input:focus, select:focus { border-color: var(--focus); box-shadow: 0 0 4px #0088ff66; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline-color: var(--focus); }
+input[type=checkbox] { accent-color: var(--blue); }
+.sidebar { background: var(--footer); }
+.brand { font-weight: 700; letter-spacing: -.5px; color: var(--text); }
+.brand span, .eyebrow { color: var(--blue); }
+.dot { background: var(--blue); }
+.nav .active, .mode .selected, .launch {
+  color: var(--accent-ink);
+  background: linear-gradient(var(--accent-top), var(--accent));
+  border-color: var(--accent-edge);
+  box-shadow: inset 0 1px var(--accent-shine), 0 2px 4px #0003;
+  text-shadow: 0 1px var(--accent-shine);
+}
+.nav .active:hover:not(:disabled), .mode .selected:hover:not(:disabled), .launch:hover:not(:disabled) {
+  color: var(--accent-ink);
+  background: linear-gradient(var(--accent-top), var(--accent));
+  border-color: var(--focus);
+  box-shadow: inset 0 1px var(--button-shine), 0 0 0 1px var(--accent-edge);
+}
+.nav .active:active, .mode .selected:active, .launch:active:not(:disabled) { background: var(--accent); }
+.hero {
+  background: linear-gradient(var(--accent-top), var(--accent));
+  border-color: var(--accent-edge);
+  border-radius: 8px;
+  box-shadow: var(--shadow), inset 0 1px var(--accent-shine);
+  color: var(--accent-ink);
+  text-shadow: 0 1px var(--accent-shine);
+}
+.hero p, .hero .badge { color: var(--accent-ink); }
+.hero::after { color: var(--accent-shine); opacity: .3; }
+.panel { border-radius: 8px; box-shadow: var(--shadow); }
+.section-head {
+  margin: -22px -22px 18px;
+  padding: 13px 22px;
+  background: linear-gradient(var(--accent-top), var(--accent));
+  border-bottom: 1px solid var(--accent-edge);
+  border-radius: 7px 7px 0 0;
+  color: var(--accent-ink);
+  text-shadow: 0 1px var(--accent-shine);
+}
+.section-head .num, .section-head small { color: inherit; }
+.check { color: var(--text); }
+.mod { background: var(--input); border-color: var(--edge); }
+.empty { color: var(--muted); border-color: var(--edge); background: var(--footer); }
+.command { background: var(--input); border-color: var(--edge); }
+.command pre { color: var(--soft-ink); }
+.bottom { background: var(--bg); }
+#theme-toggle { width: 100%; font-size: 12px; text-align: left; }
+#theme-toggle[aria-pressed=true] { border-color: var(--edge); color: var(--soft-ink); }
+::selection { color: var(--accent-ink); background: var(--accent); }
+@media(prefers-reduced-motion:reduce) { body, button, input, select { transition: none; } }

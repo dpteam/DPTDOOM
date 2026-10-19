@@ -43,6 +43,7 @@ SDL2 2.32.10 и SDL2_mixer 2.8.2 скачиваются из официальн�
 - [CI-матрица и границы автоматических проверок](docs/CI.md)
 - [Прямой кооператив: запуск и ограничения](docs/NETWORK.md)
 - [Идеи: большие серверы, боты и правила матча](docs/IDEAS.md)
+- [Windows launcher](docs/LAUNCHER.md)
 - [Баги, причины и статус исправлений](docs/BUGS.md)
 - [Разбор upstream PR](docs/UPSTREAM.md)
 - [Требования владельца](PROMPT.md)
