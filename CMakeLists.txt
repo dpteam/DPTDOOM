@@ -15,6 +15,11 @@ set(DPTDOOM_BACKEND "${default_backend}" CACHE STRING "Platform backend: win32, 
 set_property(CACHE DPTDOOM_BACKEND PROPERTY STRINGS win32 x11 sdl headless)
 option(DPTDOOM_LTO "Enable link-time optimization for optimized builds" ON)
 option(DPTDOOM_SOUND "Enable sound/music (SDL backend only)" OFF)
+option(DPTDOOM_NETWORK "Build experimental direct two-player coop" ON)
+option(DPTDOOM_STATIC_CRT "Link the MSVC runtime statically for portable test bundles" OFF)
+if(MSVC AND DPTDOOM_STATIC_CRT)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 set(DPTDOOM_SANITIZER "none" CACHE STRING "Diagnostic sanitizer: none, address, undefined")
 set_property(CACHE DPTDOOM_SANITIZER PROPERTY STRINGS none address undefined)
 
@@ -72,6 +77,27 @@ set(engine_sources
 list(TRANSFORM engine_sources PREPEND "doomgeneric/")
 add_executable(dptdoom ${engine_sources})
 target_include_directories(dptdoom PRIVATE doomgeneric)
+if(DPTDOOM_NETWORK)
+    # Fingerprint all shipped engine code/headers, not a stale dev version
+    # string or absolute build path. Different local patches must not connect.
+    file(GLOB net_fingerprint_files CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/doomgeneric/*.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/doomgeneric/*.h")
+    list(SORT net_fingerprint_files)
+    set(net_fingerprint "")
+    foreach(source IN LISTS net_fingerprint_files)
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+        file(READ "${source}" source_text)
+        string(REPLACE "\r\n" "\n" source_text "${source_text}")
+        string(SHA256 source_hash "${source_text}")
+        string(APPEND net_fingerprint "${source_hash}")
+    endforeach()
+    string(SHA256 net_build_id "${net_fingerprint}")
+    target_sources(dptdoom PRIVATE doomgeneric/dpt_net.c)
+    target_compile_definitions(dptdoom PRIVATE DPTDOOM_NETWORK DPT_NET_BUILD_ID="${net_build_id}")
+    if(WIN32)
+        target_link_libraries(dptdoom PRIVATE ws2_32)
+    endif()
+endif()
 if(MSVC AND DPTDOOM_SANITIZER STREQUAL "address")
     get_filename_component(compiler_dir "${CMAKE_C_COMPILER}" DIRECTORY)
     find_file(asan_runtime NAMES clang_rt.asan_dynamic-x86_64.dll
@@ -163,8 +189,23 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    if(DPTDOOM_NETWORK)
+        add_executable(net-protocol-test tests/net-protocol.c)
+        target_include_directories(net-protocol-test PRIVATE doomgeneric)
+        add_test(NAME net-protocol COMMAND net-protocol-test)
+        if(MSVC AND DPTDOOM_SANITIZER STREQUAL "address")
+            add_custom_command(TARGET net-protocol-test POST_BUILD COMMAND ${CMAKE_COMMAND} -E
+                copy_if_different "${asan_runtime}" $<TARGET_FILE_DIR:net-protocol-test>)
+        endif()
+    endif()
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        find_package(Git QUIET)
+        if(GIT_FOUND)
+            add_test(NAME packaging COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/packaging.py")
+            set_tests_properties(packaging PROPERTIES TIMEOUT 30)
+        endif()
         add_test(NAME startup-smoke COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/startup-smoke.py"
             $<TARGET_FILE:dptdoom> "${DPTDOOM_BACKEND}")
@@ -211,6 +252,12 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/demo-snapshot.py"
                 --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
             set_tests_properties(demo-snapshot PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS interactive)
+            if(DPTDOOM_NETWORK)
+                add_test(NAME net-windows COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-windows.py"
+                    --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+                set_tests_properties(net-windows PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS interactive)
+            endif()
         endif()
     endif()
     if(DPTDOOM_BACKEND STREQUAL "headless" AND DPTDOOM_TEST_IWAD)
@@ -226,6 +273,16 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/state-smoke.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
         set_tests_properties(state-smoke PROPERTIES TIMEOUT 180)
+        if(DPTDOOM_NETWORK)
+            add_test(NAME net-loopback COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-loopback.py"
+                --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+            set_tests_properties(net-loopback PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+            add_test(NAME net-errors COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-errors.py"
+                --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+            set_tests_properties(net-errors PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+        endif()
     endif()
     if(DPTDOOM_BACKEND STREQUAL "sdl")
         add_executable(sdl-input-test tests/sdl-input.c doomgeneric/doomgeneric_sdl.c

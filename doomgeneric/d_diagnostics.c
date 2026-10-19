@@ -1,6 +1,8 @@
 // DPT.DOOM deterministic test instrumentation, headless builds only.
 // GPL version 2 or, at your option, any later version. See LICENSE.
 #include "d_diagnostics.h"
+#include "dpt_net.h"
+#include "dpt_protocol.h"
 #include "doomstat.h"
 #include "g_game.h"
 #include "i_system.h"
@@ -15,6 +17,7 @@
 
 static unsigned int tic_limit, save_tic, ticks;
 static FILE *trace_file;
+static FILE *input_file;
 static boolean enabled;
 extern int prndindex;
 extern boolean sendsave;
@@ -37,6 +40,7 @@ static unsigned int PositiveArg(char *name)
 
 static void CloseTrace(void)
 {
+    if (input_file) { fclose(input_file); input_file = NULL; }
     if (trace_file)
     {
         FILE *file = trace_file;
@@ -50,6 +54,17 @@ void D_DiagnosticsInit(void)
     int p = M_CheckParm("-headless-trace");
     tic_limit = PositiveArg("-headless-tics");
     save_tic = PositiveArg("-headless-save-tic");
+    {
+        int input = M_CheckParm("-headless-input");
+        if (input)
+        {
+            if (input + 1 >= myargc || myargv[input + 1][0] == '-')
+                I_Error("-headless-input requires an input path");
+            input_file = fopen(myargv[input + 1], "rb");
+            if (!input_file) I_Error("Cannot open diagnostic input");
+            I_AtExit(CloseTrace, true);
+        }
+    }
     if (p)
     {
         if (p + 1 >= myargc || myargv[p + 1][0] == '-')
@@ -72,6 +87,25 @@ static uint32_t Add32(uint32_t hash, uint32_t value)
         value >>= 8;
     }
     return hash;
+}
+
+void D_DiagnosticsCommand(ticcmd_t *cmd, int tic)
+{
+    byte record[8];
+    byte consistency = cmd->consistancy;
+    size_t length;
+    (void)tic;
+    if (!input_file) return;
+    length = fread(record, 1, sizeof(record), input_file);
+    if (!length && !ferror(input_file))
+    {
+        memset(cmd, 0, sizeof(*cmd));
+        cmd->consistancy = consistency;
+        return;
+    }
+    if (length != sizeof(record) || !DPT_DecodeCommand(record, cmd))
+        I_Error("Invalid/truncated diagnostic input command");
+    cmd->consistancy = consistency;
 }
 
 // Address-independent IDs in thinker-list order. Diagnostic only, not wire IDs.
@@ -147,7 +181,8 @@ void D_DiagnosticsTic(void)
     ++ticks;
     if (gamestate == GS_LEVEL)
     {
-        archive = (trace_file || ticks == save_tic) ? P_ArchiveChecksum() : 0;
+        archive = (trace_file || ticks == save_tic)
+            ? (DPT_NetActive() ? P_NetArchiveChecksum() : P_ArchiveChecksum()) : 0;
         if (trace_file && fprintf(trace_file, "%u %d %d %08x %08x\n", ticks, gametic,
                 leveltime, archive, SimulationChecksum(archive)) < 0)
             I_Error("Failed writing diagnostic trace");

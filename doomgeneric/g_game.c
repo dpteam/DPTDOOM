@@ -72,6 +72,7 @@
 
 #include "g_game.h"
 #include "d_diagnostics.h"
+#include "dpt_net.h"
 
 
 #define SAVEGAMESIZE	0x2c000
@@ -1555,6 +1556,8 @@ char	savename[256];
 
 void G_LoadGame (char* name) 
 { 
+    if (DPT_NetActive())
+        I_Error("Direct coop: disconnect and restart in single-player before loading a save");
     M_StringCopy(savename, name, sizeof(savename));
     gameaction = ga_loadgame; 
 } 
@@ -1626,6 +1629,8 @@ G_SaveGame
 {
     if (slot < 0 || slot > 7)
         I_Error("Invalid savegame slot: %d", slot);
+    if (DPT_NetActive())
+        I_Error("Direct coop: online snapshots are not implemented yet");
     savegameslot = slot;
     M_StringCopy(savedescription, description, SAVESTRINGSIZE);
     if (demoplayback && gamestate == GS_LEVEL)

@@ -62,6 +62,8 @@ extern boolean savegame_error;
 // cached object floor/ceiling heights normalized to subsector sector bounds.
 // Does not cover state the vanilla format omits (RNG, target/tracer, etc.).
 unsigned int P_ArchiveChecksum(void);
+// Same projection with render-only automap flags excluded, for direct lockstep.
+unsigned int P_NetArchiveChecksum(void);
 
 
 #endif

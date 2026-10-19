@@ -24,6 +24,8 @@
 #include "d_event.h"
 #include "d_loop.h"
 #include "d_ticcmd.h"
+#include "dpt_net.h"
+#include "d_diagnostics.h"
 
 #include "i_system.h"
 #include "i_timer.h"
@@ -176,6 +178,7 @@ static boolean BuildNewTic(void)
     //printf ("mk:%i ",maketic);
     memset(&cmd, 0, sizeof(ticcmd_t));
     loop_interface->BuildTiccmd(&cmd, maketic);
+    D_DiagnosticsCommand(&cmd, maketic);
 
 #ifdef FEATURE_MULTIPLAYER
 
@@ -205,6 +208,10 @@ void NetUpdate (void)
     int nowtime;
     int newtics;
     int	i;
+
+    // Direct lockstep samples exactly once in TryRunTics. The legacy loop
+    // must not build and consume a second command while drawing/wiping.
+    if (DPT_NetActive()) return;
 
     // If we are running with singletics (timing a demo), this
     // is all done separately.
@@ -337,9 +344,26 @@ static void BlockUntilStart(net_gamesettings_t *settings,
 
 #endif
 
+#ifdef DPTDOOM_NETWORK
+static void DirectNetPump(void)
+{
+    I_StartTic();
+    loop_interface->ProcessEvents();
+}
+#endif
+
 void D_StartNetGame(net_gamesettings_t *settings,
                     netgame_startup_callback_t callback)
 {
+#ifdef DPTDOOM_NETWORK
+    if (DPT_NetRequested())
+    {
+        DPT_NetStart(settings, DirectNetPump);
+        localplayer = settings->consoleplayer;
+        ticdup = 1;
+        return;
+    }
+#endif
 #if ORIGCODE
     int i;
 
@@ -462,6 +486,7 @@ boolean D_InitNetGame(net_connect_data_t *connect_data)
     I_AtExit(D_QuitNetGame, true);
 
     player_class = connect_data->player_class;
+    if (DPT_NetRequested()) result = true;
 
 #ifdef FEATURE_MULTIPLAYER
 
@@ -559,6 +584,7 @@ boolean D_InitNetGame(net_connect_data_t *connect_data)
 //
 void D_QuitNetGame (void)
 {
+    DPT_NetShutdown();
 #ifdef FEATURE_MULTIPLAYER
     NET_SV_Shutdown();
     NET_CL_Disconnect();
@@ -712,6 +738,29 @@ void TryRunTics (void)
     int realtics;
     int	availabletics;
     int	counts;
+
+#ifdef DPTDOOM_NETWORK
+    if (DPT_NetActive())
+    {
+        ticcmd_t commands[NET_MAXPLAYERS];
+        boolean ingame[NET_MAXPLAYERS] = {true, true, false, false, false, false, false, false};
+        static int next_tic_time = -1;
+        int now = I_GetTime();
+        I_StartTic();
+        loop_interface->ProcessEvents();
+        if (next_tic_time < 0) next_tic_time = now;
+        if (now < next_tic_time) { I_Sleep(1); return; }
+        next_tic_time = now + 1;
+        loop_interface->RunMenu();
+        memset(commands, 0, sizeof(commands));
+        loop_interface->BuildTiccmd(&commands[localplayer], gametic);
+        D_DiagnosticsCommand(&commands[localplayer], gametic);
+        DPT_NetExchange(commands, (unsigned int)gametic);
+        loop_interface->RunTic(commands, ingame);
+        ++gametic;
+        return;
+    }
+#endif
 
     // get real tics
     entertic = I_GetTime() / ticdup;

@@ -45,6 +45,7 @@ boolean savegame_error;
 static boolean checksum_active;
 static uint32_t checksum_value;
 static unsigned int checksum_bytes;
+static boolean net_checksum_active;
 
 // Get the filename of a temporary file to write the savegame to.  After
 // the file has been successfully saved, it will be renamed to the 
@@ -1478,6 +1479,15 @@ unsigned int P_ArchiveChecksum(void)
     return checksum_value;
 }
 
+unsigned int P_NetArchiveChecksum(void)
+{
+    unsigned int result;
+    net_checksum_active = true;
+    result = P_ArchiveChecksum();
+    net_checksum_active = false;
+    return result;
+}
+
 //
 // P_ArchivePlayers
 //
@@ -1549,7 +1559,7 @@ void P_ArchiveWorld (void)
     // do lines
     for (i=0, li = lines ; i<numlines ; i++,li++)
     {
-	saveg_write16(li->flags);
+	saveg_write16(net_checksum_active ? li->flags & ~ML_MAPPED : li->flags);
 	saveg_write16(li->special);
 	saveg_write16(li->tag);
 	for (j=0 ; j<2 ; j++)

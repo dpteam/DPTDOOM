@@ -214,7 +214,7 @@ static void InitConnectData(net_connect_data_t *connect_data)
 
 void D_ConnectNetGame(void)
 {
-    net_connect_data_t connect_data;
+    net_connect_data_t connect_data = {0};
 
     InitConnectData(&connect_data);
     netgame = D_InitNetGame(&connect_data);
@@ -239,7 +239,7 @@ void D_ConnectNetGame(void)
 //
 void D_CheckNetGame (void)
 {
-    net_gamesettings_t settings;
+    net_gamesettings_t settings = {0};
 
     if (netgame)
     {

@@ -29,12 +29,17 @@ void doomgeneric_Create(int argc, char **argv)
     myargv = argv;
 
 	M_FindResponseFile();
+#ifndef DPTDOOM_NETWORK
+    if (M_ParmExists("-net-host") || M_ParmExists("-net-join"))
+        I_Error("Direct coop was disabled in this build");
+#endif
 
 	DG_ScreenBuffer = malloc(DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(*DG_ScreenBuffer));
 	if (DG_ScreenBuffer == NULL)
 	{
 		I_Error("Failed to allocate screen buffer");
 	}
+    memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(*DG_ScreenBuffer));
 
 	DG_Init();
 

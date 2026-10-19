@@ -44,6 +44,7 @@
 #include "hu_stuff.h"
 
 #include "g_game.h"
+#include "dpt_net.h"
 
 #include "m_argv.h"
 #include "m_controls.h"
@@ -649,6 +650,11 @@ void M_SaveSelect(int choice)
 //
 void M_SaveGame (int choice)
 {
+    if (DPT_NetActive())
+    {
+        M_StartMessage("ONLINE SNAPSHOTS ARE NOT READY YET", NULL, false);
+        return;
+    }
     if (!usergame && !(demoplayback && gamestate == GS_LEVEL && !netgame))
     {
 	M_StartMessage(DEH_String(SAVEDEAD),NULL,false);
@@ -680,6 +686,11 @@ void M_QuickSaveResponse(int key)
 
 void M_QuickSave(void)
 {
+    if (DPT_NetActive())
+    {
+        M_StartMessage("ONLINE SNAPSHOTS ARE NOT READY YET", NULL, false);
+        return;
+    }
     if (!usergame && !(demoplayback && gamestate == GS_LEVEL && !netgame))
     {
 	S_StartSound(NULL,sfx_oof);
