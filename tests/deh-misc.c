@@ -9,6 +9,7 @@
 #include "deh_str.h"
 #include "sounds.h"
 #include "p_pspr.h"
+#include "d_mode.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,12 @@ unsigned int numlumps;
 int maxammo[NUMAMMO]={200,50,300,50},clipammo[NUMAMMO]={10,4,20,1};
 mobjinfo_t mobjinfo[NUMMOBJTYPES]; // synthetic tables; real info.c covered by engine test
 state_t states[NUMSTATES];
+GameMode_t gamemode = commercial;
+int pars[4][10]={{0},{0,30,75,120,90,165,180,180,30,165},
+                 {0,90,90,90,120,90,360,240,30,170},
+                 {0,90,45,90,150,90,90,165,30,135}};
+int cpars[32]={30,90,120,120,90,150,120,120,270,90,210,150,150,150,210,150,
+               420,150,210,150,240,150,180,150,150,300,330,420,300,180,120,30};
 static void ActionSentinel(void) {}
 int W_LumpLength(unsigned int i){(void)i;return 0;}
 void W_ReadLump(unsigned int i,void *p){(void)i;(void)p;}
@@ -267,6 +274,35 @@ int main(void)
         REQUIRE(!strcmp(DPT_DehString(MSGON),"BEX messages on"));
         DPT_DehReset();REQUIRE(!strcmp(DPT_DehString(MSGON),MSGON));
         REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
+    }
+    {
+        // [PARS]: MAP form for commercial, E?M? form for episode builds.
+        REQUIRE(Load(HEADER "[PARS]\npar 1 45\npar 32 20\n"));
+        REQUIRE(cpars[0]==45&&cpars[31]==20&&pars[1][1]==30);
+        DPT_DehChecksum(a);
+        {const char *invalid[]={HEADER "[PARS]\npar 33 10\n",
+          HEADER "[PARS]\npar 0 10\n",HEADER "[PARS]\npar 1 65536\n",
+          HEADER "[PARS]\npar 1 -1\n",HEADER "[PARS]\npar 1 1 30\n",
+          HEADER "[PARS]\npar 1\n",HEADER "[PARS]\npar 1 2 3 4\n",
+          HEADER "[PARS]\nnotpar 1 30\n",
+          HEADER "Initial Health = 5\n[PARS]\npar 2 50\npar 3 bad\n"};
+         for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i)
+         {REQUIRE(!Load(invalid[i]));REQUIRE(cpars[0]==45&&cpars[1]==90);
+          REQUIRE(deh_initial_health==100);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
+        // Episode builds take the three-number form and fill pars[ep][map].
+        gamemode=registered;
+        REQUIRE(Load(HEADER "[PARS]\npar 1 1 45\npar 3 9 200\n"));
+        REQUIRE(pars[1][1]==45&&pars[3][9]==200&&cpars[0]==45);
+        {const char *invalid[]={HEADER "[PARS]\npar 1 30\n",
+          HEADER "[PARS]\npar 5 1 30\n",HEADER "[PARS]\npar 1 10 30\n"};
+         for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i)
+         {REQUIRE(!Load(invalid[i]));REQUIRE(pars[1][1]==45&&pars[3][9]==200);}}
+        // Episode 4 mirrors the engine's cpars[gamemap] fallthrough.
+        REQUIRE(Load(HEADER "[PARS]\npar 4 1 77\n"));
+        REQUIRE(cpars[1]==77);
+        gamemode=commercial;
+        DPT_DehReset();
+        REQUIRE(cpars[0]==30&&cpars[31]==30&&pars[1][1]==30&&cpars[1]==90);
     }
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
     puts("DeHackEd Misc/Ammo/Weapon-frame/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;

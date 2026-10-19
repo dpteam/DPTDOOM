@@ -103,6 +103,19 @@ def main():
         bex_bad=root/'bex-bad.deh';bex_bad.write_bytes(HEADER+b'[STRINGS]\nNOSUCHSTRING = value\n')
         _,text=run('bex-unknown',['-deh',str(bex_bad)],False)
         assert 'unknown [STRINGS] name' in text,text
+        bex_pars=root/'bex-pars.deh';bex_pars_copy=root/'bex-pars-copy.deh'
+        bex_pars.write_bytes(HEADER+b'[PARS]\npar 1 45\npar 32 20\n')
+        bex_pars_copy.write_bytes(bex_pars.read_bytes())
+        _,text=run('bex-pars',['-deh',str(bex_pars)])
+        assert 'par1=45 par32=20' in text,text
+        bex_pars_lump=root/'bex-pars.wad';wad(bex_pars_lump,[bex_pars.read_bytes()])
+        _,text=run('bex-pars-lump',['-file',str(bex_pars_lump),'-dehlump'])
+        assert 'par1=45 par32=20' in text,text
+        bex_pars_bad=root/'bex-pars-bad.deh'
+        bex_pars_bad.write_bytes(HEADER+b'[PARS]\npar 1 1 30\n')
+        _,text=run('bex-pars-wrong-form',['-deh',str(bex_pars_bad)],False)
+        assert 'E?M? form requires a non-commercial IWAD' in text,text
+        assert 'par1=45' not in text,text
         things=root/'thing.deh';thing_copy=root/'thing-copy.deh';map_wad=root/'thing-map.wad';patched_map=root/'thing-patched-map.wad'
         thing_map(iwad,map_wad)
         thing_map(iwad,patched_map,4000)
@@ -286,6 +299,8 @@ def main():
         pair('text-different',[text_patch,text_different],False)
         pair('bex-strings-same',[bex,bex_copy],True,'msgon=BEX messages on')
         pair('bex-strings-different',[bex,first],False)
+        pair('bex-pars-same',[bex_pars,bex_pars_copy],True,'par1=45 par32=20')
+        pair('bex-pars-different',[bex_pars,first],False)
         pair('infight-same',[infight,infight_copy],True,'infight=1')
         pair('infight-different',[infight,first],False)
         pair('thing-same',[things,thing_copy],True,'Patch visual: type=30 sprite=0 frame=32768',('-file',str(patched_map)))

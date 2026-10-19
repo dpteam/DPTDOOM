@@ -1,7 +1,7 @@
-# DeHackEd: classic-срез + BEX `[STRINGS]`
+# DeHackEd: classic-срез + BEX `[STRINGS]`/`[PARS]`
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-bexstrings-v16` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-bexpars-v17` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -16,8 +16,8 @@
 Пока принимается classic signature v3.0, `Doom version = 19`, `Patch format = 6`
 и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, `Thing 1..NUMMOBJTYPES`,
 `Frame 1..NUMSTATES-1` (с ограничениями ниже), `Text`, а также BEX
-**`[STRINGS]`** (bounded whitelist). Не выдуманная `[Misc]`, не `[PARS]`
-и не `[CODEPTR]`.
+**`[STRINGS]`** (bounded whitelist) и **`[PARS]`** (bounded par times).
+Не выдуманная `[Misc]`, не `[CODEPTR]`.
 
 ```text
 Patch File for DeHackEd v3.0
@@ -103,6 +103,37 @@ GOTARMOR = BEX armor pickup
 - Неизвестное имя — ошибка с номером строки и полным откатом источника.
 - Classic `Text` и BEX `[STRINGS]` пишут в одну таблицу, поэтому позднее
   присваивание того же имени/строки побеждает в общем порядке источников.
+
+### BEX `[PARS]`
+
+`[PARS]` меняет par-время уровней в тех же таблицах, которые читает
+`G_DoCompleted`:
+
+```text
+[PARS]
+par 1 45
+par 32 20
+```
+
+- `par <map> <seconds>` — форма для **commercial** IWAD (Doom II / Final Doom),
+  `map` 1..32, записывает `cpars[map-1]`.
+- `par <episode> <map> <seconds>` — форма для episode-сборок, `episode` 1..4,
+  `map` 1..9, записывает `pars[episode][map]`.
+- Форма определяется числом чисел (как в reference parser) **и** должна
+  соответствовать загруженному IWAD: MAP-форма при non-commercial или E?M?-форма
+  при commercial отклоняются. Так присваивание не может оказаться молча
+  неиспользуемым.
+- `seconds` — 0..65535. Значение хранится в секундах; движок умножает его на
+  `TICRATE` при показе intermission, поэтому переполнения нет.
+- Episode 4 не имеет строки в `pars[][]`: vanilla `G_DoCompleted` намеренно
+  падает в `cpars[gamemap]`. Parser повторяет это поведение (`par 4 1 77`
+  пишет `cpars[1]`), а не выдумывает четвёртую строку. Это документированный
+  vanilla-quirk: то же значение влияет и на MAP02 в commercial режиме.
+- Таблицы staged и восстанавливаются `DPT_DehReset`; ошибка в любом месте
+  источника откатывает и par-присваивания.
+- `[PARS]` не влияет на RNG, физику или сетевой checksum симуляции: это
+  отображаемое/статистическое значение. Оно всё равно входит в patch digest,
+  поэтому peers обязаны иметь одинаковый набор патчей.
 
 `Weapon N`: индексы 0=fist, 1=pistol, 2=shotgun, 3=chaingun, 4=rocket launcher,
 5=plasma, 6=BFG, 7=chainsaw, 8=super shotgun. Поддержаны `Ammo type = 0..3`
@@ -215,7 +246,7 @@ Next frame = 15
 и (для weapon states) `state.misc1/misc2`.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v16, чтобы peers не путали разные semantics.
+обновлён до v17, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -272,7 +303,7 @@ Sprite subnumber = 32769
   `sx/sy`, поэтому offset на них не виден; для постоянного смещения используют
   firing/raising состояния без bob-перезаписи. Это тоже vanilla-поведение, не
   ошибка parser-а.
-- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v16.
+- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v17.
 
 ```text
 Frame 12
@@ -285,7 +316,7 @@ Unknown 2 = 64
 graph/resources/action compatibility.
 
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-`Sound/Sprite/Pointer/Cheat`, `[PARS]`, `[CODEPTR]`, неподдерживаемые Frame/Thing fields,
+`Sound/Sprite/Pointer/Cheat`, `[CODEPTR]`, неподдерживаемые Frame/Thing fields,
 include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
@@ -295,7 +326,7 @@ Classic `Sound`/`Sprite`/`Pointer` не планируются к реализа
 виде: `Sound` в современных портах помечен как unsupported, а `Sprite`/`Pointer`
 адресуют таблицы DOS-EXE (`Offset`, `toff[dversion]`, `OrgActionPtrs`). Это
 противоречит правилу «никаких executable offsets/произвольных function
-pointers». BEX `[STRINGS]` реализован; `[PARS]`/`[CODEPTR]` — отдельный
+pointers». BEX `[STRINGS]` и `[PARS]` реализованы; `[CODEPTR]` — отдельный
 compatibility level с allowlist действий. Подробности и ссылки на
 проверенные места reference source — `DEHACKED-MBF-AUDIT.md`.
 
@@ -350,7 +381,8 @@ section/field дают ошибку с номером строки до игро
 `deh-misc`: synthetic grammar/ranges/overflow/NUL/line/size/count limits, Text
 old/new exact bytes and unsafe payload rejection, BEX `[STRINGS]` whitelist,
 case-insensitive names, value bounds, rejected continuation and shared
-classic/BEX table, atomic rollback, digest repeatability и load order, без
+classic/BEX table, BEX `[PARS]` MAP/E?M? forms, gamemode mismatch, episode 4
+fallthrough and bounds, atomic rollback, digest repeatability и load order, без
 IWAD/окна/Internet.
 
 `deh-engine` (headless + локальный Doom II): реальные player health/ammo/capacity,
@@ -370,9 +402,9 @@ info.c и игровой spawn проверяет deh-engine. Все patch/WAD f
 Duration/Frame/Weapon-frame tests проверяют реальный firing cadence (по расходу ammo с
 одинаковыми attack commands), file/lump equivalence, rollback нескольких
 секций/digest, index/range/overflow/fast exclusion, неизменные action pointers и
-reset. Text и BEX `[STRINGS]` проверяются через engine report, file/lump
-equivalence и same/different patch peers. Отдельно проверяются Next frame,
-пропуск pistol action, границы state
+reset. Text, BEX `[STRINGS]` и `[PARS]` проверяются через engine report,
+file/lump equivalence и same/different patch peers. Отдельно проверяются
+Next frame, пропуск pistol action, границы state
 table, zero-tic cycle, weapon action skip, same/different patch peers и matching
 traces с `-fast`.
 Frame visual tests: spawned barrel и psprite report, изменившийся framebuffer,

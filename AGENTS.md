@@ -165,7 +165,7 @@ ctest --preset windows-headless
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.
   Raw bytes/order/subset digest в ResourceDigest; patched saves используют
   marker DPTDEH1 + digest, patched demos — версию 120 с тем же manifest;
-  vanilla DSG/.lmp байт-совместимы. Версия DPT-deh-bexstrings-v16; Ammo max/per,
+  vanilla DSG/.lmp байт-совместимы. Версия DPT-deh-bexpars-v17; Ammo max/per,
   Weapon Ammo type только 0..3, arbitrary frame/noammo/overflow tricks отклонять.
   Tests deh-misc/deh-engine, docs/DEHACKED.md.
   Classic Sound/Sprite/Pointer осознанно не реализуются: это DOS-EXE offsets и

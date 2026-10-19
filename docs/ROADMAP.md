@@ -343,9 +343,14 @@ partition может породить две отдельные локальны
   ключ — имя строки из bounded whitelist (25 строк), значения до 2047 bytes с
   теми же запретами; trailing `\` continuation отклоняется явно; неизвестное
   имя — ошибка с полным откатом. Engine/file/lump/same-different peer tests.
-- [ ] Следующий слой BEX: безопасные `[PARS]`, затем ограниченный
-  `[CODEPTR]` только с allowlist существующих DPT action functions. Не считать
-  ограниченный subset полной совместимостью; arbitrary code pointers не принимать.
+- [x] `DPT-deh-bexpars-v17`: BEX `[PARS]` поверх тех же `pars[][]`/`cpars[]`,
+  которые читает `G_DoCompleted`. MAP-форма для commercial, E?M?-форма для
+  episode-сборок; форма должна совпадать с IWAD, иначе отказ, чтобы значение не
+  стало молча неиспользуемым. Episode 4 повторяет vanilla fallthrough в
+  `cpars[gamemap]`. Staged/reset, engine report, file/lump и peer tests.
+- [ ] Следующий слой BEX: ограниченный `[CODEPTR]` только с allowlist
+  существующих DPT action functions. Не считать ограниченный subset полной
+  совместимостью; arbitrary code pointers не принимать.
 - [x] Subset `DPT-deh-misc-ammo-v2`: Ammo Max ammo/Per ammo, Weapon Ammo type
   0..3, staged rollback всех таблиц, cross-field validation, engine firing/
   capacity и matching/mismatch network tests. Arbitrary weapon frames/noammo-overflow

@@ -28,6 +28,7 @@ static boolean enabled;
 static boolean rules_probe;
 extern int prndindex;
 extern boolean sendsave;
+extern int cpars[32];
 void G_DoSaveGame(void);
 
 static unsigned int PositiveArg(char *name)
@@ -254,7 +255,7 @@ void D_DiagnosticsTic(void)
                     p->ammo[0],p->ammo[1],p->ammo[2],p->ammo[3],
                     clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
                 printf("Patch text: armor=%s saved=%s msgon=%s\n",DPT_DehString(GOTARMOR),DPT_DehString(GGSAVED),DPT_DehString(MSGON));
-                printf("Patch misc: infight=%d\n",deh_species_infighting);
+                printf("Patch misc: infight=%d par1=%d par32=%d\n",deh_species_infighting,cpars[0],cpars[31]);
                 if(p->psprites[ps_weapon].state)
                     printf("Patch weapon visual: sprite=%d frame=%d sx=%d sy=%d\n",
                         (int)p->psprites[ps_weapon].state->sprite,p->psprites[ps_weapon].state->frame,

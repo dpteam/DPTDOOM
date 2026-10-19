@@ -1574,7 +1574,7 @@ void D_DoomMain (void)
         }
     }
     if (DPT_DehLoadedCount())
-        puts("DeHackEd: bounded classic subset + BEX [STRINGS] active; patched saves and demos carry a manifest; no full DeHackEd/BEX/Boom/MBF compatibility");
+        puts("DeHackEd: bounded classic subset + BEX [STRINGS]/[PARS] active; patched saves and demos carry a manifest; no full DeHackEd/BEX/Boom/MBF compatibility");
 #elif ORIGCODE
     //!
     // @category mod

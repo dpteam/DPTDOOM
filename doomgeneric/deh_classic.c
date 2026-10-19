@@ -12,6 +12,7 @@
 #include "sounds.h"
 #include "d_englsh.h"
 #include "deh_str.h"
+#include "doomstat.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +86,12 @@ static const char *const text_originals[TEXT_COUNT]={
     GAMMALVL4
 };
 static text_replacement_t text_replacements[TEXT_COUNT],staged_text[TEXT_COUNT];
+// BEX [PARS] writes the same tables G_DoCompleted reads. Episode 4 has no row
+// in pars[][], so the engine deliberately falls through to cpars[gamemap];
+// the parser mirrors that exact lookup instead of inventing a fourth row.
+extern int pars[4][10],cpars[32];
+static int base_pars[4][10],staged_pars[4][10];
+static int base_cpars[32],staged_cpars[32];
 typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
 #define THING(name,field,low,high) {name,offsetof(mobjinfo_t,field),low,high}
 static const thing_field_t thing_fields[]={
@@ -204,6 +211,50 @@ static boolean ApplyBexString(const char *name,const char *value,
     targets[i].original=text_originals[i];
     targets[i].present=true;
     return true;
+}
+// BEX [PARS]: "par <map> <seconds>" for commercial, "par <ep> <map> <seconds>"
+// for episode builds. Token count decides the form, exactly like the reference
+// parser, but the form must also match the loaded IWAD so an assignment can
+// never be silently inert.
+static boolean ApplyPar(char *rest,unsigned int line)
+{
+    char *token[3];int count=0;char *p=Trim(rest);
+    while(*p&&count<3)
+    {
+        char *start=p;
+        while(*p&&!isspace((unsigned char)*p))++p;
+        if(*p)*p++=0;
+        token[count++]=start;
+        p=Trim(p);
+    }
+    if(*p)return Error(line,"[PARS] par accepts at most three numbers");
+    if(count==2)
+    {
+        int map,par;
+        if(!Number(token[0],&map)||!Number(token[1],&par))
+            return Error(line,"[PARS] par values must be decimal integers");
+        if(gamemode!=commercial)
+            return Error(line,"[PARS] MAP?? form requires a commercial IWAD");
+        if(map<1||map>32)return Error(line,"[PARS] MAP number must be 1..32");
+        if(par<0||par>65535)return Error(line,"[PARS] par time must be 0..65535 seconds");
+        staged_cpars[map-1]=par;return true;
+    }
+    if(count==3)
+    {
+        int episode,map,par;
+        if(!Number(token[0],&episode)||!Number(token[1],&map)||!Number(token[2],&par))
+            return Error(line,"[PARS] par values must be decimal integers");
+        if(gamemode==commercial)
+            return Error(line,"[PARS] E?M? form requires a non-commercial IWAD");
+        if(episode<1||episode>4)return Error(line,"[PARS] episode must be 1..4");
+        if(map<1||map>9)return Error(line,"[PARS] map must be 1..9");
+        if(par<0||par>65535)return Error(line,"[PARS] par time must be 0..65535 seconds");
+        // Vanilla E4 par lookup reads cpars[gamemap]; keep that quirk visible.
+        if(episode==4)staged_cpars[map]=par;
+        else staged_pars[episode][map]=par;
+        return true;
+    }
+    return Error(line,"[PARS] par requires <map> <time> or <episode> <map> <time>");
 }
 char *DPT_DehString(const char *s)
 {
@@ -385,6 +436,8 @@ void DPT_DehReset(void)
             base_sprite[i]=states[i].sprite;base_frame[i]=states[i].frame;
             base_misc1[i]=states[i].misc1;base_misc2[i]=states[i].misc2;
         }
+        memcpy(base_pars,pars,sizeof(base_pars));
+        memcpy(base_cpars,cpars,sizeof(base_cpars));
         BuildWeaponStateSet();
     }
     memcpy(maxammo,base_maxammo,sizeof(base_maxammo));memcpy(clipammo,base_clipammo,sizeof(base_clipammo));
@@ -398,6 +451,8 @@ void DPT_DehReset(void)
         states[i].misc1=base_misc1[i];states[i].misc2=base_misc2[i];
         visual_patched[i]=false;
     }
+    memcpy(pars,base_pars,sizeof(base_pars));
+    memcpy(cpars,base_cpars,sizeof(base_cpars));
     for(i=0;i<TEXT_COUNT;++i)
     {
         text_replacements[i].original=text_originals[i];
@@ -415,7 +470,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     boolean text_changed[TEXT_COUNT];
     int staged_max[NUMAMMO],staged_clip[NUMAMMO];
     size_t offset=0;boolean signature=false,doom=false,format=false;
-    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME, TEXT, STRINGS } section=NONE;
+    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME, TEXT, STRINGS, PARS } section=NONE;
     int index=0;
     char line[MAX_LINE+1];
     if(!initialized)DPT_DehReset();
@@ -428,6 +483,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     memcpy(staged_weapons,weaponinfo,sizeof(staged_weapons));
     memcpy(staged_things,mobjinfo,sizeof(staged_things));
     memcpy(staged_text,text_replacements,sizeof(staged_text));
+    memcpy(staged_pars,pars,sizeof(staged_pars));
+    memcpy(staged_cpars,cpars,sizeof(staged_cpars));
     memset(text_changed,0,sizeof(text_changed));
     for(i=0;i<NUMSTATES;++i)
     {
@@ -462,6 +519,18 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
             // key is the string identifier instead of its original bytes.
             if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before [STRINGS]");
             section=STRINGS;continue;
+        }
+        if(Equal(text,"[PARS]"))
+        {
+            if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before [PARS]");
+            section=PARS;continue;
+        }
+        if(section==PARS&&IsToken(text,"par"))
+        {
+            char *separator=strchr(text,' ');
+            if(!separator)return Error(line_number,"[PARS] par requires map and time");
+            if(!ApplyPar(separator+1,line_number))return false;
+            ++assignments;continue;
         }
         if(IsToken(text,"Text"))
         {
@@ -623,6 +692,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         visual_patched[i]=staged_visual_patched[i];
     }
     memcpy(text_replacements,staged_text,sizeof(staged_text));
+    memcpy(pars,staged_pars,sizeof(staged_pars));
+    memcpy(cpars,staged_cpars,sizeof(staged_cpars));
     SHA1_UpdateInt32(&digest_context,(unsigned int)size);
     SHA1_Update(&digest_context,(byte*)data,size);
     ++loaded;bytes_total+=(unsigned int)size;return true;
