@@ -91,6 +91,105 @@ Launcher хранит `[Master] Endpoint=play.dartpower.xyz:25135`, `Publish=0|1
 numeric IPv4 **или DNS-домен** и порт; URL/пути/IPv6/Unicode host не принимаются.
 Без явного refresh или публикации подключения к master нет.
 
+## Hairpin NAT / masquerade: один публичный адрес дома и снаружи
+
+При hairpin SNAT master может видеть source IP роутера вместо адреса хоста.
+Добавлена **явная операторская policy** в необязательном текстовом конфиге:
+
+```text
+# Документационный пример: заменить обе стороны своими значениями!
+address-map=192.168.50.0/24=203.0.113.10
+```
+
+```powershell
+dptdoom-master.exe --bind 0.0.0.0 --port 25135 --config C:/local/master.conf
+```
+
+### Три режима публичного адреса
+
+Для одного WAN у master и домашних игровых хостов можно обойтись без ручного
+обновления IPv4. Все режимы включаются **только оператором**, по умолчанию `off`:
+
+```text
+public-address-mode=dns
+public-host=games.example.org
+hairpin-subnet=192.168.50.0/24
+public-refresh-seconds=300
+```
+
+- `manual`: вместо `public-host` указать `public-ip=203.0.113.10` (пример, не
+  реальный сервер). Никаких DNS/API запросов; адрес действует до перезапуска.
+- `dns`: `public-host=...`, первый допустимый публичный IPv4 системного resolver.
+  Split-DNS с private answer не принимается. HTTPS API не вызывается.
+- `api`: `public-api=https://api.ipify.org/` или свой аналогичный plain-text
+  endpoint. HTTPS/443, сертификаты проверяются штатным TLS, redirect OFF,
+  максимум 64 bytes ответа, строго public IPv4; JSON/HTML не принимается.
+  URL с credentials/query/fragment/custom port запрещён. Нет встроенного
+  обязательного сервиса: API URL задаётся явно, запрос раскрывает провайдеру
+  внешний egress IP master (или его proxy/VPN), это не IP произвольного клиента.
+
+Для каждого режима нужна одна или несколько `hairpin-subnet` (суммарно со
+static address-map максимум 8 непересекающихся диапазонов). Одновременно
+public-host/public-ip/public-api не смешиваются; неверная конфигурация отклоняется.
+`public-refresh-seconds` 30..3600, default 300. Сетевые запросы DNS/API идут в
+одном worker вне accept loop. Через 5s попытка считается просроченной, поздний
+результат отбрасывается. OS DNS/TLS может завершаться дольше: новый worker не
+создаётся, пока старый не завершится; регистрация остальных sources продолжает
+работать. Последний хороший IP живёт до трёх refresh intervals после успеха.
+При его истечении mapped leases удаляются, новые mapped registrations получают
+CAPACITY с логом discovery-not-ready; private/router IP не публикуется молча.
+При смене IP старые mapped leases тоже удаляются — обычный heartbeat получает
+UNAUTHORIZED, затем хост перепубликуется. Нет auto probes к игровому порту.
+
+Windows использует native resolver/WinHTTP, без дополнительных DLL. Unix —
+native resolver/pthreads, API доступен только если CMake нашёл libcurl; иначе
+`api` даёт понятный startup error, а manual/dns продолжают поддерживаться.
+Unix runtime этого нового пути пока не проверен. Системный HTTPS proxy/VPN
+может изменить увиденный API egress IP; предпочитать DNS при известном домене.
+
+Пустой/отсутствующий config не включает mapping. Файл читается только по
+явному `--config`, неизвестные/неверные строки — отказ startup. Пример
+`docs/master-example.conf` содержит **только комментарии**, без активных правил.
+Пользовательских подсетей/IP в исходниках/defaults нет. Реальный operator config
+хранить вне tracked source (например, в игнорируемом `build/`).
+
+Для совпавшего source CIDR в LIST публикуется настроенный адрес, а game port
+сохраняется. Для остальных sources — их реальный адрес, как раньше. Поэтому
+хост из LAN может обращаться к master через свой внешний домен и получать ту
+же публичную игровую карточку, что его друзья. **Клиент/launcher и directory
+protocol v1 не меняются.** Домен master не подразумевает, что любой игровой
+хост находится на том же IP: никакого автоматического присвоения master IP нет.
+
+Адрес источника lease хранится отдельно от advertised address: heartbeat/remove
+всё ещё требуют реальный source + secret. Mapping задаёт только оператор master,
+клиент не может передать свой произвольный advertised IP. Дубликаты публичного
+IP:game-port отвергаются, в том числе при конфликте mapped и обычного хостов.
+Лимиты регистраций остаются по actual source, а не переписанному адресу.
+
+Ограничения правил: максимум 8, numeric IPv4, canonical CIDR без overlap,
+source только внутри RFC1918/loopback. Например `/32` позволяет ограничиться
+одним SNAT-роутером вместо всей подсети. Доверять всем источникам из выбранного
+диапазона — **решение администратора**, а не доказательство владения публичным
+адресом. Частный source сам по себе ничего автоматически не разрешает.
+Destination отбрасывает очевидные local/multicast addresses, но не проверяется
+на реальную глобальную маршрутизируемость/владение: TEST-NET используется в tests.
+
+Это **не настройка роутера, не relay и не NAT traversal**. Нужны рабочий hairpin
+и проброс game TCP port на нужный игровой ПК. Если внешний порт отличается от
+внутреннего, port mapping пока не поддерживается; использовать одинаковые
+порты до отдельного расширения. В manual/static address-map при смене WAN IP
+обновить config и перезапустить; DNS/API обновляются по интервалу. Изменения Firewall/
+OpenWrt автоматически не выполняются. Все записи остаются UNVERIFIED.
+
+Startup печатает активные правила, регистрация — actual peer и `advertised=...`
+с `mapped=yes/no`, без имён/lease secrets. `master-address-map-model` и
+`master-address-map` покрывают модель и настоящий EXE, default/no-config,
+границы/overlap/config errors, публичный список и source-bound renew/remove.
+`master-public-address-model` проверяет grammar/validation, режимы, истечение
+last-good и смену адреса с удалением старых leases без обращения в Интернет.
+Wire test дополнительно проверяет manual mode и fail-closed DNS localhost
+(OS resolver only), пока основной directory остаётся доступным.
+
 ## Публикация и browser
 
 В launcher: выбрать host, в «Серверы» включить «Публиковать мой ожидающий
@@ -135,7 +234,9 @@ CI build/test подключаются через CMake; наличие YAML н�
 
 ## Поведение и пределы
 
-- TCP source IPv4 — адрес записи; клиент передаёт только game port, **не host**.
+- По умолчанию TCP source IPv4 — адрес записи; клиент передаёт только game port,
+  **не host**. Явная операторская address-map policy может менять listing IP,
+  не источник аутентификации (см. выше).
   Master не верит произвольным forwarded IP/домашним DNS/URL из metadata.
 - При регистрации OS CSPRNG выдаёт случайные id (16 bytes) и secret (24 bytes).
   В Windows — BCryptGenRandom, в Unix — `/dev/urandom`; не rand()/timestamp.

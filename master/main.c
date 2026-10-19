@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
+#include <ctype.h>
 #include <time.h>
 typedef int SOCKET;
 #define INVALID_SOCKET (-1)
@@ -27,6 +28,7 @@ typedef int SOCKET;
 #endif
 #include "directory.h"
 #include "log.h"
+#include "public_address.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -51,6 +53,7 @@ static dm_client_t clients[DM_CLIENTS];
 static dm_bucket_t rate_ips[DM_RATE_IPS], global_rate;
 static volatile sig_atomic_t stopping;
 static uint64_t next_client_id;
+static pa_state_t public_address;
 
 static int LastSocketError(void)
 {
@@ -180,7 +183,7 @@ static int Reply(dm_client_t *client, uint64_t now)
     {
         const char *reason="accepted";
         unsigned int event=op==DM_LIST?ML_LIST:op==DM_REGISTER?ML_REGISTER:op==DM_REMOVE?ML_REMOVE:ML_HEARTBEAT;
-        char metadata[144];
+        char metadata[200];
         if(status==DM_BAD_REQUEST)reason=op==DM_REGISTER?DM_InfoError(client->request+DM_HEADER):"bad-request";
         else if(status==DM_CONFLICT)reason="endpoint-already-registered-or-ID-collision;wait-TTL";
         else if(status==DM_CAPACITY)
@@ -188,7 +191,7 @@ static int Reply(dm_client_t *client, uint64_t now)
             unsigned int j,count=0,ip_count=0;
             for(j=0;j<DM_MAX_SERVERS;++j)if(directory.entries[j].active)
             {++count;if(!memcmp(directory.entries[j].host,client->host,4))++ip_count;}
-            reason=ip_count>=DM_MAX_IP_SERVERS?"per-IP-registration-limit(4)":count>=DM_MAX_SERVERS?"directory-capacity(128)":"registration-capacity";
+            reason=!DM_MappingReady(&directory,client->host)?"public-address-discovery-not-ready(retry)":ip_count>=DM_MAX_IP_SERVERS?"per-IP-registration-limit(4)":count>=DM_MAX_SERVERS?"directory-capacity(128)":"registration-capacity";
         }
         else if(status==DM_UNAUTHORIZED)
         {
@@ -204,8 +207,10 @@ static int Reply(dm_client_t *client, uint64_t now)
         if(op==DM_REGISTER&&status==DM_OK)
         {
             const unsigned char *p=client->request+DM_HEADER;
-            snprintf(metadata,sizeof(metadata),"accepted-game-port=%u-skill=%u-flags=%u-game-protocol=%u-TTL=%u",
-                DM_Get16(p+124),p[126],p[127],p[128],directory.lease_seconds);reason=metadata;
+            unsigned char advertised[4];DM_AdvertisedAddress(&directory,client->host,advertised);
+            snprintf(metadata,sizeof(metadata),"accepted-game-port=%u-skill=%u-flags=%u-game-protocol=%u-TTL=%u advertised=%u.%u.%u.%u:%u mapped=%s",
+                DM_Get16(p+124),p[126],p[127],p[128],directory.lease_seconds,
+                advertised[0],advertised[1],advertised[2],advertised[3],DM_Get16(p+124),memcmp(advertised,client->host,4)?"yes":"no");reason=metadata;
         }
         ClientEvent(client,event,reason?reason:"invalid-metadata",status,0,now);
     }
@@ -284,6 +289,7 @@ static int Run(SOCKET listener)
         SOCKET maximum=listener;
         unsigned int i;
         uint64_t now=Now();
+        PA_Tick(&public_address,&directory,now);
         Prune(now); ML_Flush(now,0);
         FD_ZERO(&reads); FD_ZERO(&writes); FD_SET(listener,&reads);
         for(i=0;i<DM_CLIENTS;++i)
@@ -324,6 +330,32 @@ static int Number(const char *text, unsigned int low, unsigned int high, unsigne
     if(value<low)return 0;
     *out=value; return 1;
 }
+static int LoadConfig(const char *path)
+{
+    FILE *file=fopen(path,"rb");
+    char line[768];unsigned int number=0;
+    if(!file){fprintf(stderr,"Master: cannot open config: %s\n",path);return 0;}
+    while(fgets(line,sizeof(line),file))
+    {
+        char *start=line,*end;size_t length=strlen(line);++number;
+        if(length==sizeof(line)-1 && line[length-1]!='\n')goto invalid;
+        while(*start==' '||*start=='\t')++start;
+        end=start+strlen(start);while(end>start && isspace((unsigned char)end[-1]))*--end=0;
+        if(!*start || *start=='#')continue;
+        if(!strncmp(start,"address-map=",12))
+        {if(!DM_AddAddressMap(&directory,start+12))goto invalid;}
+        else
+        {
+            char *separator=strchr(start,'=');if(!separator)goto invalid;
+            *separator=0;if(!PA_Config(&public_address,start,separator+1))goto invalid;
+        }
+    }
+    if(ferror(file)){fclose(file);fputs("Master: config read failed\n",stderr);return 0;}
+    fclose(file);return 1;
+invalid:
+    fprintf(stderr,"Master: invalid config line %u (address-map/public-address-mode/public-host/public-ip/public-api/hairpin-subnet/public-refresh-seconds; see docs/MASTER.md)\n",number);
+    fclose(file);return 0;
+}
 #ifdef _WIN32
 static BOOL WINAPI Stop(DWORD event)
 {
@@ -337,25 +369,30 @@ int main(int argc, char **argv)
 {
     const char *host="127.0.0.1";
     const char *log_path="dptdoom-master.log";
+    const char *config_path=NULL;
     unsigned int port=25135,i;
     unsigned int log_size=1048576;
     struct sockaddr_in address;
     SOCKET listener;
     int result;
     directory.lease_seconds=60;
+    PA_Init(&public_address);
     for(i=1;i<(unsigned int)argc;++i)
     {
         if(!strcmp(argv[i],"--version")) { puts("DPT.DOOM master 0.1.0-dev"); return 0; }
         if(!strcmp(argv[i],"--help"))
-        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216]\nDefault loopback:25135, TTL 60s, log dptdoom-master.log (1 MiB + one backup).\nExperimental directory v1; no TLS, game relay or port probing."); return 0; }
+        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path]\nConfig: address-map=private-CIDR=public-IPv4 (optional operator hairpin policy).\nDefault loopback:25135, TTL 60s, no address rewriting, log dptdoom-master.log.\nExperimental directory v1; no TLS, game relay or port probing."); return 0; }
         if(i+1>=(unsigned int)argc)goto usage;
         if(!strcmp(argv[i],"--bind"))host=argv[++i];
+        else if(!strcmp(argv[i],"--config")){if(config_path)goto usage;config_path=argv[++i];}
         else if(!strcmp(argv[i],"--log"))log_path=argv[++i];
         else if(!strcmp(argv[i],"--log-max-bytes")) { if(!Number(argv[++i],4096,16777216,&log_size))goto usage; }
         else if(!strcmp(argv[i],"--port")) { if(!Number(argv[++i],1,65535,&port))goto usage; }
         else if(!strcmp(argv[i],"--lease-seconds")) { if(!Number(argv[++i],3,300,&directory.lease_seconds))goto usage; }
         else goto usage;
     }
+    if(config_path && !LoadConfig(config_path))return 2;
+    if(!PA_Prepare(&public_address,&directory)){fputs("Master: invalid public address mode/config combination or subnet overlap\n",stderr);return 2;}
     if(!ML_Open(log_path,log_size)) { fputs("Master: cannot open event log (check --log path/permissions)\n",stderr); return 1; }
 #ifdef _WIN32
     { WSADATA data; if(WSAStartup(MAKEWORD(2,2),&data)) { ML_Message("Master: Winsock startup failed"); ML_Close(); return 1; } }
@@ -378,12 +415,21 @@ int main(int argc, char **argv)
     if(!Nonblocking(listener) || bind(listener,(struct sockaddr*)&address,sizeof(address))==SOCKET_ERROR || listen(listener,DM_CLIENTS)==SOCKET_ERROR)
     { ML_Message("Master: nonblocking/bind/listen failed; check address and port"); DM_Close(listener); result=1; goto cleanup; }
     { char message[256]; snprintf(message,sizeof(message),"DPT.DOOM master: listening on %s:%u (directory v1, TTL %us, experimental LAN; no TLS)",host,port,directory.lease_seconds); ML_Message(message); }
+    for(i=0;i<directory.address_map_count;++i)
+    {
+        const dm_address_map_t *rule=&directory.address_maps[i];char message[320];
+        snprintf(message,sizeof(message),"Operator address-map: source=%u.%u.%u.%u/%u advertised=%u.%u.%u.%u dynamic=%s ready=%s; game port unchanged; lease auth remains actual source; reachability unverified",
+            rule->network[0],rule->network[1],rule->network[2],rule->network[3],rule->prefix,
+            rule->advertised[0],rule->advertised[1],rule->advertised[2],rule->advertised[3],rule->dynamic?"yes":"no",rule->enabled?"yes":"no");ML_Message(message);
+    }
+    {char message[360];snprintf(message,sizeof(message),"Public address discovery: mode=%s host=%s refresh_seconds=%u (API URL omitted; HTTPS request only in explicit api mode)",public_address.mode,public_address.host[0]?public_address.host:"none",public_address.refresh_seconds);ML_Message(message);}
     ML_Message("Master diagnostic v2: status 0=OK 1=BAD_REQUEST 2=UNAUTHORIZED 3=CONFLICT 4=CAPACITY; cid is local to this process, peer port is TCP source port, not game port");
     ML_Message("Requests are logged with byte progress and failure reason; no names/tokens/payload dumps. Missing remote events means no observed request, not proof of firewall cause.");
     result=Run(listener);
     for(i=0;i<DM_CLIENTS;++i)Drop(&clients[i]);
     DM_Close(listener);
 cleanup:
+    PA_Close(&public_address);
 #ifdef _WIN32
     WSACleanup();
 #endif

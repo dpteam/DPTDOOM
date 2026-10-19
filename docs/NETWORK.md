@@ -13,6 +13,11 @@ reconnect, late join, аутентификации или шифрования. 
 Объявление снимается при accept/shutdown, иначе TTL. Ошибка master не ломает
 direct accept; см. ограничения reachability/privacy в MASTER.md.
 
+Для hairpin NAT/SNAT master поддерживает optional operator `--config` с
+`address-map=private-CIDR=public-IPv4`. Это меняет IP карточки для указанной
+подсети, **не** direct protocol и не source/token auth. Нет owner-IP hardcode;
+по умолчанию rewriting OFF. Подробности и ограничения портов — MASTER.md.
+
 ## Играть вдвоём
 
 Оба используют одну сборку/Artifact и одинаковые IWAD/PWAD в одинаковом порядке.

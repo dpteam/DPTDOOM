@@ -126,6 +126,16 @@ ctest --preset windows-headless
   play.dartpower.xyz:25135 (не перезаписывать пользовательский адрес).
   По просьбе владельца допустим тестовый --bind 0.0.0.0:25135, но не создавать
   firewall/router rules и не заявлять внешнюю доступность без проверки.
+- Hairpin/SNAT: optional master --config с address-map=private-CIDR=public-IPv4,
+  до 8 canonical nonoverlapping RFC1918/loopback ranges. По умолчанию OFF;
+  actual source сохраняется для auth/limits, list IP отдельно, game port прежний.
+  Owner IP не хардкодить/не коммитить; local config только build/ или вне repo.
+  Пример docs/master-example.conf inert; tests master-address-map(-model).
+- Public address modes: public-address-mode=manual|dns|api + hairpin-subnet,
+  соответственно public-ip/public-host/public-api; default OFF. DNS/HTTPS worker,
+  refresh 300s, last-good 3 intervals, смена/истечение удаляет mapped leases.
+  Windows WinHTTP, Unix optional libcurl + pthreads; API только opt-in HTTPS,
+  no redirects/TLS bypass. Owner config только build/, no owner-IP hardcode.
 - Debug graphical Windows client: AllocConsole + stdout/stderr tee/file,
   `dpt_debug_console.c`; Release/RelWithDebInfo/headless без него. --version тихий.
   debug-console test interactive. Master `--log`, `--log-max-bytes`: 1MiB + .1,

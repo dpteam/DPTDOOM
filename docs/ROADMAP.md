@@ -270,6 +270,16 @@ partition может породить две отдельные локальны
   совпадение build/resources до handshake и game-port reachability.
 - [ ] Отдельный безопасный game-query/challenge для port reachability; текущий
   single accept нельзя занимать проверочным подключением master.
+- [x] Hairpin listing fix: optional operator config CIDR→advertised IPv4,
+  actual source отдельно для lease auth, public endpoint collision check.
+  Нет hardcoded owner IP/подсети, config в build вне Git; протокол/client прежние.
+- [x] Public address modes manual/dns/api, explicit operator hairpin ranges,
+  worker DNS/HTTPS discovery, refresh/last-good expiry, changed-IP lease cleanup.
+  Windows DNS и native HTTPS runtime проверены локально; Unix API требует libcurl,
+  новый Unix runtime ждёт CI. Нет обязательного external API/owner IP в defaults.
+- [x] Регрессия public address modes: 32/32 Windows MSVC SDL, 29/29 MinGW
+  headless, 31/31 MSVC ASan. Local native DNS/HTTPS runtime проверен;
+  никакие Firewall/OpenWrt настройки автоматически не менялись.
 
 Протокол/запуск/ограничения — `docs/MASTER.md`. Это directory, **не игровой server**,
 не Internet-ready сервис. Native browser/publication связка проверяется локально.
