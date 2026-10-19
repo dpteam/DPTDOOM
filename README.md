@@ -76,7 +76,7 @@ SDL2 2.32.10 и SDL2_mixer 2.8.2 скачиваются из официальн�
 - [Нативный master directory-прототип](docs/MASTER.md)
 - [Баги, причины и статус исправлений](docs/BUGS.md)
 - [Разбор upstream PR](docs/UPSTREAM.md)
-- [DeHackEd: ограниченный subset, включая Thing и Frame/Weapon graph](docs/DEHACKED.md)
+- [DeHackEd: ограниченный subset, включая Text, Thing и Frame/Weapon graph](docs/DEHACKED.md)
 - [Требования владельца](PROMPT.md)
 
 ## Другие платформы и настройки

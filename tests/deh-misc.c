@@ -5,6 +5,8 @@
 #include "d_items.h"
 #include "info.h"
 #include "m_fixed.h"
+#include "d_englsh.h"
+#include "deh_str.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +20,7 @@ static void ActionSentinel(void) {}
 int W_LumpLength(unsigned int i){(void)i;return 0;}
 void W_ReadLump(unsigned int i,void *p){(void)i;(void)p;}
 static int Load(const char *text){return DPT_DehLoadBytes((const unsigned char*)text,strlen(text));}
+static int LoadData(const unsigned char *data,size_t size){return DPT_DehLoadBytes(data,size);}
 int main(void)
 {
     sha1_digest_t a,b,c;unsigned int i;unsigned char *data;
@@ -81,6 +84,34 @@ int main(void)
     REQUIRE(!Load(HEADER "Weapon 1\nDeselect frame = 0\n"));
     REQUIRE(!Load(HEADER "Weapon 1\nShooting frame = 1\n"));
     DPT_DehReset();REQUIRE(weaponinfo[wp_pistol].ammo==am_clip&&weaponinfo[wp_pistol].upstate==S_PISTOLUP);
+    {
+        const char old[]=GOTARMOR,replacement[]="Custom armor message!\n";
+        unsigned char text_patch[512];size_t head,n=strlen(old),r=strlen(replacement);
+        head=(size_t)snprintf((char *)text_patch,sizeof(text_patch),HEADER "Text %u %u\n",(unsigned)n,(unsigned)r);
+        memcpy(text_patch+head,old,n);memcpy(text_patch+head+n,replacement,r);
+        REQUIRE(LoadData(text_patch,head+n+r));
+        REQUIRE(!strcmp(DPT_DehString(GOTARMOR),replacement));
+        REQUIRE(!strcmp(DPT_DehString(GOTMEGA),GOTMEGA));
+        DPT_DehReset();REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
+    }
+    {
+        const char old[]=GGSAVED;unsigned char patch[256];size_t head,n=strlen(old);
+        head=(size_t)snprintf((char *)patch,sizeof(patch),HEADER "Text %u 0\n",(unsigned)n);
+        memcpy(patch+head,old,n);REQUIRE(LoadData(patch,head+n));
+        REQUIRE(!strcmp(DPT_DehString(GGSAVED),""));DPT_DehReset();
+    }
+    {
+        const char old[]=GOTARMOR;const unsigned char bad[]={ 'X','%','Y' };unsigned char patch[256];
+        size_t head=(size_t)snprintf((char *)patch,sizeof(patch),HEADER "Text %u 3\n",(unsigned)strlen(old));
+        memcpy(patch+head,old,strlen(old));memcpy(patch+head+strlen(old),bad,sizeof(bad));
+        REQUIRE(!LoadData(patch,head+strlen(old)+sizeof(bad)));REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
+        head=(size_t)snprintf((char *)patch,sizeof(patch),HEADER "Text %u 4\n",(unsigned)strlen(old));
+        memcpy(patch+head,old,strlen(old));memcpy(patch+head+strlen(old),"tiny",4);
+        REQUIRE(!LoadData(patch,head+strlen(old)+3));REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
+        head=(size_t)snprintf((char *)patch,sizeof(patch),HEADER "Text %u 4\n",(unsigned)strlen(old));
+        memcpy(patch+head,"wrong",5);memcpy(patch+head+5,"tiny",4);
+        REQUIRE(!LoadData(patch,head+9));REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
+    }
     REQUIRE(Load(HEADER "Thing 2 (Trooper)\nHit points = 123\nSpeed = 12\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 0\nReaction time = 20\nThing 34\nSpeed = 1966080\n"));
     REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==123&&mobjinfo[MT_POSSESSED].speed==12);
     REQUIRE(mobjinfo[MT_POSSESSED].radius==24*FRACUNIT&&mobjinfo[MT_POSSESSED].mass==250);

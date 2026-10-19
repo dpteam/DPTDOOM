@@ -332,7 +332,7 @@ partition может породить две отдельные локальны
   прогон 34/35: второй WebView2/CDP launcher startup превысил test deadline;
   отдельная перепроверка deh-misc/master-client-wire/launcher-windows — 3/3.
   Не относить первый WebView failure к DeHackEd/macOS без evidence.
-- [ ] Следующие sections: Frame graph extensions, Text и BEX. Не считать
+- [ ] Следующие sections: Frame graph extensions, BEX и full string table. Не считать
   ограниченный subset полной совместимостью; arbitrary code pointers не принимать.
 - [x] Subset `DPT-deh-misc-ammo-v2`: Ammo Max ammo/Per ammo, Weapon Ammo type
   0..3, staged rollback всех таблиц, cross-field validation, engine firing/
@@ -343,7 +343,7 @@ partition может породить две отдельные локальны
   optional inert label, bounded health/reaction/pain/speed/size/mass/damage,
   transactional rollback и reset всех таблиц. Real barrel mobj file/lump tests,
   patch order и matching/mismatch two-peer traces; Thing states/flags/sounds
-  и Frame/Text/BEX остаются неподдерживаемыми.
+  и полный Text/BEX остаются неподдерживаемыми.
 - [x] `DPT-deh-framegraph-v5`: Frame Duration 1..32767 плюс ограниченный
   `Next frame` для существующих состояний; без S_NULL source/fast-transformed
   SARG range, zero/negative Duration, action/resource changes. Проверены реальный
@@ -353,6 +353,9 @@ partition может породить две отдельные локальны
   vanilla weapon-state pool/domain checks, staged rollback/reset, real pistol
   action-skip cadence и same/different network digest tests. Arbitrary states,
   infinite states, unsafe S_NULL uses и action pointers остаются запрещены.
+- [x] `DPT-deh-text-v7`: bounded classic Text replacements for a registered
+  vanilla message whitelist; exact old bytes, printable payload bounds, no `%`/
+  control/NUL, atomic reset/rollback, file/lump and same/different network tests.
 - [x] Предыдущий Thing slice: полные MinGW headless 33/33 и MSVC SDL 35/35,
   целевые MSVC ASan parser/engine/baselines 3/3.
 - [x] Actions run 39304002144/ddd69cc success: macOS master-client-wire fixture

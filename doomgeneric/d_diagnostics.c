@@ -13,6 +13,8 @@
 #include "p_saveg.h"
 #include "r_state.h"
 #include "deh_classic.h"
+#include "deh_str.h"
+#include "d_englsh.h"
 #include "d_items.h"
 #include <errno.h>
 #include <limits.h>
@@ -250,6 +252,7 @@ void D_DiagnosticsTic(void)
                     p->maxammo[0],p->maxammo[1],p->maxammo[2],p->maxammo[3],
                     p->ammo[0],p->ammo[1],p->ammo[2],p->ammo[3],
                     clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
+                printf("Patch text: armor=%s saved=%s\n",DPT_DehString(GOTARMOR),DPT_DehString(GGSAVED));
                 // Report an actual spawned entity, not just the patched table.
                 // Entity fields are copied at spawn, while speed/mass/damage
                 // are consumed through info during gameplay.

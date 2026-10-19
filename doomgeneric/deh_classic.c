@@ -7,6 +7,8 @@
 #include "d_items.h"
 #include "info.h"
 #include "m_fixed.h"
+#include "d_englsh.h"
+#include "deh_str.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +17,8 @@
 #include <errno.h>
 #include <limits.h>
 
-enum { MAX_LINE=2047, MAX_SOURCE=262144, MAX_PATCHES=16, FIELD_COUNT=15 };
+enum { MAX_LINE=2047, MAX_SOURCE=262144, MAX_PATCHES=16, FIELD_COUNT=15,
+       TEXT_MAX=2047, TEXT_COUNT=16 };
 #define MISC_FIELDS(X) \
     X("Initial Health",initial_health,100,1,10000) \
     X("Initial Bullets",initial_bullets,50,0,200) \
@@ -57,6 +60,13 @@ static int base_tics[NUMSTATES],staged_tics[NUMSTATES];
 static statenum_t base_nextstate[NUMSTATES],staged_nextstate[NUMSTATES];
 static boolean base_weapon_state[NUMSTATES];
 static weaponinfo_t staged_weapons[NUMWEAPONS];
+typedef struct { const char *original; char replacement[TEXT_MAX+1]; boolean present; } text_replacement_t;
+static const char *const text_originals[TEXT_COUNT]={
+    GOTARMOR,GOTMEGA,GOTHTHBONUS,GOTARMBONUS,GOTSTIM,GOTMEDINEED,
+    GOTMEDIKIT,GOTSUPER,GOTBLUECARD,GOTYELWCARD,GOTREDCARD,GOTBLUESKUL,
+    GOTYELWSKUL,GOTREDSKULL,GGSAVED,HUSTR_MSGU
+};
+static text_replacement_t text_replacements[TEXT_COUNT],staged_text[TEXT_COUNT];
 typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
 #define THING(name,field,low,high) {name,offsetof(mobjinfo_t,field),low,high}
 static const thing_field_t thing_fields[]={
@@ -97,6 +107,50 @@ static boolean Number(const char *text,int *value)
     errno=0;number=strtol(text,&end,10);
     if(errno==ERANGE||*end||number<INT_MIN||number>INT_MAX)return false;
     *value=(int)number;return true;
+}
+static boolean IsToken(const char *text,const char *token)
+{
+    while(*token&&*text&&tolower((unsigned char)*text)==tolower((unsigned char)*token))
+        ++text,++token;
+    return !*token&&(!*text||isspace((unsigned char)*text));
+}
+static boolean TextHeader(char *text,int *old_length,int *new_length)
+{
+    char *p=Trim(text),*q;
+    if(!IsToken(p,"Text"))return false;
+    while(*p&&!isspace((unsigned char)*p))++p;
+    if(!*p)return false;
+    p=Trim(p);q=p;while(*q&&!isspace((unsigned char)*q))++q;
+    if(*q)*q++=0;
+    if(!Number(p,old_length))return false;
+    p=Trim(q);q=p;while(*q&&!isspace((unsigned char)*q))++q;
+    if(*q)*q++=0;
+    if(!Number(p,new_length)||*Trim(q))return false;
+    return true;
+}
+static int TextSlot(const unsigned char *old,int length)
+{
+    unsigned int i;
+    for(i=0;i<TEXT_COUNT;++i)
+        if((int)strlen(text_originals[i])==length&&!memcmp(old,text_originals[i],(size_t)length))return (int)i;
+    return -1;
+}
+static boolean ValidTextBytes(const unsigned char *text,int length)
+{
+    int i;
+    for(i=0;i<length;++i)
+        if(text[i]=='%'||(text[i]<32&&text[i]!='\n'&&text[i]!='\r'&&text[i]!='\t')||text[i]>126)
+            return false;
+    return true;
+}
+char *DPT_DehString(const char *s)
+{
+    unsigned int i;
+    if(!s)return (char *)s;
+    for(i=0;i<TEXT_COUNT;++i)
+        if(text_replacements[i].present&&!strcmp(s,text_replacements[i].original))
+            return text_replacements[i].replacement;
+    return (char *)s;
 }
 static boolean ThingIndex(char *text,int *index)
 {
@@ -231,6 +285,12 @@ void DPT_DehReset(void)
         states[i].tics=base_tics[i];
         states[i].nextstate=base_nextstate[i];
     }
+    for(i=0;i<TEXT_COUNT;++i)
+    {
+        text_replacements[i].original=text_originals[i];
+        text_replacements[i].replacement[0]=0;
+        text_replacements[i].present=false;
+    }
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=fields[i].initial;
     deh_species_infighting=DEH_DEFAULT_SPECIES_INFIGHTING;
     loaded=bytes_total=0;last_error[0]=0;
@@ -240,9 +300,10 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
 {
     int staged[FIELD_COUNT];unsigned int i,line_number=0,assignments=0;
     boolean next_changed[NUMSTATES];
+    boolean text_changed[TEXT_COUNT];
     int staged_max[NUMAMMO],staged_clip[NUMAMMO];
     size_t offset=0;boolean signature=false,doom=false,format=false;
-    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME } section=NONE;
+    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME, TEXT } section=NONE;
     int index=0;
     char line[MAX_LINE+1];
     if(!initialized)DPT_DehReset();
@@ -254,6 +315,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     memcpy(staged_max,maxammo,sizeof(staged_max));memcpy(staged_clip,clipammo,sizeof(staged_clip));
     memcpy(staged_weapons,weaponinfo,sizeof(staged_weapons));
     memcpy(staged_things,mobjinfo,sizeof(staged_things));
+    memcpy(staged_text,text_replacements,sizeof(staged_text));
+    memset(text_changed,0,sizeof(text_changed));
     for(i=0;i<NUMSTATES;++i)
     {
         staged_tics[i]=states[i].tics;
@@ -277,6 +340,25 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         {
             if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before Misc 0");
             section=MISC;continue;
+        }
+        if(IsToken(text,"Text"))
+        {
+            int old_length,new_length,slot;
+            if(!doom||!format)return Error(line_number,"headers required before Text section");
+            if(!TextHeader(text,&old_length,&new_length))return Error(line_number,"invalid Text header (expected Text old-length new-length)");
+            if(old_length<0||old_length>TEXT_MAX||new_length<0||new_length>TEXT_MAX)
+                return Error(line_number,"Text lengths must be 0..2047");
+            if(size-offset<(size_t)old_length+(size_t)new_length)
+                return Error(line_number,"Text payload is truncated");
+            slot=TextSlot(data+offset,old_length);
+            if(slot<0)return Error(line_number,"Text old bytes are not a registered vanilla string");
+            if(!ValidTextBytes(data+offset+old_length,new_length))
+                return Error(line_number,"Text replacement contains unsafe bytes or format marker");
+            memset(staged_text[slot].replacement,0,sizeof(staged_text[slot].replacement));
+            memcpy(staged_text[slot].replacement,data+offset+old_length,(size_t)new_length);
+            staged_text[slot].original=text_originals[slot];staged_text[slot].present=true;
+            text_changed[slot]=true;offset+=(size_t)old_length+(size_t)new_length;
+            section=TEXT;++assignments;continue;
         }
         if(!strchr(text,'='))
         {
@@ -334,6 +416,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
             }
             return Error(line_number,"unsupported Frame field (only Duration and Next frame)");
         }
+        if(section==TEXT)
+            return Error(line_number,"Text payload must follow its Text header");
         if(section==THING)
         {
             if(!ApplyThing(index,text,value,line_number))return false;
@@ -376,6 +460,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     memcpy(mobjinfo,staged_things,sizeof(staged_things));
     for(i=0;i<NUMSTATES;++i)states[i].tics=staged_tics[i];
     for(i=0;i<NUMSTATES;++i)states[i].nextstate=staged_nextstate[i];
+    memcpy(text_replacements,staged_text,sizeof(staged_text));
     SHA1_UpdateInt32(&digest_context,(unsigned int)size);
     SHA1_Update(&digest_context,(byte*)data,size);
     ++loaded;bytes_total+=(unsigned int)size;return true;

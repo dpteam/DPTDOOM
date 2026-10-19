@@ -74,6 +74,15 @@ def main():
         ammo=root/'ammo.deh';ammo.write_bytes(HEADER+b'Initial Bullets = 50\nAmmo 0\nMax ammo = 450\nPer ammo = 17\nAmmo 1\nMax ammo = 60\nWeapon 1\nAmmo type = 1\n')
         _,text=run('ammo-weapon',['-deh',str(ammo)])
         assert 'Patch report: maxammo=450,60,300,50' in text and 'perammo=17,4,20,1 pistol-ammo=1' in text,text
+        text_patch=root/'text.deh';text_copy=root/'text-copy.deh'
+        old=b'Picked up the armor.';replacement=b'DPT armor message!'
+        text_patch.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(replacement)).encode()+b'\n'+old+replacement)
+        text_copy.write_bytes(text_patch.read_bytes())
+        _,text=run('text',['-deh',str(text_patch)])
+        assert 'Patch text: armor=DPT armor message! saved=game saved.' in text,text
+        text_lump=root/'text-lump.wad';wad(text_lump,[text_patch.read_bytes()])
+        _,text=run('text-lump',['-file',str(text_lump),'-dehlump'])
+        assert 'Patch text: armor=DPT armor message! saved=game saved.' in text,text
         things=root/'thing.deh';thing_copy=root/'thing-copy.deh';map_wad=root/'thing-map.wad'
         thing_map(iwad,map_wad)
         things.write_bytes(HEADER+b'Thing 31 (Barrel)\nHit points = 123\nSpeed = 1\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 100\nReaction time = 20\n')
@@ -157,6 +166,9 @@ def main():
         ammo_same=root/'ammo-copy.deh';ammo_same.write_bytes(ammo.read_bytes())
         pair('ammo-same',[ammo,ammo_same],True,'health=100 ammo=50')
         pair('ammo-different',[ammo,first],False)
+        pair('text-same',[text_patch,text_copy],True,'health=100 ammo=50')
+        text_different=root/'text-different.deh';text_different.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(b'Other message!')).encode()+b'\n'+old+b'Other message!')
+        pair('text-different',[text_patch,text_different],False)
         pair('thing-same',[things,thing_copy],True,'type=30 health=123 radius=1572864',('-file',str(map_wad)))
         pair('thing-different',[things,first],False,extra=('-file',str(map_wad)))
         pair('duration-same',[duration,duration_copy],True,'health=100',('-headless-input',str(inputs)))

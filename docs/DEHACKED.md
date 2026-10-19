@@ -1,7 +1,7 @@
-# DeHackEd: ограниченный Misc / Ammo / Weapon-frames / Thing / Frame graph срез
+# DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-weaponframes-v6` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-text-v7` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -60,6 +60,23 @@ patches или их поиска на диске; launcher пока не име�
 1..10000 (базовая ёмкость; backpack штатно удваивает), `Per ammo` — 0..1000
 (количество в обычной порции; коэффициенты pickup/skill остаются штатными).
 Понижение bullet capacity ниже Initial Bullets отклоняет весь источник.
+
+`Weapon N`: индексы 0=fist, 1=pistol, 2=shotgun, 3=chaingun, 4=rocket launcher,
+`Text` принимает classic `Text old-length new-length` только для заранее
+зарегистрированных vanilla messages. Разрешены pickup/save/chat strings из
+текущего whitelist; старые bytes должны совпасть полностью. Новый payload —
+до 2047 bytes, printable ASCII с `\\n`/`\\r`/`\\t`; `%`, NUL, другие control и
+non-ASCII bytes запрещены. `[STRINGS]`, неизвестные old strings и format strings
+не поддерживаются.
+
+```text
+Text 22 18
+Picked up the armor.DPT armor message!
+```
+
+Payload — ровно `old-length` bytes, затем `new-length` bytes; line endings внутри
+payload не нормализуются. Замена применяется через DPT `DEH_String`; rollback и
+reset возвращают исходные строки.
 
 `Weapon N`: индексы 0=fist, 1=pistol, 2=shotgun, 3=chaingun, 4=rocket launcher,
 5=plasma, 6=BFG, 7=chainsaw, 8=super shotgun. Поддержаны `Ammo type = 0..3`
@@ -157,7 +174,7 @@ Next frame = 15
 Меняются только `state.tics` и `state.nextstate`, не sprite/frame/misc/action.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v6, чтобы peers не путали разные semantics.
+обновлён до v7, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -175,7 +192,7 @@ Nightmare штатно сдвигает вправо/влево, пока **не
 отклоняются. Для них нужны отдельные проверки graph/resources/action compatibility.
 
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-`Monsters Infight`, Sound/Sprite/Pointer/Cheat/Text, неподдерживаемые Frame/Thing fields,
+`Monsters Infight`, Sound/Sprite/Pointer/Cheat, `[STRINGS]`, неподдерживаемые Frame/Thing fields,
 BEX, include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
@@ -207,8 +224,9 @@ section/field дают ошибку с номером строки до игро
 
 ## Проверки
 
-`deh-misc`: synthetic grammar/ranges/overflow/NUL/line/size/count limits, atomic
-rollback, digest repeatability и load order, без IWAD/окна/Internet.
+`deh-misc`: synthetic grammar/ranges/overflow/NUL/line/size/count limits, Text
+old/new exact bytes and unsafe payload rejection, atomic rollback, digest
+repeatability и load order, без IWAD/окна/Internet.
 
 `deh-engine` (headless + локальный Doom II): реальные player health/ammo/capacity,
 per-ammo/type в patch report, attack commands обычного/переназначенного pistol, внешний
@@ -224,7 +242,8 @@ info.c и игровой spawn проверяет deh-engine. Все patch/WAD f
 Duration/Frame/Weapon-frame tests проверяют реальный firing cadence (по расходу ammo с
 одинаковыми attack commands), file/lump equivalence, rollback нескольких
 секций/digest, index/range/overflow/fast exclusion, неизменные action/sprite и
-reset. Отдельно проверяются Next frame, пропуск pistol action, границы state
+reset. Text проверяется через engine report, file/lump equivalence и same/different
+patch peers. Отдельно проверяются Next frame, пропуск pistol action, границы state
 table, zero-tic cycle, weapon action skip, same/different patch peers и matching
 traces с `-fast`.
 `deh-engine` имеет общий

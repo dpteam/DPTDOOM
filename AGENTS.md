@@ -160,16 +160,16 @@ ctest --preset windows-headless
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
-- DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Weapon frames + Thing numeric + Frame graph** classic
+- DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Text + Weapon frames + Thing numeric + Frame graph** classic
   v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.
   Raw bytes/order/subset digest в ResourceDigest; patched vanilla save/load/
-  record запрещены до manifest format. Версия DPT-deh-weaponframes-v6; Ammo max/per,
+  record запрещены до manifest format. Версия DPT-deh-text-v7; Ammo max/per,
   Weapon Ammo type только 0..3, arbitrary frame/noammo/overflow tricks отклонять.
   Tests deh-misc/deh-engine, docs/DEHACKED.md.
   Thing 1-based, optional (label); health/reaction/pain/speed/radius/height/mass/
   damage bounded; Frame Duration1..32767, S_NULL и SARG fast range запрещены,
-  durations only staged/reset; bounded Next frame and Weapon frame references only,
+  bounded Text whitelist; durations only staged/reset; bounded Next frame and Weapon frame references only,
   zero-tic cycles rejected, actions/resources не менять. Full Thing flags/
   states/sounds, остальные Frame/Text/BEX/MBF не готовы.
   Base/staged mobjinfo static, reset restores original. Tests actual barrel spawn;
