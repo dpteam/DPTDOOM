@@ -51,6 +51,11 @@ FAILED/connect, нулевую отправку/приём; для refusal по-
 OS error. Отдельно проверяется порт после закрытия reservation. Клиентские
 таймауты не увеличены, macOS scenarios не пропускаются. Нужен remote rerun.
 
+Подтверждён remote rerun: [ddd69cc / run 39304002144](https://github.com/dpteam/DPTDOOM/actions/runs/39304002144)
+завершён **success** (public API, также подтверждено владельцем). Таким образом,
+исправление bound-non-listener fixture прошло macOS Headless/SDL в Actions.
+Новый Thing subset после этой ревизии ещё требует следующего remote run.
+
 ## Матрица
 
 | Job | Runner | Проверки без игровых данных |
