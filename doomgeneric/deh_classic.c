@@ -7,6 +7,7 @@
 #include "d_items.h"
 #include "info.h"
 #include "m_fixed.h"
+#include "p_mobj.h"
 #include "d_englsh.h"
 #include "deh_str.h"
 #include <stddef.h>
@@ -70,6 +71,7 @@ static text_replacement_t text_replacements[TEXT_COUNT],staged_text[TEXT_COUNT];
 typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
 #define THING(name,field,low,high) {name,offsetof(mobjinfo_t,field),low,high}
 static const thing_field_t thing_fields[]={
+    THING("ID #",doomednum,-1,32767),
     THING("Hit points",spawnhealth,1,10000),
     THING("Reaction time",reactiontime,0,10000),
     THING("Pain chance",painchance,0,255),
@@ -79,6 +81,11 @@ static const thing_field_t thing_fields[]={
     THING("Missile damage",damage,0,100)
 };
 #undef THING
+static const int thing_spawn_flags=
+    MF_SPECIAL|MF_SOLID|MF_SHOOTABLE|MF_NOSECTOR|MF_NOBLOCKMAP|MF_AMBUSH|
+    MF_SPAWNCEILING|MF_NOGRAVITY|MF_DROPOFF|MF_PICKUP|MF_NOCLIP|MF_SLIDE|
+    MF_FLOAT|MF_TELEPORT|MF_MISSILE|MF_DROPPED|MF_SHADOW|MF_NOBLOOD|
+    MF_CORPSE|MF_INFLOAT|MF_COUNTKILL|MF_COUNTITEM|MF_SKULLFLY|MF_NOTDMATCH;
 
 static boolean Error(unsigned int line,const char *message)
 {
@@ -178,6 +185,12 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
         if(value<1||value>high)return Error(line,"Thing Speed outside supported category/range");
         staged_things[index].speed=value;return true;
     }
+    if(Equal(field,"Bits"))
+    {
+        if(value<0||(value&~thing_spawn_flags))
+            return Error(line,"Thing Bits contains unsupported or reserved flags");
+        staged_things[index].flags=value;return true;
+    }
     for(i=0;i<sizeof(thing_fields)/sizeof(thing_fields[0]);++i)
     {
         const thing_field_t *f=&thing_fields[i];
@@ -188,6 +201,18 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
         }
     }
     return Error(line,"unsupported Thing field (states/flags/sounds/IDs are not supported)");
+}
+static boolean ValidateThingIds(const mobjinfo_t *things,unsigned int line)
+{
+    unsigned int i,j;
+    for(i=0;i<NUMMOBJTYPES;++i)
+    {
+        if(things[i].doomednum<0)continue;
+        for(j=i+1;j<NUMMOBJTYPES;++j)
+            if(things[j].doomednum==things[i].doomednum)
+                return Error(line,"Thing ID # duplicates another DoomEd number");
+    }
+    return true;
 }
 static boolean ValidateFrameGraph(const int *tics,const statenum_t *next,
     const boolean *next_changed,unsigned int line)
@@ -452,6 +477,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     }
     if(!section||!assignments)return Error(line_number,"patch has no supported assignments");
     if(staged[1]>staged_max[am_clip])return Error(line_number,"Initial Bullets exceeds Max ammo for bullets");
+    if(!ValidateThingIds(staged_things,line_number))return false;
     if(!ValidateFrameGraph(staged_tics,staged_nextstate,next_changed,line_number))return false;
     // Commit only after the entire source has passed validation.
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=staged[i];

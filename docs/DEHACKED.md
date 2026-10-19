@@ -1,7 +1,7 @@
 # DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-text-v7` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-thingflags-v8` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -128,6 +128,8 @@ actor/class name, не исполняется и не попадает в digest
 | Speed | 1..128 для типов с исходной whole-unit speed; 1..4194304 для исходной fixed-point speed |
 | Mass | 1..1000000; ноль запрещён, thrust делит на массу |
 | Missile damage | 0..100, info damage для missile/skull столкновений, **не** глобальная замена hitscan/action damage |
+| ID # | -1..32767, DoomEd number; duplicate non-negative IDs запрещены |
+| Bits | bounded vanilla mobj flags; неизвестные/reserved bits запрещены |
 
 Категория Speed определяется исходной таблицей (исходная speed ≥65536 —
 fixed-point). Patches не меняют flags/actions и не могут переключить категорию.
@@ -145,6 +147,10 @@ Mass = 250
 ```
 
 После такого patch barrel при spawn получает health123/radius24/height60.
+`ID #` меняет DoomEd number, а `Bits` — только разрешённую vanilla flag mask;
+это влияет на последующие map spawns и collision/pickup/kill semantics. Duplicate
+non-negative IDs отклоняются, чтобы DoomEd lookup не стал неоднозначным. Полные
+state/sound/action substitutions через Thing по-прежнему не разрешены.
 `Thing 1 Hit points` меняет mobjinfo player, но стартовое `player.health` по-прежнему
 задаёт `Misc 0 Initial Health`, как в существующем engine path. Изменения `Bits`,
 map ID, звуков и любых state fields (`Initial frame` и т.п.) пока отклоняются.
@@ -174,7 +180,7 @@ Next frame = 15
 Меняются только `state.tics` и `state.nextstate`, не sprite/frame/misc/action.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v7, чтобы peers не путали разные semantics.
+обновлён до v8, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/

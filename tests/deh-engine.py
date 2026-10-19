@@ -20,7 +20,7 @@ def wad(path, patches):
     path.write_bytes(data)
 
 
-def thing_map(iwad, path):
+def thing_map(iwad, path, doomednum=2035):
     # Extract only to the test's temporary directory. Preserve map geometry,
     # replace THINGS by two starts + one barrel at a known map thing position.
     source=iwad.read_bytes();_,count,directory=struct.unpack_from('<4sii',source)
@@ -34,7 +34,7 @@ def thing_map(iwad, path):
     starts=[t for t in things if t[3] in (1,2)]
     assert len(starts)==2
     position=max(things,key=lambda t:(t[0]-starts[0][0])**2+(t[1]-starts[0][1])**2)
-    custom=starts+[(position[0],position[1],position[2],2035,7)]
+    custom=starts+[(position[0],position[1],position[2],doomednum,7)]
     level=[(name,b''.join(struct.pack('<hhhhh',*t) for t in custom) if name==b'THINGS' else data) for name,data in level]
     body=bytearray(b'PWAD'+struct.pack('<ii',len(level),0));records=[]
     for name,data in level:
@@ -83,17 +83,18 @@ def main():
         text_lump=root/'text-lump.wad';wad(text_lump,[text_patch.read_bytes()])
         _,text=run('text-lump',['-file',str(text_lump),'-dehlump'])
         assert 'Patch text: armor=DPT armor message! saved=game saved.' in text,text
-        things=root/'thing.deh';thing_copy=root/'thing-copy.deh';map_wad=root/'thing-map.wad'
+        things=root/'thing.deh';thing_copy=root/'thing-copy.deh';map_wad=root/'thing-map.wad';patched_map=root/'thing-patched-map.wad'
         thing_map(iwad,map_wad)
-        things.write_bytes(HEADER+b'Thing 31 (Barrel)\nHit points = 123\nSpeed = 1\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 100\nReaction time = 20\n')
+        thing_map(iwad,patched_map,4000)
+        things.write_bytes(HEADER+b'Thing 31 (Barrel)\nID # = 4000\nBits = 2\nHit points = 123\nSpeed = 1\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 100\nReaction time = 20\n')
         thing_copy.write_bytes(things.read_bytes())
         _,plain_thing=run('plain-thing',['-file',str(map_wad),'-deh',str(first)])
-        assert 'Patch thing: type=30 health=20 radius=655360 height=2752512' in plain_thing,plain_thing
-        _,patched_thing=run('patched-thing',['-file',str(map_wad),'-deh',str(things)])
-        assert 'Patch thing: type=30 health=123 radius=1572864 height=3932160 speed=1 mass=250 damage=7 pain=100 reaction=20' in patched_thing,patched_thing
+        assert 'Patch thing: type=30 id=2035 flags=524294 health=20 radius=655360 height=2752512' in plain_thing,plain_thing
+        _,patched_thing=run('patched-thing',['-file',str(patched_map),'-deh',str(things)])
+        assert 'Patch thing: type=30 id=4000 flags=2 health=123 radius=1572864 height=3932160 speed=1 mass=250 damage=7 pain=100 reaction=20' in patched_thing,patched_thing
         embedded=root/'thing-lump.wad';wad(embedded,[things.read_bytes()])
-        _,embedded_thing=run('thing-lump',['-file',str(map_wad),str(embedded),'-dehlump'])
-        assert 'type=30 health=123 radius=1572864 height=3932160' in embedded_thing,embedded_thing
+        _,embedded_thing=run('thing-lump',['-file',str(patched_map),str(embedded),'-dehlump'])
+        assert 'type=30 id=4000 flags=2 health=123 radius=1572864 height=3932160' in embedded_thing,embedded_thing
         # Identical attack commands: standard pistol burns bullets; patched
         # pistol uses empty shell reserve and must not burn the 50 bullets.
         inputs=root/'attack.bin';inputs.write_bytes(b''.join(struct.pack('!bbhBBBB',0,0,0,1 if tic%30>=15 else 0,0,0,0) for tic in range(200)))
@@ -169,8 +170,8 @@ def main():
         pair('text-same',[text_patch,text_copy],True,'health=100 ammo=50')
         text_different=root/'text-different.deh';text_different.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(b'Other message!')).encode()+b'\n'+old+b'Other message!')
         pair('text-different',[text_patch,text_different],False)
-        pair('thing-same',[things,thing_copy],True,'type=30 health=123 radius=1572864',('-file',str(map_wad)))
-        pair('thing-different',[things,first],False,extra=('-file',str(map_wad)))
+        pair('thing-same',[things,thing_copy],True,'type=30 id=4000 flags=2 health=123 radius=1572864',('-file',str(patched_map)))
+        pair('thing-different',[things,first],False,extra=('-file',str(patched_map)))
         pair('duration-same',[duration,duration_copy],True,'health=100',('-headless-input',str(inputs)))
         pair('duration-different',[duration,first],False)
         # Repeating -fast initialization must not mutate the patched pistol

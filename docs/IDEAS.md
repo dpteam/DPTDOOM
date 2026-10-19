@@ -164,7 +164,7 @@
   произвольный код или scripts через DECORATE и не обещать полную ZDoom
   совместимость одним фактом загрузки actor definition.
 - Постепенно подтягивать оставшийся подходящий функционал из **csDoom** и
-  **DOOM ACE/AXE** по конкретным модулям: сначала сравнить behavior и зависимости,
+  **DOOM ACE** по конкретным модулям: сначала сравнить behavior и зависимости,
   затем выбрать минимальную нативную реализацию DPT.DOOM. Не копировать целые
   подсистемы вслепую; отдельно проверять license/provenance, notices,
   third-party audio/network code, DOS/address assumptions и отделять parser/

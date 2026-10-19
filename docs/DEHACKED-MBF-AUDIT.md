@@ -106,7 +106,7 @@ Boom/MBF/MBF21 не отмечать готовыми от наличия refere
 Реализованный subset описан в `DEHACKED.md`: **Misc 0, Ammo max/per, Weapon
 Ammo type и Thing numeric fields**, отдельный DPT_DEH_CLASSIC path, без включения
 полного FEATURE_DEHACKED. Добавлены bounded Text replacements для whitelist
-vanilla messages, Frame Duration/Next frame и bounded Weapon frame references
+vanilla messages, Thing ID/Bits, Frame Duration/Next frame и bounded Weapon frame references
 (existing states, без arbitrary action pointers). Thing state/flags/sounds,
 полный Text/[STRINGS], остальные Frame fields, произвольные weapon frames и BEX
 остаются очередью следующих срезов.

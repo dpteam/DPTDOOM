@@ -29,9 +29,11 @@ int main(void)
         HEADER "Initial Health = 50\nInitial Bullets = 9999999999999999999999999999999\n",
         HEADER "Initial Health = 50\nBlue Armor Class = 3\n", HEADER "BFG Cells/Shot = 0\n",
         HEADER "Monsters Infight = 202\n", HEADER "Unknown field = 1\n",
-        HEADER "Thing 1\nBits = 20\n", HEADER "[CODEPTR]\n", HEADER "Initial Health = 12junk\n",
+        HEADER "Thing 1\nBits = 1073741824\n", HEADER "[CODEPTR]\n", HEADER "Initial Health = 12junk\n",
         "Patch File for DeHackEd v3.0\nDoom version = 109\nPatch format = 6\nMisc 0\nInitial Health = 12\n",
         "Patch File for DeHackEd v3.0\nDoom version = 19\nMisc 0\nInitial Health = 12\n"};
+    for(i=0;i<NUMMOBJTYPES;++i)mobjinfo[i].doomednum=-1;
+    mobjinfo[MT_POSSESSED].doomednum=3004;mobjinfo[MT_SHOTGUY].doomednum=9;
     mobjinfo[MT_POSSESSED].spawnhealth=20;mobjinfo[MT_POSSESSED].speed=8;mobjinfo[MT_ROCKET].speed=20*FRACUNIT;
     mobjinfo[MT_POSSESSED].spawnstate=42;mobjinfo[MT_POSSESSED].flags=123;
     states[S_NULL].tics=-1;states[S_PISTOL1].tics=4;states[S_PISTOL1].nextstate=S_PISTOL2;
@@ -110,13 +112,20 @@ int main(void)
         REQUIRE(!LoadData(patch,head+strlen(old)+3));REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
         head=(size_t)snprintf((char *)patch,sizeof(patch),HEADER "Text %u 4\n",(unsigned)strlen(old));
         memcpy(patch+head,"wrong",5);memcpy(patch+head+5,"tiny",4);
-        REQUIRE(!LoadData(patch,head+9));REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
+    REQUIRE(!LoadData(patch,head+9));REQUIRE(!strcmp(DPT_DehString(GOTARMOR),GOTARMOR));
     }
+    REQUIRE(Load(HEADER "Thing 2\nID # = 4000\nBits = 38\n"));
+    REQUIRE(mobjinfo[MT_POSSESSED].doomednum==4000&&mobjinfo[MT_POSSESSED].flags==38);
+    REQUIRE(!Load(HEADER "Thing 2\nID # = 9\n"));
+    REQUIRE(!Load(HEADER "Thing 2\nID # = -2\n"));
+    REQUIRE(!Load(HEADER "Thing 2\nBits = -1\n"));
+    REQUIRE(!Load(HEADER "Thing 2\nBits = 1073741824\n"));
+    REQUIRE(mobjinfo[MT_POSSESSED].doomednum==4000&&mobjinfo[MT_POSSESSED].flags==38);
     REQUIRE(Load(HEADER "Thing 2 (Trooper)\nHit points = 123\nSpeed = 12\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 0\nReaction time = 20\nThing 34\nSpeed = 1966080\n"));
     REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==123&&mobjinfo[MT_POSSESSED].speed==12);
     REQUIRE(mobjinfo[MT_POSSESSED].radius==24*FRACUNIT&&mobjinfo[MT_POSSESSED].mass==250);
     REQUIRE(mobjinfo[MT_ROCKET].speed==30*FRACUNIT);
-    REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==42&&mobjinfo[MT_POSSESSED].flags==123);
+    REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==42&&mobjinfo[MT_POSSESSED].flags==38);
     DPT_DehChecksum(a);
     {const char *invalid[]={HEADER "Thing 0\nHit points = 1\n",HEADER "Thing 999\nHit points = 1\n",
       HEADER "Thing 2 (Unclosed\nHit points = 1\n",HEADER "Thing 2 (OK) trailing\nHit points = 1\n",
