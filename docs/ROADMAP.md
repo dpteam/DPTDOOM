@@ -300,6 +300,9 @@ partition может породить две отдельные локальны
 
 - [ ] DeHackEd: `.deh` + `DEHACKED` lump, порядок patches, parsing bounds,
   vanilla regression и сверка модификаций в сети. FEATURE_DEHACKED сейчас OFF.
+- [ ] Аудит DOOM ACE `engine/dehacked.*`; альтернативно игровой csDoom, если
+  конкретная реализация проще/подходит. Проверить licenses/provenance и зависимости;
+  локальный csDoomMaster — не игровой порт и не источник DeHackEd/MBF.
 - [ ] MBF-совместимые карты/моды (medium по просьбе владельца); оценить BEX/Boom
   как промежуточные этапы, MBF21 отдельно. Сначала compatibility matrix/tests,
   не выдавать загрузку карты за корректную реализацию её mechanics.

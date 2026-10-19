@@ -133,6 +133,15 @@
   понятные ошибки, regression tests ванильного пути и изменённых states/things.
   Сейчас `FEATURE_DEHACKED` выключен в `doomfeatures.h`; оставшиеся вызовы/
   заголовки upstream не являются рабочей поддержкой.
+- Источники для оценки по просьбе владельца: **DOOM ACE**, альтернативно
+  **игровой csDoom**, если реализация нужного модуля там есть и легче переносится.
+  В ACE есть `engine/dehacked.*`; README описывает привязку к DOS Doom II 1.9,
+  LICENSE — LGPL-2.1. Перед переносом проверить файловые notices/provenance,
+  лицензионную совместимость, 32-bit address assumptions и отделить parser/
+  gameplay от ACE injection/exploit инфраструктуры. Ни parser, ни MBF/MBF21
+  compatibility не считать drop-in. В `refs/csDoomMaster` **только master**:
+  для оценки игровых фич нужны отдельные исходники csDoom; наличие там конкретной
+  совместимости ещё не проверено. Заимствования проверять теми же regression tests.
 - Поддержать **MBF-совместимые карты/моды**. Это не отдельное расширение файла:
   нужны map specials, физика/AI/flags/action pointers и compatibility semantics,
   а не только принятие WAD в loader. Сам факт открытия уровня не доказывает,
