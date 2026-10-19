@@ -10,3 +10,15 @@ Debug/
 Release/
 Build/
 doomgeneric.map
+refs/
+/build/
+/out/
+*.pdb
+*.ilk
+*.res
+*.map
+*.wad
+*.WAD
+.savegame/
+default.cfg
+dptdoom-doom.cfg

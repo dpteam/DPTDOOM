@@ -21,8 +21,11 @@
 #ifndef __DOOMTYPE__
 #define __DOOMTYPE__
 
-// #define macros to provide functions missing in Windows.
-// Outside Windows, we use strings.h for str[n]casecmp.
+// Standard string declarations are needed on every platform.
+#include <string.h>
+
+// Provide functions missing in MSVC. POSIX str[n]casecmp declarations
+// still require strings.h; string.h alone (upstream PR #29) is not enough.
 
 
 #ifdef _MSC_VER

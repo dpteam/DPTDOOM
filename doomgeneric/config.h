@@ -64,34 +64,34 @@
 #undef HAVE_UNISTD_H
 
 /* Name of package */
-#define PACKAGE "Doom"
+#define PACKAGE "dptdoom"
 
 /* Define to the address where bug reports for this package should be sent. */
 #undef PACKAGE_BUGREPORT
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "Doom Generic"
+#define PACKAGE_NAME "DPT.DOOM"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "Doom Generic 0.1"
+#define PACKAGE_STRING "DPT.DOOM 0.1.0-dev"
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "doomgeneric.tar"
+#define PACKAGE_TARNAME "dptdoom"
 
 /* Define to the home page for this package. */
-#define PACKAGE_URL ""
+#define PACKAGE_URL "https://github.com/dpteam/DPTDOOM"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION 0.1
+#define PACKAGE_VERSION "0.1.0-dev"
 
 /* Change this when you create your awesome forked version */
-#define PROGRAM_PREFIX "doomgeneric"
+#define PROGRAM_PREFIX "dptdoom-"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
 /* Version number of package */
-#define VERSION 0.1
+#define VERSION PACKAGE_VERSION
 
 /* Define to 1 if you want to compile the unmodified code */
 #undef ORIGCODE

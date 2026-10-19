@@ -3,9 +3,11 @@
 #include "doomkeys.h"
 #include "m_argv.h"
 #include "doomgeneric.h"
+#include "config.h"
 
+#include <ctype.h>
 #include <stdio.h>
-#include <unistd.h>
+#include <stdlib.h>
 
 #include <stdbool.h>
 #include <SDL.h>
@@ -132,7 +134,13 @@ static void handleKeyInput(){
 
 
 void DG_Init(){
-  window = SDL_CreateWindow("DOOM",
+  SDL_SetMainReady();
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+    fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+    exit(1);
+  }
+  atexit(SDL_Quit);
+  window = SDL_CreateWindow(PACKAGE_NAME,
                             SDL_WINDOWPOS_UNDEFINED,
                             SDL_WINDOWPOS_UNDEFINED,
                             DOOMGENERIC_RESX,

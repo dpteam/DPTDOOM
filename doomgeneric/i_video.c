@@ -467,7 +467,9 @@ void I_EndRead (void)
 
 void I_SetWindowTitle (char *title)
 {
-	DG_SetWindowTitle(title);
+    char branded_title[256];
+    snprintf(branded_title, sizeof(branded_title), "%s - %s", PACKAGE_NAME, title);
+    DG_SetWindowTitle(branded_title);
 }
 
 void I_GraphicsCheckCommandLine (void)

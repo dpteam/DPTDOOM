@@ -204,6 +204,11 @@ void D_Display (void)
     else
     	wipe = false;
 
+    // Timed demos should measure game rendering, not the wall-clock-driven
+    // melt transition. This also makes headless frame counts reproducible.
+    if (timingdemo)
+        wipe = false;
+
     if (gamestate == GS_LEVEL && gametic)
     	HU_Erase();
     
@@ -1081,8 +1086,6 @@ static void D_Endoom(void)
     endoom = W_CacheLumpName(DEH_String("ENDOOM"), PU_STATIC);
 
     I_Endoom(endoom);
-
-	exit(0);
 }
 
 #if ORIGCODE
@@ -1164,7 +1167,9 @@ void D_DoomMain (void)
 {
     int p;
     char file[256];
-    char demolumpname[9];
+    // DoomGeneric returns from D_DoomMain before ticking the game. Demo
+    // playback keeps this pointer, so it must outlive this stack frame.
+    static char demolumpname[9];
 #if ORIGCODE
     int numiwadlumps;
 #endif
@@ -1550,7 +1555,7 @@ void D_DoomMain (void)
     // In -cdrom mode, we write savegames to c:\doomdata as well as configs.
     if (M_ParmExists("-cdrom"))
     {
-        savegamedir = configdir;
+        savegamedir = M_StringDuplicate(configdir);
     }
     else
 #endif

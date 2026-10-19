@@ -22,7 +22,8 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{95A126D2-CC94-4840-BF05-80305041B5FB}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>doomgeneric</RootNamespace>
+    <RootNamespace>DPTDOOM</RootNamespace>
+    <ProjectName>DPT.DOOM</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -70,6 +71,14 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <TargetName>dptdoom</TargetName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\resources\dptdoom.rc">
+      <AdditionalIncludeDirectories>$(ProjectDir)..\resources;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>

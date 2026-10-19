@@ -1,12 +1,18 @@
 #include "doomkeys.h"
 
 #include "doomgeneric.h"
+#include "config.h"
+#include "i_system.h"
 
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include <Windows.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
-static BITMAPINFO s_Bmi = { sizeof(BITMAPINFOHEADER), DOOMGENERIC_RESX, -DOOMGENERIC_RESY, 1, 32 };
+static BITMAPINFO s_Bmi = { { sizeof(BITMAPINFOHEADER), DOOMGENERIC_RESX, -DOOMGENERIC_RESY, 1, 32 } };
 static HWND s_Hwnd = 0;
 static HDC s_Hdc = 0;
 
@@ -48,6 +54,29 @@ static unsigned char convertToDoomKey(unsigned char key)
 	case VK_SHIFT:
 		key = KEY_RSHIFT;
 		break;
+	case VK_MENU:
+		key = KEY_RALT;
+		break;
+	case VK_BACK:
+		key = KEY_BACKSPACE;
+		break;
+	case VK_PAUSE:
+		key = KEY_PAUSE;
+		break;
+	case VK_F1: key = KEY_F1; break;
+	case VK_F2: key = KEY_F2; break;
+	case VK_F3: key = KEY_F3; break;
+	case VK_F4: key = KEY_F4; break;
+	case VK_F5: key = KEY_F5; break;
+	case VK_F6: key = KEY_F6; break;
+	case VK_F7: key = KEY_F7; break;
+	case VK_F8: key = KEY_F8; break;
+	case VK_F9: key = KEY_F9; break;
+	case VK_F10: key = KEY_F10; break;
+	case VK_F11: key = KEY_F11; break;
+	case VK_F12: key = KEY_F12; break;
+	case VK_OEM_PLUS: key = KEY_EQUALS; break;
+	case VK_OEM_MINUS: key = KEY_MINUS; break;
 	default:
 		key = tolower(key);
 		break;
@@ -72,17 +101,17 @@ static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 	switch (msg)
 	{
 	case WM_CLOSE:
-		DestroyWindow(hwnd);
+		// Run Doom's exit callbacks (including saving configuration).
+		I_Quit();
 		break;
 	case WM_DESTROY:
 		PostQuitMessage(0);
-		ExitProcess(0);
 		break;
 	case WM_KEYDOWN:
-		addKeyToQueue(1, wParam);
+		addKeyToQueue(1, (unsigned char)wParam);
 		break;
 	case WM_KEYUP:
-		addKeyToQueue(0, wParam);
+		addKeyToQueue(0, (unsigned char)wParam);
 		break;
 	default:
 		return DefWindowProcA(hwnd, msg, wParam, lParam);
@@ -93,8 +122,8 @@ static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 void DG_Init()
 {
 	// window creation
-	const char windowClassName[] = "DoomWindowClass";
-	const char windowTitle[] = "Doom";
+	const char windowClassName[] = "DPTDOOMWindowClass";
+	const char windowTitle[] = PACKAGE_NAME;
 	WNDCLASSEXA wc;
 
 	wc.cbSize = sizeof(WNDCLASSEXA);
@@ -102,13 +131,13 @@ void DG_Init()
 	wc.lpfnWndProc = wndProc;
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = 0;
-	wc.hInstance = 0;
-	wc.hIcon = 0;
-	wc.hCursor = 0;
+	wc.hInstance = GetModuleHandleA(NULL);
+	wc.hIcon = LoadIconA(wc.hInstance, MAKEINTRESOURCEA(1));
+	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wc.hbrBackground = 0;
 	wc.lpszMenuName = 0;
 	wc.lpszClassName = windowClassName;
-	wc.hIconSm = 0;
+	wc.hIconSm = wc.hIcon;
 
 	if (!RegisterClassExA(&wc))
 	{
@@ -123,7 +152,7 @@ void DG_Init()
 	rect.bottom = DOOMGENERIC_RESY;
 	AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
 
-	HWND hwnd = CreateWindowExA(0, windowClassName, windowTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, 0, 0, 0, 0);
+	HWND hwnd = CreateWindowExA(0, windowClassName, windowTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, 0, 0, wc.hInstance, 0);
 	if (hwnd)
 	{
 		s_Hwnd = hwnd;
@@ -148,13 +177,16 @@ void DG_DrawFrame()
 
 	while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE) > 0)
 	{
+		if (msg.message == WM_QUIT)
+		{
+			I_Quit();
+		}
 		TranslateMessage(&msg);
 		DispatchMessageA(&msg);
 	}
 
 	StretchDIBits(s_Hdc, 0, 0, DOOMGENERIC_RESX, DOOMGENERIC_RESY, 0, 0, DOOMGENERIC_RESX, DOOMGENERIC_RESY, DG_ScreenBuffer, &s_Bmi, 0, SRCCOPY);
 
-	SwapBuffers(s_Hdc);
 }
 
 void DG_SleepMs(uint32_t ms)
@@ -200,7 +232,7 @@ int main(int argc, char **argv)
 {
     doomgeneric_Create(argc, argv);
 
-    for (int i = 0; ; i++)
+    for (;;)
     {
         doomgeneric_Tick();
     }

@@ -42,7 +42,7 @@
 // Location where all configuration data is stored - 
 // default.cfg, savegames, etc.
 
-char *configdir;
+const char *configdir;
 
 // Default filenames for configuration files.
 
@@ -1608,7 +1608,6 @@ static const int scantokey[128] =
 
 static void SaveDefaultCollection(default_collection_t *collection)
 {
-#if ORIGCODE
     default_t *defaults;
     int i, v;
     FILE *f;
@@ -1708,14 +1707,13 @@ static void SaveDefaultCollection(default_collection_t *collection)
     }
 
     fclose (f);
-#endif
 }
 
 // Parses integer values in the configuration file
 
 static int ParseIntParameter(char *strparm)
 {
-    int parm;
+    int parm = 0;
 
     if (strparm[0] == '0' && strparm[1] == 'x')
         sscanf(strparm+2, "%x", &parm);
@@ -1770,9 +1768,9 @@ static void SetVariable(default_t *def, char *value)
 
 static void LoadDefaultCollection(default_collection_t *collection)
 {
-#if ORIGCODE
     FILE *f;
     default_t *def;
+    char line[256];
     char defname[80];
     char strparm[100];
 
@@ -1787,9 +1785,9 @@ static void LoadDefaultCollection(default_collection_t *collection)
         return;
     }
 
-    while (!feof(f))
+    while (fgets(line, sizeof(line), f) != NULL)
     {
-        if (fscanf(f, "%79s %99[^\n]\n", defname, strparm) != 2)
+        if (sscanf(line, "%79s %99[^\n]", defname, strparm) != 2)
         {
             // This line doesn't match
 
@@ -1811,7 +1809,7 @@ static void LoadDefaultCollection(default_collection_t *collection)
         // Strip off trailing non-printable characters (\r characters
         // from DOS text files)
 
-        while (strlen(strparm) > 0 && !isprint(strparm[strlen(strparm)-1]))
+        while (strlen(strparm) > 0 && !isprint((unsigned char)strparm[strlen(strparm)-1]))
         {
             strparm[strlen(strparm)-1] = '\0';
         }
@@ -1828,7 +1826,6 @@ static void LoadDefaultCollection(default_collection_t *collection)
     }
 
     fclose (f);
-#endif
 }
 
 // Set the default filenames to use for configuration files.
@@ -2040,13 +2037,10 @@ float M_GetFloatVariable(char *name)
 // Get the path to the default configuration dir to use, if NULL
 // is passed to M_SetConfigDir.
 
-static char *GetDefaultConfigDir(void)
+static const char *GetDefaultConfigDir(void)
 {
-    char *result = (char *)malloc(2);
-    result[0] = '.';
-    result[1] = '\0';
-
-    return result;
+    // Paths are joined directly to filenames, so keep the separator.
+    return "." DIR_SEPARATOR_S;
 }
 
 // 
@@ -2056,7 +2050,7 @@ static char *GetDefaultConfigDir(void)
 // files are stored - default.cfg, chocolate-doom.cfg, savegames, etc.
 //
 
-void M_SetConfigDir(char *dir)
+void M_SetConfigDir(const char *dir)
 {
     // Use the directory that was passed, or find the default.
 
