@@ -164,7 +164,8 @@ ctest --preset windows-headless
   v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.
   Raw bytes/order/subset digest в ResourceDigest; patched saves используют
-  marker DPTDEH1 + digest, demo recording с патчами пока запрещена. Версия DPT-deh-savemanifest-v14; Ammo max/per,
+  marker DPTDEH1 + digest, patched demos — версию 120 с тем же manifest;
+  vanilla DSG/.lmp байт-совместимы. Версия DPT-deh-demomanifest-v15; Ammo max/per,
   Weapon Ammo type только 0..3, arbitrary frame/noammo/overflow tricks отклонять.
   Tests deh-misc/deh-engine, docs/DEHACKED.md.
   Thing 1-based, optional (label); ID #/Bits/state/sound references bounded; health/reaction/pain/speed/

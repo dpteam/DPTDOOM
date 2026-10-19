@@ -281,6 +281,9 @@ void D_DiagnosticsTic(void)
             }
         }
         // Explicit bounded test run is success, not timedemo's I_Error report.
+        // A bounded recording still has to be finalized into a real file.
+        if (demorecording)
+            G_CheckDemoStatus();
         timingdemo = false;
         demoplayback = false;
         I_Quit();

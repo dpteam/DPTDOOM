@@ -1574,7 +1574,7 @@ void D_DoomMain (void)
         }
     }
     if (DPT_DehLoadedCount())
-        puts("DeHackEd: bounded Misc/Ammo/Text/Weapon/Thing/Frame subset active; patched saves use a manifest; demo recording still disabled; no full DeHackEd/BEX/Boom/MBF compatibility");
+        puts("DeHackEd: bounded Misc/Ammo/Text/Weapon/Thing/Frame subset active; patched saves and demos carry a manifest; no full DeHackEd/BEX/Boom/MBF compatibility");
 #elif ORIGCODE
     //!
     // @category mod

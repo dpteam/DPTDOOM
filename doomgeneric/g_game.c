@@ -2042,6 +2042,14 @@ G_InitNew
 // 
 #define DEMOMARKER		0x80
 
+// Patched demos carry their own version byte and a bounded patch manifest.
+// Vanilla demos keep their original byte layout and stay readable; a patched
+// file cannot be mistaken for a vanilla demo or vice versa.
+#define DPT_DEMO_VERSION        120
+#define DPT_DEMO_MARKER         "DPTDEH1"
+#define DPT_DEMO_MARKER_LEN     7
+#define DPT_DEMO_MANIFEST_SIZE  31   // 7 marker + 20 SHA-1 + 4 source count
+
 
 void G_ReadDemoTiccmd (ticcmd_t* cmd) 
 { 
@@ -2157,8 +2165,6 @@ void G_WriteDemoTiccmd (ticcmd_t* cmd)
 //
 void G_RecordDemo (char *name)
 {
-    if (DPT_DehLoadedCount())
-        I_Error("DeHackEd: demo recording disabled (no patch manifest in demo format); saves with a manifest are supported");
     size_t demoname_size;
     int i;
     int maxsize;
@@ -2225,6 +2231,24 @@ void G_BeginRecording (void)
 	
     // Save the right version code for this demo
  
+#ifdef DPT_DEH_CLASSIC
+    if (DPT_DehLoadedCount())
+    {
+        sha1_digest_t digest;
+        unsigned int count = DPT_DehLoadedCount();
+        int n;
+
+        *demo_p++ = DPT_DEMO_VERSION;
+        memcpy(demo_p, DPT_DEMO_MARKER, DPT_DEMO_MARKER_LEN);
+        demo_p += DPT_DEMO_MARKER_LEN;
+        DPT_DehChecksum(digest);
+        memcpy(demo_p, digest, 20);
+        demo_p += 20;
+        for (n = 0; n < 4; ++n)
+            *demo_p++ = (byte)((count >> (n * 8)) & 0xff);
+    }
+    else
+#endif
     if (longtics)
     {
         *demo_p++ = DOOM_191_VERSION;
@@ -2338,6 +2362,31 @@ void G_DoPlayDemo (void)
         // demo recorded with cph's modified "v1.91" doom exe
         longtics = true;
     }
+#ifdef DPT_DEH_CLASSIC
+    else if (demoversion == DPT_DEMO_VERSION)
+    {
+        sha1_digest_t saved, current;
+        unsigned int count = 0;
+        int n;
+
+        if (memcmp(demo_p, DPT_DEMO_MARKER, DPT_DEMO_MARKER_LEN) != 0)
+            I_Error("Corrupt DeHackEd demo manifest");
+        demo_p += DPT_DEMO_MARKER_LEN;
+        memcpy(saved, demo_p, 20);
+        demo_p += 20;
+        for (n = 0; n < 4; ++n)
+            count |= ((unsigned int)*demo_p++) << (n * 8);
+
+        if (!DPT_DehLoadedCount())
+            I_Error("This demo was recorded with DeHackEd patches; "
+                    "start it with the same -deh/-dehlump set");
+        DPT_DehChecksum(current);
+        if (count != DPT_DehLoadedCount() || memcmp(saved, current, 20) != 0)
+            I_Error("Demo was recorded with different DeHackEd patches; "
+                    "start it with the same -deh/-dehlump set");
+        longtics = false;
+    }
+#endif
     else
     {
         char *message = "Demo is from a different game version!\n"
@@ -2353,6 +2402,13 @@ void G_DoPlayDemo (void)
         printf(message, demoversion, G_VanillaVersionCode(),
                          DemoVersionDescription(demoversion));
     }
+
+#ifdef DPT_DEH_CLASSIC
+    // A vanilla demo must not be replayed under patched rules: its recorded
+    // tic stream was produced with different tables and could desync silently.
+    if (demoversion != DPT_DEMO_VERSION && DPT_DehLoadedCount())
+        I_Error("Vanilla demo cannot be played while DeHackEd patches are active");
+#endif
     
     skill = *demo_p++; 
     episode = *demo_p++; 

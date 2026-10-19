@@ -211,11 +211,30 @@ def main():
         assert 'health=100 ammo=50' in text,text
         text=run_in(vanilla_dir,['-deh',str(first),'-loadgame','0'],False)
         assert 'Vanilla savegame cannot be loaded' in text,text
-        # Demo recording still has no manifest slot and stays blocked.
+        # Demo recording now carries a manifest; vanilla demos stay untouched.
         record_dir=root/'record'
-        text=run_in(record_dir,['-deh',str(first),'-record','test'],False)
-        assert 'demo recording disabled' in text,text
-        assert not list(record_dir.glob('*.lmp'))
+        text=run_in(record_dir,['-deh',str(first),'-record','test'],False,tics=30)
+        assert 'recorded' in text,text
+        demo_files=list(record_dir.glob('*.lmp'))
+        assert len(demo_files)==1,demo_files
+        demo_bytes=demo_files[0].read_bytes()
+        assert demo_bytes[0]==120 and demo_bytes[1:8]==b'DPTDEH1',demo_bytes[:12]
+        assert demo_bytes[-1]==0x80,demo_bytes[-4:]
+        # Same patch set replays; a different set or none is rejected.
+        text=run_in(record_dir,['-deh',str(first),'-playdemo','test.lmp'])
+        assert 'Playing demo' in text,text
+        text=run_in(record_dir,['-deh',str(second),'-playdemo','test.lmp'],False)
+        assert 'different DeHackEd patches' in text,text
+        text=run_in(record_dir,['-playdemo','test.lmp'],False)
+        assert 'recorded with DeHackEd patches' in text,text
+        # Vanilla demo bytes keep version 109 and stay usable without patches.
+        vanilla_demo=record_dir/'vanilla.lmp'
+        text=run_in(record_dir,['-record','vanilla'],False,tics=30)
+        assert vanilla_demo.is_file(),text
+        vanilla_bytes=vanilla_demo.read_bytes()
+        assert vanilla_bytes[0]==109,vanilla_bytes[:4]
+        text=run_in(record_dir,['-deh',str(first),'-playdemo','vanilla.lmp'],False)
+        assert 'Vanilla demo cannot be played' in text,text
 
         def pair(name,patches,success,expected='health=77 ammo=23',extra=()):
             with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]

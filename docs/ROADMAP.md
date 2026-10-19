@@ -385,6 +385,11 @@ partition может породить две отдельные локальны
   разрешён, другой набор/без патчей и vanilla save при активных патчах
   отвергаются до симуляции. Vanilla DSG байт-совместим. Demo recording с
   патчами остаётся запрещённой: в vanilla `.lmp` нет места под manifest.
+- [x] `DPT-deh-demomanifest-v15`: patched demo пишет версию `120`, marker
+  `DPTDEH1`, SHA-1 digest набора патчей и число источников; same-set playback
+  разрешён, другой набор/без патчей и vanilla demo при активных патчах
+  отвергаются. Vanilla `.lmp` (109/111) байт-совместим. Headless test
+  финализирует запись на tic limit, поэтому проверяется настоящий файл.
 - [x] Проверки v11 на Windows: полный MinGW headless **33/33**, MSVC SDL
   **35/35**, MSVC headless ASan **35/35**. Vanilla state baselines не менялись;
   deh-engine проверяет real visual fields/framebuffer и loaded-resource rejects.

@@ -1,7 +1,7 @@
 # DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-savemanifest-v14` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-demomanifest-v15` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -296,12 +296,20 @@ section/field дают ошибку с номером строки до игро
     версию, поэтому старые DSG остаются байт-совместимыми и не портятся.
   - Manifest не заменяет данные сохранения: RNG/target/tracer по-прежнему
     хранятся по ванильной схеме DSG.
-- Demo recording при активных патчах **по-прежнему запрещена**: vanilla `.lmp`
-  не имеет места под manifest, а обещание совместимости с patched demos без
-  отдельного формата было бы ложным. Demo playback с явно выбранным patch
-  остаётся возможным, но не заявляется совместимость/синхронизация с
-  произвольными patched demos. Непатченный attract-demo save/takeover и state
-  baselines остаются без изменений.
+- Demo recording при активных патчах использует **отдельный формат**:
+  первый байт версии — `120` вместо vanilla `109`/`111`, затем 7-байтовый
+  marker `DPTDEH1`, 20-байтовый SHA-1 digest набора патчей и 4-байтовое число
+  источников, и только потом обычный vanilla-заголовок и поток ticcmd.
+  - Тот же набор патчей — демо воспроизводится.
+  - Другой набор или запуск без патчей — fail-fast
+    (`recorded with DeHackEd patches` / `different DeHackEd patches`).
+  - Vanilla-демо при активных патчах отвергается: его tic stream записан с
+    другими таблицами и мог бы молча разойтись.
+  - Vanilla `.lmp` остаётся байт-совместимым: версия `109`/`111` и layout не
+    менялись, поэтому старые демо и внешние инструменты работают как раньше.
+  - Manifest описывает только набор патчей, не IWAD/PWAD; сверка ресурсов для
+    сетевой игры по-прежнему идёт через ResourceDigest.
+- Непатченный attract-demo save/takeover и state baselines остаются без изменений.
 
 ## Проверки
 
@@ -312,7 +320,9 @@ repeatability и load order, без IWAD/окна/Internet.
 `deh-engine` (headless + локальный Doom II): реальные player health/ammo/capacity,
 per-ammo/type в patch report, attack commands обычного/переназначенного pistol, внешний
 patch, повторные patches, два DEHACKED lumps и explicit opt-in/order, bad source,
-patched-save manifest (same/different/no patches, vanilla save rejection) и
+patched-save manifest (same/different/no patches, vanilla save rejection),
+patched-demo manifest (version 120, same/different/no patches, vanilla demo
+rejection) и
 одинаковые/разные patches в настоящих two-peer
 процессах с matching traces (Misc, Ammo/Weapon, Thing). Для Thing создаётся
 временный MAP01 overlay с двумя starts и одной barrel: сравниваются поля
