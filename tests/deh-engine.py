@@ -53,7 +53,7 @@ def main():
         first=root/'first.deh';second=root/'second.deh';same=root/'other-path.deh';bad=root/'bad.deh';overlay=root/'patches.wad'
         first.write_bytes(HEADER+b'Initial Health = 77\nInitial Bullets = 23\n')
         same.write_bytes(first.read_bytes());second.write_bytes(HEADER+b'Initial Health = 88\n')
-        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 13\nNext frame = 14\n')
+        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 13\nSprite number = 1\n')
         wad(overlay,[HEADER+b'Initial Health = 90\n',HEADER+b'Initial Health = 91\n'])
         base=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-tics','5','-headless-session-report']
 
@@ -93,6 +93,9 @@ def main():
         duration=root/'duration.deh';duration_copy=root/'duration-copy.deh'
         duration.write_bytes(HEADER+b'Frame 13\nDuration = 60\nFrame 14\nDuration = 60\nFrame 15\nDuration = 60\nFrame 16\nDuration = 60\n')
         duration_copy.write_bytes(duration.read_bytes())
+        transition=root/'transition.deh';transition_copy=root/'transition-copy.deh'
+        transition.write_bytes(HEADER+b'Frame 13\nNext frame = 15\n')
+        transition_copy.write_bytes(transition.read_bytes())
         fire_ammo={}
         for name,extra in [('standard-fire',[]),('patched-fire',['-deh',str(ammo)]),('slow-fire',['-deh',str(duration)])]:
             work=root/name;work.mkdir()
@@ -158,7 +161,14 @@ def main():
         # Repeating -fast initialization must not mutate the patched pistol
         # durations; the fast-transformed SARG range itself is not patchable.
         pair('duration-fast',[duration,duration_copy],True,'health=100',('-fast','-headless-input',str(inputs)))
-        print('DeHackEd engine: actual health/ammo/spawned Thing, Duration firing cadence file/lump, rejection/guards, same/different/fast network patches and traces OK')
+        pair('transition-same',[transition,transition_copy],True,'health=100',('-headless-input',str(inputs)))
+        pair('transition-different',[transition,first],False)
+        # Skipping S_PISTOL2 skips A_FirePistol, so the same attack stream
+        # leaves the clip unchanged. This verifies the real state graph path.
+        _,transition_text=run('transition-engine',['-deh',str(transition),'-headless-tics','140','-headless-input',str(inputs)])
+        match=re.search(r'Session report: .* health=100 ammo=(\d+)',transition_text)
+        assert match and int(match[1])==50,transition_text
+        print('DeHackEd engine: actual health/ammo/spawned Thing, Duration cadence, Next-frame graph, rejection/guards and network patch traces OK')
 
 
 if __name__=='__main__':main()

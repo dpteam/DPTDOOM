@@ -1,7 +1,7 @@
-# DeHackEd: ограниченный Misc / Ammo / Weapon-ammo / Thing / Frame Duration срез
+# DeHackEd: ограниченный Misc / Ammo / Weapon-ammo / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-duration-v4` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-framegraph-v5` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -125,32 +125,42 @@ map ID, звуков и любых state fields (`Initial frame` и т.п.) по
 staged: неверное поле в конце patch не меняет ни Things, ни Misc/Ammo/Weapon,
 ни digest/count. Reset восстанавливает все исходные таблицы.
 
-### Frame — только Duration
+### Frame — Duration и ограниченный Next frame
 
 Поддерживается `Duration = 1..32767` для существующих состояний; Frame индексы
 **с нуля** в оригинальной таблице, но `Frame 0` (`S_NULL`) неизменяем и отклоняется.
-В отличие от Thing, подписи в скобках у Frame пока не принимаются.
+В отличие от Thing, подписи в скобках у Frame пока не принимаются. `Next frame`
+меняет только существующий `state.nextstate`; action pointers, sprite/frame/misc
+и таблицы weapon references остаются неизменными.
 
 ```text
 Frame 13
 Duration = 60
+Next frame = 15
 ```
 
 `13` — исходный `S_PISTOL1`: задержка до следующего состояния становится 60
-тиков. Меняется только `state.tics`, не nextstate/sprite/frame/misc/action.
+тиков. `Next frame = 15` в том же блоке переводит `S_PISTOL1` на существующий
+`S_PISTOL3`, пропуская `S_PISTOL2` и его action. Индексы — нулевые, диапазон
+`0..NUMSTATES-1`; `0` (`S_NULL`) разрешён как конечный переход.
+
+Меняются только `state.tics` и `state.nextstate`, не sprite/frame/misc/action.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v4, чтобы peers не путали разные semantics.
+обновлён до v5, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
 Nightmare штатно сдвигает вправо/влево, пока **не patchable**. Это не полная
 историческая Frame совместимость. Исходные нулевые/бесконечные vanilla states
 остаются прежними, пока пользователь не меняет их разрешённой положительной
-длительностью; переходы исходного графа не редактируются. Source reset возвращает
-исходные длительности, не копируя function pointers.
+длительностью. После всех staged assignments parser проверяет граф нулевых
+состояний: цикл, состоящий только из zero-tic states, отклоняется, чтобы
+`P_SetMobjState`/`P_SetPsprite` не зависали. Циклы с положительной или
+бесконечной (`-1`) длительностью допустимы. Source reset возвращает исходные
+длительности и переходы, не копируя function pointers.
 
-`Sprite number`, `Sprite subnumber`, `Next frame`, `Unknown 1/2`, code pointers,
+`Sprite number`, `Sprite subnumber`, `Unknown 1/2`, code pointers,
 weapon state references и новые state индексы по-прежнему отклоняются. Для них
 нужны отдельные проверки graph/resources/action compatibility.
 
@@ -201,10 +211,12 @@ Unit tests не линкуют action code: используют synthetic mobji
 info.c и игровой spawn проверяет deh-engine. Все patch/WAD fixtures создаются во временных
 каталогах; IWAD/извлечённые ресурсы не коммитятся.
 
-Duration tests проверяют реальный firing cadence (по расходу ammo с одинаковыми
-attack commands), file/lump equivalence, rollback нескольких секций/digest,
-index/range/overflow/fast exclusion, неизменные action/transition/sprite и reset,
-same/different patch peers и matching traces с `-fast`. `deh-engine` имеет общий
+Duration/Frame tests проверяют реальный firing cadence (по расходу ammo с
+одинаковыми attack commands), file/lump equivalence, rollback нескольких
+секций/digest, index/range/overflow/fast exclusion, неизменные action/sprite и
+reset. Отдельно проверяются Next frame, пропуск pistol action, границы state
+table, zero-tic cycle, same/different patch peers и matching traces с `-fast`.
+`deh-engine` имеет общий
 deadline 150s из-за дополнительных настоящих игровых прогонов, а не снятия
 таймаутов отдельных network/child operations.
 

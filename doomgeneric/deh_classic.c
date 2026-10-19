@@ -51,8 +51,10 @@ static mobjinfo_t base_things[NUMMOBJTYPES];
 // Parser startup is single-threaded. Keep staged tables off the small C stack;
 // unsupported states/flags/sounds never receive an assignment.
 static mobjinfo_t staged_things[NUMMOBJTYPES];
-// Only durations are copied/committed, never action pointers or transitions.
+// Only durations and existing transitions are copied/committed; action
+// pointers, sprites and state payloads never receive patch assignments.
 static int base_tics[NUMSTATES],staged_tics[NUMSTATES];
+static statenum_t base_nextstate[NUMSTATES],staged_nextstate[NUMSTATES];
 typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
 #define THING(name,field,low,high) {name,offsetof(mobjinfo_t,field),low,high}
 static const thing_field_t thing_fields[]={
@@ -131,6 +133,26 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
     }
     return Error(line,"unsupported Thing field (states/flags/sounds/IDs are not supported)");
 }
+static boolean ValidateFrameGraph(const int *tics,const statenum_t *next,unsigned int line)
+{
+    int start;
+    // P_SetMobjState/P_SetPsprite follow zero-tic states synchronously. A
+    // cycle containing a positive or -1 tic yields first; a cycle made solely
+    // of zero-tic states would spin forever.
+    for(start=1;start<NUMSTATES;++start)
+    {
+        int state=start,steps=0;
+        while(state!=S_NULL&&tics[state]==0)
+        {
+            if((int)next[state]<0||(int)next[state]>=NUMSTATES)
+                return Error(line,"Frame transition points outside the state table");
+            state=(int)next[state];
+            if(++steps>NUMSTATES)
+                return Error(line,"Frame transitions create a zero-duration cycle");
+        }
+    }
+    return true;
+}
 void DPT_DehReset(void)
 {
     unsigned int i;
@@ -139,12 +161,20 @@ void DPT_DehReset(void)
         memcpy(base_maxammo,maxammo,sizeof(base_maxammo));memcpy(base_clipammo,clipammo,sizeof(base_clipammo));
         memcpy(base_weapons,weaponinfo,sizeof(base_weapons));
         memcpy(base_things,mobjinfo,sizeof(base_things));
-        for(i=0;i<NUMSTATES;++i)base_tics[i]=states[i].tics;
+        for(i=0;i<NUMSTATES;++i)
+        {
+            base_tics[i]=states[i].tics;
+            base_nextstate[i]=states[i].nextstate;
+        }
     }
     memcpy(maxammo,base_maxammo,sizeof(base_maxammo));memcpy(clipammo,base_clipammo,sizeof(base_clipammo));
     memcpy(weaponinfo,base_weapons,sizeof(base_weapons));
     memcpy(mobjinfo,base_things,sizeof(base_things));
-    for(i=0;i<NUMSTATES;++i)states[i].tics=base_tics[i];
+    for(i=0;i<NUMSTATES;++i)
+    {
+        states[i].tics=base_tics[i];
+        states[i].nextstate=base_nextstate[i];
+    }
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=fields[i].initial;
     deh_species_infighting=DEH_DEFAULT_SPECIES_INFIGHTING;
     loaded=bytes_total=0;last_error[0]=0;
@@ -167,7 +197,11 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     memcpy(staged_max,maxammo,sizeof(staged_max));memcpy(staged_clip,clipammo,sizeof(staged_clip));
     for(i=0;i<NUMWEAPONS;++i)staged_weapon[i]=weaponinfo[i].ammo;
     memcpy(staged_things,mobjinfo,sizeof(staged_things));
-    for(i=0;i<NUMSTATES;++i)staged_tics[i]=states[i].tics;
+    for(i=0;i<NUMSTATES;++i)
+    {
+        staged_tics[i]=states[i].tics;
+        staged_nextstate[i]=states[i].nextstate;
+    }
     while(offset<size)
     {
         size_t start=offset,length;char *text,*equals;int value;
@@ -229,9 +263,17 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         }
         if(section==FRAME)
         {
-            if(!Equal(text,"Duration"))return Error(line_number,"unsupported Frame field (only Duration)");
-            if(value<1||value>32767)return Error(line_number,"Frame Duration must be 1..32767 (zero/negative unsupported)");
-            staged_tics[index]=value;++assignments;continue;
+            if(Equal(text,"Duration"))
+            {
+                if(value<1||value>32767)return Error(line_number,"Frame Duration must be 1..32767 (zero/negative unsupported)");
+                staged_tics[index]=value;++assignments;continue;
+            }
+            if(Equal(text,"Next frame"))
+            {
+                if(value<0||value>=NUMSTATES)return Error(line_number,"Next frame outside the state table");
+                staged_nextstate[index]=(statenum_t)value;++assignments;continue;
+            }
+            return Error(line_number,"unsupported Frame field (only Duration and Next frame)");
         }
         if(section==THING)
         {
@@ -263,12 +305,14 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     }
     if(!section||!assignments)return Error(line_number,"patch has no supported assignments");
     if(staged[1]>staged_max[am_clip])return Error(line_number,"Initial Bullets exceeds Max ammo for bullets");
+    if(!ValidateFrameGraph(staged_tics,staged_nextstate,line_number))return false;
     // Commit only after the entire source has passed validation.
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=staged[i];
     memcpy(maxammo,staged_max,sizeof(staged_max));memcpy(clipammo,staged_clip,sizeof(staged_clip));
     for(i=0;i<NUMWEAPONS;++i)weaponinfo[i].ammo=(ammotype_t)staged_weapon[i];
     memcpy(mobjinfo,staged_things,sizeof(staged_things));
     for(i=0;i<NUMSTATES;++i)states[i].tics=staged_tics[i];
+    for(i=0;i<NUMSTATES;++i)states[i].nextstate=staged_nextstate[i];
     SHA1_UpdateInt32(&digest_context,(unsigned int)size);
     SHA1_Update(&digest_context,(byte*)data,size);
     ++loaded;bytes_total+=(unsigned int)size;return true;

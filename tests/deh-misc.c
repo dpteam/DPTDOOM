@@ -97,7 +97,7 @@ int main(void)
     {const char *invalid[]={HEADER "Frame 0\nDuration = 1\n",HEADER "Frame -1\nDuration = 1\n",
       HEADER "Frame 999999999999999999999\nDuration = 1\n",HEADER "Frame 13 (Pistol)\nDuration = 1\n",
       HEADER "Frame 13\nDuration = 0\n",HEADER "Frame 13\nDuration = -1\n",HEADER "Frame 13\nDuration = 32768\n",
-      HEADER "Frame 13\nNext frame = 14\n",HEADER "Frame 13\nSprite number = 1\n",
+      HEADER "Frame 13\nNext frame = 999999\n",HEADER "Frame 13\nSprite number = 1\n",
       HEADER "Initial Health = 5\nAmmo 0\nPer ammo = 12\nThing 2\nHit points = 42\nFrame 13\nDuration = 2\nFrame 14\nDuration = 0\n"};
      for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i){REQUIRE(!Load(invalid[i]));REQUIRE(states[S_PISTOL1].tics==30&&states[S_PISTOL2].tics==31);
       REQUIRE(deh_initial_health==100&&clipammo[0]==10&&mobjinfo[MT_POSSESSED].spawnhealth==20);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
@@ -106,6 +106,11 @@ int main(void)
      snprintf(patch,sizeof(patch),HEADER "Frame %d\nDuration = 2\n",S_SARG_RUN1);REQUIRE(!Load(patch));
      snprintf(patch,sizeof(patch),HEADER "Frame %d\nDuration = 2\n",S_SARG_PAIN2);REQUIRE(!Load(patch));
      snprintf(patch,sizeof(patch),HEADER "Frame %d\nDuration = 32767\n",NUMSTATES-1);REQUIRE(Load(patch));REQUIRE(states[NUMSTATES-1].tics==32767);}
+    REQUIRE(Load(HEADER "Frame 13\nNext frame = 15\n"));
+    REQUIRE(states[S_PISTOL1].nextstate==S_PISTOL3&&states[S_PISTOL1].action.acv==ActionSentinel);
+    REQUIRE(Load(HEADER "Frame 13\nNext frame = 0\n"));REQUIRE(states[S_PISTOL1].nextstate==S_NULL);
+    REQUIRE(!Load(HEADER "Frame 1\nNext frame = 1\n"));
+    REQUIRE(states[S_LIGHTDONE].nextstate==S_NULL);
     REQUIRE(Load(HEADER "Frame 13\nDuration = 60\n"));REQUIRE(states[S_PISTOL1].tics==60);
     DPT_DehReset();REQUIRE(states[S_PISTOL1].tics==4&&states[S_NULL].tics==-1);
     REQUIRE(states[S_PISTOL1].action.acv==ActionSentinel&&states[S_PISTOL1].nextstate==S_PISTOL2);
