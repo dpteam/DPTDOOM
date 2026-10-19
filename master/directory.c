@@ -18,7 +18,7 @@ static int IPv4(const char **text, unsigned char result[4])
 }
 static uint32_t PrefixMask(unsigned int prefix)
 { return prefix?UINT32_MAX<<(32-prefix):0; }
-int DM_PublicIPv4(const unsigned char *ip)
+int DM_PublicIPv4(const unsigned char ip[4])
 {
     return ip[0] && ip[0]<224 && ip[0]!=127 && ip[0]!=10
         && !(ip[0]==172&&ip[1]>=16&&ip[1]<=31) && !(ip[0]==192&&ip[1]==168)
@@ -176,6 +176,7 @@ unsigned int DM_List(dm_directory_t *d, uint64_t now, unsigned char *reply)
         if(!entry->active)continue;
         memset(row,0,DM_ROW); memcpy(row,entry->id,16); memcpy(row+16,entry->advertised,4);
         DM_Put32(row+20,(uint32_t)((entry->expires-now)/1000)); memcpy(row+24,entry->info,DM_INFO);
+        DM_Put32(row+156,entry->relay_available?DM_RELAY_AVAILABLE:0);
         ++count;
     }
     DM_Put32(reply,count);

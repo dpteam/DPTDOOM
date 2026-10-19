@@ -32,6 +32,9 @@ int MC_ValidList(const unsigned char *body, unsigned int size);
 const char *MC_StatusName(unsigned int status);
 const char *MC_OperationName(unsigned int op);
 void MC_Diagnostic(const dm_client_query_t *query, char *text, size_t capacity);
+// After a successful relay reply, transfer the socket to caller. On Windows
+// caller must already own a WSAStartup reference (engine does).
+uintptr_t MC_TakeSocket(dm_client_query_t *query);
 #ifdef __cplusplus
 }
 #endif

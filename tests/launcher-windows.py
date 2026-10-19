@@ -232,8 +232,10 @@ def main():
             port = free_port()
             master_port = free_port()
             master_log = (root / "master.stdout.log").open("wb")
+            master_config=root/'relay-master.conf'
+            master_config.write_text('address-map=127.0.0.1/32=203.0.113.9\n')
             master = subprocess.Popen([str(exe.parent / "dptdoom-master.exe"), "--port", str(master_port),
-                                       "--log", str(root / "master.events.log")], cwd=root, stdout=master_log, stderr=master_log)
+                                       "--relay", "--config",str(master_config),"--log", str(root / "master.events.log")], cwd=root, stdout=master_log, stderr=master_log)
             p2, c2, storage2 = start(root / "custom data")
             set_fields(c, 1, 2, port)
             c.js("$('extra').checked=true;$('pass').checked=true;send('preview')")
@@ -241,16 +243,24 @@ def main():
             wait(lambda: c.js("$('status').textContent==='Настройки master сохранены.'"))
             pid1 = launch(c, False)
             wait(lambda: any('waiting coop host published' in f.read_text(errors='replace') for f in storage.glob('sessions/*/game.log')))
+            wait(lambda:'relay-host-attached' in (root/'master.events.log').read_text())
             set_fields(c2, 0, 1, 2342)
             c2.js(f"$('serversNav').click();$('masterEndpoint').value='localhost:{master_port}';$('refreshServers').click()")
             wait(lambda: c2.js("document.querySelectorAll('.server-card').length===1"))
             assert c2.js("document.querySelector('.server-card strong').textContent") == '<b>Browser test</b>'
+            assert '203.0.113.9:' in c2.js("document.querySelector('.server-card').textContent")
+            assert 'DIRECT + RELAY' in c2.js("document.querySelector('.server-card').textContent")
             assert c2.js("document.querySelectorAll('.server-card b').length") == 0
             c2.js("document.querySelector('.server-card button').click()")
             wait(lambda: c2.js("mode===2&&$('port').value==='" + str(port) + "'"))
             assert c2.js("$('extra').checked&&$('pass').checked")
             assert c2.js("$('status').textContent.includes('не проверена')")
             pid2 = launch(c2)
+            # The window now exists throughout Connecting; its existence no
+            # longer proves game handshake completion. Wait for both engines.
+            for directory in (storage, storage2):
+                wait(lambda directory=directory: any('Direct coop: connected as player' in f.read_text(errors='replace')
+                     for f in directory.glob('sessions/*/game.log')))
             time.sleep(2)
             close_game(pid2)
             wait(lambda: c2.js("!$('launch').disabled"))
@@ -268,6 +278,8 @@ def main():
             logs = [f.read_text(errors="replace") for d in (storage, storage2) for f in d.glob("sessions/*/game.log")]
             assert sum("connected" in text for text in logs) >= 2, logs
             assert not any("desync" in text.lower() for text in logs), logs
+            assert any('host paired through master' in text for text in logs),logs
+            assert any('guest paired through master' in text for text in logs),logs
             assert any('Launcher master DNS:' in text and 'localhost:' in text and 'Master diagnostic v2:' in text for text in logs)
             network_logs = [f.read_text() for d in (storage, storage2) for f in d.glob('launcher-network-*.log')]
             assert any('dns_error=0' in text and 'resolved_IPv4=127.0.0.1' in text and 'op=LIST' in text for text in network_logs)

@@ -148,6 +148,13 @@ ctest --preset windows-headless
   Launcher DNS failures: launcher-network-<pid>-<ticks>.log в data dir.
   Не логировать raw packet/auth/name; Firewall/NAT/VPN не менять автоматически
   и не выдавать connect timeout за доказанную причину сетевой неисправности.
+- Relay разрешён владельцем: master --relay opt-in, 8 пар/4 на source, 4KiB
+  buffers/side, 64KiB/s/side, idle120s/lifetime6h. Operations5/6 и LIST row156
+  bit0; старые browser builds могут отклонить flag, обновлять обоих peers.
+  Native master/relay.c, docs/RELAY.md; not arbitrary proxy/TLS/auth. Host lease
+  source+secret, guest public session-id, consumed listing; direct first then
+  2s fallback. Tests master-relay/master-publish/UI include unavailable direct,
+  traces/survivor. Launcher wait120s; startup dpt_connect_screen.* uses HUD font.
 - P2P — план: PWAD, PK3 после загрузчика, без commercial IWAD; точный hash
   allowlist только Freedoom 1/2 + shareware DOOM1.WAD (не full Doom I).
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная

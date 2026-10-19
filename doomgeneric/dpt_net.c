@@ -38,6 +38,7 @@ typedef int SOCKET;
 #include <stdarg.h>
 #include <time.h>
 #include "../master/client.h"
+#include "dpt_connect_screen.h"
 
 static dm_client_query_t master_query;
 static boolean master_initialized, master_enabled, master_waiting, master_removing;
@@ -48,6 +49,28 @@ static boolean master_has_lease;
 static uint32_t master_next;
 static unsigned int master_interval=20;
 static unsigned int master_attempt;
+static dm_client_query_t relay_query;
+static boolean relay_initialized,relay_pending,relay_requested;
+static uint32_t relay_retry;
+
+static void RelayHostPoll(void)
+{
+    uint32_t now=DG_GetTicksMs();int result;
+    if(!relay_requested||!master_has_lease)return;
+    if(!relay_pending && (int32_t)(now-relay_retry)>=0)
+    {
+        MC_Begin(&relay_query,master_ip,master_port,DM_RELAY_HOST,master_auth,DM_AUTH,now);
+        relay_query.deadline=(uint64_t)now+120000;relay_pending=true;
+        puts("Relay: attaching outgoing host channel to master (no game-port forwarding needed for relay)");fflush(stdout);
+    }
+    if(!relay_pending)return;
+    result=MC_Poll(&relay_query,now);
+    if(result<0|| (result>0&&relay_query.status))
+    {
+        char diagnostic[1024];MC_Diagnostic(&relay_query,diagnostic,sizeof(diagnostic));printf("Relay: host attach failed %s\n",diagnostic);fflush(stdout);
+        MC_Close(&relay_query);relay_pending=false;relay_retry=now+10000;
+    }
+}
 
 static void MasterDiagnostic(const char *event)
 {
@@ -97,6 +120,7 @@ static void MasterRemove(void)
     uint32_t start;
     if(!master_initialized || master_removing)return;
     master_removing=true; master_enabled=false;
+    if(relay_initialized){MC_Close(&relay_query);relay_pending=false;}
     // A pending registration may have committed remotely before its response.
     // Give it a bounded chance to return the lease, then remove; otherwise TTL.
     start=DG_GetTicksMs();
@@ -203,7 +227,9 @@ static boolean Wait(uint32_t start, const char *operation)
     {
         last_pump = now;
         if (pump_events) pump_events();
-        DG_DrawFrame();
+        if(!active)DPT_ConnectScreen(!strcmp(operation,"accept")?"WAITING FOR PLAYER...":!strcmp(operation,"relay join")?"TRYING RELAY...":"CONNECTING...",
+            !strcmp(operation,"relay join")?"RELAY VIA MASTER":"DIRECT + OPTIONAL RELAY");
+        else DG_DrawFrame();
     }
     DG_SleepMs(1);
     return true;
@@ -275,6 +301,9 @@ static char *Argument(char *name)
 
 boolean DPT_NetRequested(void)
 {
+    if((M_ParmExists("-net-relay")&&!M_ParmExists("-net-host"))
+        ||((M_ParmExists("-relay-master")||M_ParmExists("-relay-session"))&&!M_ParmExists("-net-join")))
+        I_Error("Relay requires a published host or an explicit join session");
     if((M_ParmExists("-master")||M_ParmExists("-session-name")) && !M_ParmExists("-net-host"))
         I_Error("Master publication requires -net-host");
     return M_ParmExists("-net-host") || M_ParmExists("-net-join");
@@ -285,6 +314,7 @@ boolean DPT_NetPeerPresent(void) { return active && !alone; }
 void DPT_NetShutdown(void)
 {
     MasterRemove();
+    if(relay_initialized)MC_Close(&relay_query);
     active = false;
     alone = false;
     disconnect_requested = false;
@@ -329,6 +359,8 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     char *host = Argument("-net-host"), *join = Argument("-net-join");
     char *bind_ip = Argument("-net-bind"), *timeout = Argument("-net-timeout");
     char *master=Argument("-master"), *session_name=Argument("-session-name");
+    char *relay_master=Argument("-relay-master"),*relay_session=Argument("-relay-session");
+    byte relay_id[16];char relay_ip[64];unsigned int relay_port=0;
     struct sockaddr_in address;
     byte hello[DPT_NET_HELLO_SIZE] = {0}, remote[DPT_NET_HELLO_SIZE];
     sha1_context_t context;
@@ -340,6 +372,23 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     if ((host != NULL) == (join != NULL)) I_Error("Use exactly one of -net-host or -net-join");
     if((master || session_name) && !host)I_Error("Master publication requires -net-host");
     if(session_name && !master)I_Error("-session-name requires -master");
+    relay_requested=M_ParmExists("-net-relay");
+    if(relay_requested&&(!host||!master))I_Error("-net-relay requires published host (-net-host and -master)");
+    if((relay_master!=NULL)!=(relay_session!=NULL)|| (relay_master&&!join))I_Error("Relay fallback requires join plus -relay-master and -relay-session");
+    if(relay_master)
+    {
+        char parsed[254];struct in_addr numeric;
+        if(!MC_Endpoint(relay_master,parsed,&relay_port)||strlen(parsed)>=sizeof(relay_ip)||inet_pton(AF_INET,parsed,&numeric)!=1
+            ||strlen(relay_session)!=32)I_Error("Invalid relay endpoint/session id");
+        strcpy(relay_ip,parsed);
+        for(i=0;i<16;++i)
+        {
+            char pair[3]={relay_session[i*2],relay_session[i*2+1],0};char *end;unsigned long value;
+            if(!((pair[0]>='0'&&pair[0]<='9')||(pair[0]>='a'&&pair[0]<='f'))
+                ||!((pair[1]>='0'&&pair[1]<='9')||(pair[1]>='a'&&pair[1]<='f')))I_Error("Invalid relay session id");
+            value=strtoul(pair,&end,16);relay_id[i]=(byte)value;
+        }
+    }
     if (M_ParmExists("-playdemo") || M_ParmExists("-timedemo") || M_ParmExists("-record")
         || M_ParmExists("-loadgame") || M_ParmExists("-turbo") || M_ParmExists("-solo-net")
         || M_ParmExists("-left") || M_ParmExists("-right") || M_ParmExists("-drone")
@@ -357,6 +406,7 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     { WSADATA data; if (WSAStartup(MAKEWORD(2, 2), &data)) I_Error("WSAStartup failed"); }
 #endif
     sockets_started = true;
+    MC_Init(&relay_query);relay_initialized=true;relay_pending=false;relay_retry=DG_GetTicksMs();
     if(master)
     {
         char parsed[254]; struct in_addr numeric;
@@ -400,9 +450,18 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
         printf("Direct coop diagnostic: accept_timeout_ms=%u master=%s build=%s\n",timeout_ms,master?master:"disabled",DPT_NET_BUILD_ID);
         fflush(stdout);
         start = DG_GetTicksMs();
-        while ((connection = accept(listener, NULL, NULL)) == INVALID_SOCKET)
+        for(;;)
         {
+            connection=accept(listener,NULL,NULL);
+            if(connection!=INVALID_SOCKET)break;
             if (!WouldBlock()) I_Error("Network: accept failed");
+            RelayHostPoll();
+            if(relay_pending&&relay_query.result==1&&!relay_query.status)
+            {
+                connection=(SOCKET)MC_TakeSocket(&relay_query);relay_pending=false;
+                master_has_lease=false; // pairing atomically consumed listing
+                puts("Relay: host paired through master; using relayed game transport");fflush(stdout);break;
+            }
             MasterPoll();
             Wait(start, "accept");
         }
@@ -424,19 +483,20 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
         connection = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (connection == INVALID_SOCKET) I_Error("Network: cannot create client socket");
         Nonblocking(connection);
+        printf("Direct coop connect: target=%s timeout_ms=%u fallback=%s\n",join,timeout_ms,relay_master?"relay-after-2000ms":"disabled");fflush(stdout);
         if (connect(connection, (struct sockaddr *)&address, sizeof(address)) == SOCKET_ERROR)
         {
-            if (!WouldBlock()) I_Error("Network: connect failed");
+            if (!WouldBlock()) {if(relay_master)goto relay_fallback;I_Error("Network: connect failed");}
             start = DG_GetTicksMs();
             for (;;)
             {
-                fd_set writable;
+                fd_set writable,errors;
                 struct timeval wait_time = {0, 0};
-                FD_ZERO(&writable); FD_SET(connection, &writable);
+                FD_ZERO(&writable); FD_SET(connection, &writable);FD_ZERO(&errors);FD_SET(connection,&errors);
 #ifdef _WIN32
-                if (select(0, NULL, &writable, NULL, &wait_time) > 0)
+                if (select(0, NULL, &writable, &errors, &wait_time) > 0)
 #else
-                if (select(connection + 1, NULL, &writable, NULL, &wait_time) > 0)
+                if (select(connection + 1, NULL, &writable, &errors, &wait_time) > 0)
 #endif
                 {
                     int error = 0;
@@ -446,12 +506,31 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
                     socklen_t size = sizeof(error);
 #endif
                     if (getsockopt(connection, SOL_SOCKET, SO_ERROR, (char *)&error, &size) || error)
-                        I_Error("Network: connect refused/failed");
+                    {printf("Direct coop connect failed: socket_error=%d\n",error);fflush(stdout);if(relay_master)goto relay_fallback;I_Error("Network: connect refused/failed");}
                     break;
                 }
+                if(relay_master&&(uint32_t)(DG_GetTicksMs()-start)>=2000)goto relay_fallback;
                 Wait(start, "connect");
             }
         }
+        goto join_ready;
+relay_fallback:
+        net_close(connection);connection=INVALID_SOCKET;
+        printf("Relay: direct unavailable; connecting outgoing guest channel to %s (session id omitted)\n",relay_master);fflush(stdout);
+        MC_Begin(&relay_query,relay_ip,relay_port,DM_RELAY_JOIN,relay_id,16,DG_GetTicksMs());
+        start=DG_GetTicksMs();relay_query.deadline=(uint64_t)start+timeout_ms;
+        for(;;)
+        {
+            int result=MC_Poll(&relay_query,DG_GetTicksMs());
+            if(result)
+            {
+                if(result<0||relay_query.status){char diagnostic[1024];MC_Diagnostic(&relay_query,diagnostic,sizeof(diagnostic));I_Error("Relay join failed: %s",diagnostic);}
+                connection=(SOCKET)MC_TakeSocket(&relay_query);break;
+            }
+            Wait(start,"relay join");
+        }
+        puts("Relay: guest paired through master; using relayed game transport");fflush(stdout);
+join_ready:
         local_player = 1;
     }
     Nonblocking(connection);

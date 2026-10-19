@@ -49,7 +49,7 @@ def main():
 
         try:
             mp, gp = port(), port()
-            m, mlog = start("master", [master, "--port", mp, "--lease-seconds", "3"])
+            m, mlog = start("master", [master, "--port", mp, "--lease-seconds", "3", "--relay"])
             wait(lambda: "listening on" in mlog.read_text())
 
             def rows():
@@ -61,7 +61,7 @@ def main():
 
             common = [engine, "-iwad", iwad, "-warp", "1", "-skill", "4", "-dmflags", "3",
                       "-nomonsters", "-net-timeout", "12000", "-headless-tics", "140"]
-            host, hlog = start("host", common + ["-net-host", gp, "-master", f"127.0.0.1:{mp}", "-session-name", "Published test"])
+            host, hlog = start("host", common + ["-net-host", gp, "-master", f"127.0.0.1:{mp}", "-session-name", "Published test", "-net-relay"])
             advertised = wait(rows)
             assert len(advertised) == 1
             row = advertised[0]
@@ -72,19 +72,57 @@ def main():
             time.sleep(3.4)
             assert len(rows()) == 1 and host.poll() is None
             assert "heartbeat:" in (root / "master/dptdoom-master.log").read_text()
-            guest, glog = start("guest", common + ["-net-join", f"127.0.0.1:{gp}"])
+            session=rows()[0][:16].hex()
+            guest, glog = start("guest", common + ["-net-join", f"127.0.0.1:{gp}",'-relay-master',f'127.0.0.1:{mp}','-relay-session',session])
             wait(lambda: not rows())
             assert host.wait(20) == 0, hlog.read_text()
             assert guest.wait(20) == 0, glog.read_text()
             assert "connected as player 1" in hlog.read_text()
             assert "advertisement removed" in hlog.read_text()
+            assert 'using relayed game transport' not in hlog.read_text()
+            assert 'using relayed game transport' not in glog.read_text()
+            assert "connected as player 2" in glog.read_text()
+            # Block the direct path logically by pointing guest at an unused
+            # loopback port; only the registered relay channel can connect it.
+            gp=port();bad_direct=port()
+            host,hlog=start('relayed-host',common+['-headless-trace','trace.txt','-net-host',gp,'-master',f'127.0.0.1:{mp}','-net-relay'])
+            advertised=wait(lambda: [r for r in rows() if wire.struct.unpack('!I',r[156:160])[0]&1])
+            session_id=advertised[0][:16].hex()
+            guest,glog=start('relayed-guest',common+['-headless-trace','trace.txt','-net-join',f'127.0.0.1:{bad_direct}',
+                '-relay-master',f'127.0.0.1:{mp}','-relay-session',session_id])
+            assert host.wait(20)==0,hlog.read_text()
+            assert guest.wait(20)==0,glog.read_text()
+            assert 'host paired through master' in hlog.read_text()
+            assert 'guest paired through master' in glog.read_text()
+            assert 'connected as player 1' in hlog.read_text() and 'connected as player 2' in glog.read_text()
+            assert not rows()
+            assert (root/'relayed-host/trace.txt').read_bytes()==(root/'relayed-guest/trace.txt').read_bytes()
+            # Peer exits cleanly at 70 tics; survivor must reach 140 through EOF
+            # propagated by the relay, not reset/eject to the menu.
+            gp=port();bad_direct=port()
+            shorter=[str(x) for x in common];shorter[shorter.index('-headless-tics')+1]='70'
+            host,hlog=start('relay-survivor-host',common+['-headless-session-report','-net-host',gp,'-master',f'127.0.0.1:{mp}','-net-relay'])
+            advertised=wait(lambda:[r for r in rows() if wire.struct.unpack('!I',r[156:160])[0]&1])
+            guest,glog=start('relay-survivor-guest',shorter+['-net-join',f'127.0.0.1:{bad_direct}',
+                '-relay-master',f'127.0.0.1:{mp}','-relay-session',advertised[0][:16].hex()])
+            assert guest.wait(20)==0,glog.read_text()
+            assert host.wait(20)==0,hlog.read_text()
+            assert 'Session report: state=0 player=1 leveltime=140' in hlog.read_text(),hlog.read_text()
+            assert "connected as player 1" in hlog.read_text()
             assert "connected as player 2" in glog.read_text()
             # Ordinary failed startup invokes shutdown cleanup and removes lease.
             host, hlog = start("timeout", [engine, "-iwad", iwad, "-warp", "1", "-net-host", gp,
-                "-net-timeout", "2000", "-master", f"127.0.0.1:{mp}"])
+                "-net-timeout", "2000", "-headless-dump", "waiting.ppm", "-master", f"127.0.0.1:{mp}"])
             wait(rows)
             assert host.wait(10) != 0
             wait(lambda: not rows())
+            ppm=(root/'timeout/waiting.ppm').read_bytes()
+            header=b'P6\n640 400\n255\n'
+            assert ppm.startswith(header) and len(ppm)==len(header)+640*400*3
+            pixels=ppm[len(header):]
+            # The startup screen must contain native HUD-font text, not the
+            # original all-black platform framebuffer. No screen/desktop capture.
+            assert any(pixels[(88*2)*640*3:(110*2)*640*3]),'missing waiting text'
             # Master outage must not prevent a real direct connection.
             dead = port()
             gp = port()
@@ -98,7 +136,7 @@ def main():
             assert guest.wait(20) == 0, glog.read_text()
             timeout_text=(root/'timeout/stdout.log').read_text()
             assert 'no second player connected' in timeout_text and 'separate' in timeout_text
-            print("Master publication: actual game metadata, heartbeat beyond TTL, remove on join/timeout, direct connect during outage OK")
+            print("Master publication: actual metadata/heartbeat/removal/outage; real engine direct-failure to relay fallback with gameplay OK")
         finally:
             for p in processes:
                 if p.poll() is None:

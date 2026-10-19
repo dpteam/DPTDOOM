@@ -5,8 +5,10 @@
 Python используется только в автоматических тестах. По уточнению владельца
 будущий игровой сервер тоже должен быть нативным C/C++, не Python-сервисом.
 
-Это **каталог объявлений**, не игровой dedicated server, relay или новая модель
-репликации. Текущая игра по-прежнему direct COOP на двоих, без late join.
+По умолчанию это **каталог объявлений**, не игровой dedicated server и не новая
+модель репликации. Есть opt-in `--relay` для двух исходящих игровых соединений
+на том же порту: [RELAY.md](RELAY.md). По умолчанию relay OFF.
+Текущая игра по-прежнему COOP на двоих, без late join.
 Реализована публикация ожидающего хоста из игры и выбор объявления в Windows
 HTML launcher. Это не late join: объявление снимается сразу после accept игрока.
 `master-publish` и launcher test используют настоящие игровые процессы.
@@ -79,7 +81,7 @@ connect timeout не дают права автоматически обвини
 граница наблюдений; логи показывают точную последнюю достигнутую стадию.
 
 `accept timeout` отдельно объясняет, что второй игрок не подключился вовремя,
-а master не является relay. Для ручного ожидания CLI `-net-timeout 120000`;
+а directory без `--relay` не передаёт игровой трафик. Для ручного ожидания CLI `-net-timeout 120000`;
 таймауты и правила Firewall автоматически не изменяются.
 
 По просьбе владельца тестовый внешний адрес — `play.dartpower.xyz:25135`.
@@ -273,7 +275,7 @@ big-endian, значения serialized по offsets; native struct/padding не
 |---|---:|---|
 | 0 | 4 | ASCII `DPTM` |
 | 4 | 2 | directory version = 1 |
-| 6 | 2 | operation: LIST=1, REGISTER=2, HEARTBEAT=3, REMOVE=4 |
+| 6 | 2 | operation: LIST=1, REGISTER=2, HEARTBEAT=3, REMOVE=4, RELAY_HOST=5, RELAY_JOIN=6 |
 | 8 | 4 | body length |
 | 12 | 2 | status: в request 0; response 0=OK, 1=bad request, 2=unauthorized, 3=conflict, 4=capacity |
 | 14 | 2 | reserved = 0 |
@@ -287,7 +289,7 @@ LIST request: пустое тело. Response: uint32 count, затем count ×
 | 16 | 4 | source IPv4 в network byte order |
 | 20 | 4 | оставшийся TTL в секундах (округлён вниз) |
 | 24 | 132 | registration info (ниже) |
-| 156 | 4 | reserved = 0 |
+| 156 | 4 | flags: bit0=relay available, остальные 0; см. RELAY.md |
 
 REGISTER request: 132-byte info:
 
@@ -323,8 +325,8 @@ cleartext TCP, злонамеренных регистраций с собств
 Нельзя проверять нынешний direct-host произвольным TCP connect: это может занять
 его единственный accept вместо игрока. Для reachability нужен отдельный
 безопасный query/challenge путь в игре, затем фильтрация/явный статус в browser.
-IP/домен master настраиваются, direct-connect независим. NAT traversal/relay и
-игровой dedicated server — отдельные задачи.
+IP/домен master настраиваются, direct-connect независим. Relay теперь opt-in
+(RELAY.md); NAT hole punching и игровой dedicated server — отдельные задачи.
 
 Старый `refs/csDoomMaster` изучен, код не скопирован: ошибки `bAddServer` после
 выхода index за массив, доверие входящим UDP registrations/remote list и

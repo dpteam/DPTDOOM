@@ -42,7 +42,8 @@ const char *MC_StatusName(unsigned int status)
 const char *MC_OperationName(unsigned int op)
 {
     switch(op) { case DM_LIST:return "LIST";case DM_REGISTER:return "REGISTER";
-    case DM_HEARTBEAT:return "HEARTBEAT";case DM_REMOVE:return "REMOVE";default:return "UNKNOWN"; }
+    case DM_HEARTBEAT:return "HEARTBEAT";case DM_REMOVE:return "REMOVE";
+    case DM_RELAY_HOST:return "RELAY_HOST";case DM_RELAY_JOIN:return "RELAY_JOIN";default:return "UNKNOWN"; }
 }
 static void LocalAddress(dm_client_query_t *q)
 {
@@ -95,7 +96,18 @@ static void Disconnect(dm_client_query_t *q)
 }
 void MC_Init(dm_client_query_t *q) { memset(q,0,sizeof(*q)); q->socket=(uintptr_t)INVALID_SOCKET; }
 void MC_Close(dm_client_query_t *q) { Disconnect(q); MC_Init(q); }
-static int Finish(dm_client_query_t *q,int result) { q->result=result; LocalAddress(q); Disconnect(q); return result; }
+static int Finish(dm_client_query_t *q,int result)
+{
+    q->result=result;LocalAddress(q);
+    if(!(result==1&&!q->status&&(q->op==DM_RELAY_HOST||q->op==DM_RELAY_JOIN)))Disconnect(q);
+    return result;
+}
+uintptr_t MC_TakeSocket(dm_client_query_t *q)
+{
+    uintptr_t socket=q->socket;
+    if(q->result!=1||q->status||(q->op!=DM_RELAY_HOST&&q->op!=DM_RELAY_JOIN))return (uintptr_t)INVALID_SOCKET;
+    q->socket=(uintptr_t)INVALID_SOCKET;Disconnect(q);return socket;
+}
 static int Fail(dm_client_query_t *q,const char *reason,int error)
 { q->failure=reason;q->os_error=error;return Finish(q,-1); }
 int MC_Endpoint(const char *text,char host[254],unsigned int *port)
@@ -158,7 +170,7 @@ int MC_ValidList(const unsigned char *p,unsigned int size)
     for(i=0;i<count;++i)
     {
         const unsigned char *row=p+4+i*DM_ROW;
-        if(!DM_ValidInfo(row+24) || DM_Get32(row+156) || DM_Get32(row+20)>300
+        if(!DM_ValidInfo(row+24) || (DM_Get32(row+156)&~DM_RELAY_AVAILABLE) || DM_Get32(row+20)>300
             || row[16]==0 || row[16]>=224 || (row[16]==255))return 0;
     }
     return 1;
@@ -220,7 +232,9 @@ int MC_Poll(dm_client_query_t *q,uint64_t now)
         if(DM_Get16(h+14)||q->status>DM_CAPACITY)return Fail(q,"reply-reserved/status",0);
         if(length>DM_MAX_BODY || (q->status&&length))return Fail(q,"reply-length",0);
         if(q->status)return Finish(q,1);
-        if((q->op==DM_REGISTER && length!=DM_LEASE) || (q->op>=DM_HEARTBEAT && length!=4)
+        if(q->op==DM_RELAY_HOST||q->op==DM_RELAY_JOIN)
+        {if(length)return Fail(q,"relay-reply-length",0);return Finish(q,1);}
+        if((q->op==DM_REGISTER && length!=DM_LEASE) || ((q->op==DM_HEARTBEAT||q->op==DM_REMOVE) && length!=4)
             || (q->op==DM_LIST && length<4))return Fail(q,"reply-body-size",0);
         q->wanted=DM_HEADER+length; return 0;
     }

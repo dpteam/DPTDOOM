@@ -80,6 +80,11 @@ Launcher config seeds [Master] Endpoint=play.dartpower.xyz:25135 on profile save
 Use the Servers page to refresh the list or opt in to publishing a waiting host.
 This is NOT a dedicated game server. Waiting-host publication is opt-in;
 directory rows are UNVERIFIED. No TLS, game-port reachability proof or NAT traversal.
+Optional native relay: master operator passes --relay (same master TCP port).
+Update BOTH game PCs to this build. A DIRECT + RELAY browser card tries direct,
+then outgoing relay if direct TCP is unavailable. No additional router changes.
+Relay carries game traffic through the master, without encryption; trusted tests only.
+Launcher waiting timeout is 120 seconds; game window shows connection status.
 
 Direct coop is experimental, exactly 2 players, trusted LAN only (TCP).
 Both peers need the same build, IWAD/PWAD contents/order and skill/map flags.

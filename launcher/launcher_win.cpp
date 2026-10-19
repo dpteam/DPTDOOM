@@ -56,6 +56,7 @@ static bool publishHost;
 static bool masterSettingsValid=true;
 static std::wstring sessionName=L"DPT.DOOM COOP";
 static std::vector<unsigned char> serverRows;
+static std::wstring relayMaster,relaySession;
 struct DirectoryJob
 {
     std::string host;
@@ -161,7 +162,7 @@ static bool MasterFields(const std::vector<std::wstring> &f)
     if(!MC_Endpoint(endpoint.c_str(),host,&port))return false;
     for(wchar_t ch:f[4])if(ch<32||ch>126)return false;
     if(f[4].front()==L' '||f[4].back()==L' ')return false;
-    if(masterEndpoint!=f[2]){serverRows.clear();resolvedMaster.clear();if(directoryThread){directoryTimedOut=true;launchAfterResolve=false;}}
+    if(masterEndpoint!=f[2]){serverRows.clear();resolvedMaster.clear();relayMaster.clear();relaySession.clear();if(directoryThread){directoryTimedOut=true;launchAfterResolve=false;}}
     masterEndpoint=f[2];publishHost=f[3]==L"1";sessionName=f[4];return true;
 }
 static bool StartDirectory(bool list)
@@ -188,7 +189,8 @@ static void DirectoryState()
         json+=L"{\"name\":"+Quote(name)+L",\"map\":"+Quote(map)+L",\"address\":"
             +Quote(std::to_wstring(row[16])+L"."+std::to_wstring(row[17])+L"."+std::to_wstring(row[18])+L"."+std::to_wstring(row[19]))
             +L",\"port\":"+std::to_wstring(DM_Get16(info+124))+L",\"skill\":"+std::to_wstring(info[126])
-            +L",\"flags\":"+std::to_wstring(info[127])+L",\"ttl\":"+std::to_wstring(DM_Get32(row+20))+L"}";
+            +L",\"flags\":"+std::to_wstring(info[127])+L",\"ttl\":"+std::to_wstring(DM_Get32(row+20))
+            +L",\"relay\":"+((DM_Get32(row+156)&DM_RELAY_AVAILABLE)?L"true":L"false")+L"}";
     }
     Send(json+L"]}");
 }
@@ -313,9 +315,15 @@ static void Launch()
         std::string endpoint(masterEndpoint.begin(),masterEndpoint.end());char host[254];unsigned port;
         if(!MC_Endpoint(endpoint.c_str(),host,&port))return;
         std::wstring numeric(resolvedMaster.begin(),resolvedMaster.end());numeric+=L":"+std::to_wstring(port);
-        if(!LP_QuoteAppend(command,LP_COMMAND,L"-master")||!LP_QuoteAppend(command,LP_COMMAND,numeric.c_str())
+        if(!LP_QuoteAppend(command,LP_COMMAND,L"-net-relay")||!LP_QuoteAppend(command,LP_COMMAND,L"-master")||!LP_QuoteAppend(command,LP_COMMAND,numeric.c_str())
             ||!LP_QuoteAppend(command,LP_COMMAND,L"-session-name")||!LP_QuoteAppend(command,LP_COMMAND,sessionName.c_str()))
         {Status(L"Слишком длинная команда.",true);return;}
+    }
+    if(profile.mode==2&&!relaySession.empty())
+    {
+        if(!LP_QuoteAppend(command,LP_COMMAND,L"-relay-master")||!LP_QuoteAppend(command,LP_COMMAND,relayMaster.c_str())
+            ||!LP_QuoteAppend(command,LP_COMMAND,L"-relay-session")||!LP_QuoteAppend(command,LP_COMMAND,relaySession.c_str()))
+        {Status(L"Слишком длинная команда relay.",true);return;}
     }
     State();
     if(profile.mode==1&&profile.lan&&MessageBoxW(window,L"Разрешить подключения со всех IPv4-интерфейсов?\n\nТолько доверенная LAN: без пароля, шифрования и NAT traversal. Не открывайте порт в публичный Интернет.",L"DPT.DOOM — LAN host",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)!=IDYES)return;
@@ -384,6 +392,14 @@ static void Message(const wchar_t *text)
             if(GetTickCount64()-rowsReceived>=static_cast<ULONGLONG>(DM_Get32(row+20))*1000)
             {Status(L"Запись устарела. Обнови список.",true);return;}
             profile.mode=2;profile.port=DM_Get16(info+124);profile.skill=info[126];profile.dmflags=info[127]&3;
+            relaySession.clear();relayMaster.clear();
+            if(DM_Get32(row+156)&DM_RELAY_AVAILABLE)
+            {
+                static const wchar_t hex[]=L"0123456789abcdef";
+                for(unsigned i=0;i<16;++i){relaySession+=hex[row[i]>>4];relaySession+=hex[row[i]&15];}
+                std::string endpoint(masterEndpoint.begin(),masterEndpoint.end());char host[254];unsigned port;
+                if(MC_Endpoint(endpoint.c_str(),host,&port))relayMaster=std::wstring(resolvedMaster.begin(),resolvedMaster.end())+L":"+std::to_wstring(port);
+            }
             profile.nomonsters=(info[127]&4)!=0;profile.fast=(info[127]&8)!=0;profile.respawn=(info[127]&16)!=0;
             swprintf(profile.address,64,L"%u.%u.%u.%u",row[16],row[17],row[18],row[19]);
             if(info[116]=='M'){profile.commercial=1;profile.map=(info[119]-'0')*10+info[120]-'0';}
@@ -409,9 +425,12 @@ static void Message(const wchar_t *text)
         }
         State();Status(L"Выбери ресурсы и запускай. Список серверов обновляется только по запросу.");return;
     }
-    if(action==L"load"){slot=selected;LoadProfile();State();Status(L"Профиль загружен.");return;}
+    if(action==L"load"){relaySession.clear();relayMaster.clear();slot=selected;LoadProfile();State();Status(L"Профиль загружен.");return;}
     if(action==L"log"){OpenLog();return;}
-    if(!Read(f)){Status(L"Проверь числа: эпизод 1–4, карта 1–32, сложность 1–5, порт 1–65535.",true);return;}
+    {launch_profile_t previous=profile;
+     if(!Read(f)){Status(L"Проверь числа: эпизод 1–4, карта 1–32, сложность 1–5, порт 1–65535.",true);return;}
+     if(previous.mode!=profile.mode||previous.port!=profile.port||wcscmp(previous.address,profile.address))
+     {relaySession.clear();relayMaster.clear();}}
     if(action==L"preview"){State(false);return;}
     if(action==L"save"){bool ok=SaveProfile();Status(ok?L"Профиль сохранён.":L"Не удалось сохранить профиль.",!ok);return;}
     if(action==L"launch"){if(masterSettingsMessageFailed&&profile.mode==1)return;Launch();return;}

@@ -15,7 +15,8 @@
 #define DM_MAX_BODY (4 + DM_ROW * DM_MAX_SERVERS)
 #define DM_VERSION 1
 #define DM_GAME_PROTOCOL 2
-enum { DM_LIST=1, DM_REGISTER, DM_HEARTBEAT, DM_REMOVE };
+enum { DM_LIST=1, DM_REGISTER, DM_HEARTBEAT, DM_REMOVE, DM_RELAY_HOST, DM_RELAY_JOIN };
+#define DM_RELAY_AVAILABLE 1u
 enum { DM_OK=0, DM_BAD_REQUEST, DM_UNAUTHORIZED, DM_CONFLICT, DM_CAPACITY };
 
 static inline uint16_t DM_Get16(const unsigned char *p)
@@ -38,6 +39,8 @@ static inline int DM_RequestLength(const unsigned char *p)
     if(op==DM_LIST && !length)return 0;
     if(op==DM_REGISTER && length==DM_INFO)return DM_INFO;
     if((op==DM_HEARTBEAT || op==DM_REMOVE) && length==DM_AUTH)return DM_AUTH;
+    if(op==DM_RELAY_HOST && length==DM_AUTH)return DM_AUTH;
+    if(op==DM_RELAY_JOIN && length==16)return 16;
     return -1;
 }
 static inline const char *DM_HeaderError(const unsigned char *p)
@@ -45,7 +48,7 @@ static inline const char *DM_HeaderError(const unsigned char *p)
     if(memcmp(p,"DPTM",4))return "magic-not-DPTM(wrong-service/proxy/probe)";
     if(DM_Get16(p+4)!=DM_VERSION)return "directory-version-mismatch";
     if(DM_Get16(p+12)||DM_Get16(p+14))return "nonzero-request-status/reserved";
-    if(DM_Get16(p+6)<DM_LIST||DM_Get16(p+6)>DM_REMOVE)return "unknown-operation";
+    if(DM_Get16(p+6)<DM_LIST||DM_Get16(p+6)>DM_RELAY_JOIN)return "unknown-operation";
     if(DM_RequestLength(p)<0)return "invalid-body-length";
     return NULL;
 }

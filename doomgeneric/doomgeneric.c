@@ -32,7 +32,8 @@ void doomgeneric_Create(int argc, char **argv)
 
 	M_FindResponseFile();
 #ifndef DPTDOOM_NETWORK
-    if (M_ParmExists("-net-host") || M_ParmExists("-net-join") || M_ParmExists("-master"))
+    if (M_ParmExists("-net-host") || M_ParmExists("-net-join") || M_ParmExists("-master")
+        || M_ParmExists("-net-relay") || M_ParmExists("-relay-master") || M_ParmExists("-relay-session"))
         I_Error("Direct coop was disabled in this build");
 #endif
 

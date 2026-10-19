@@ -46,6 +46,8 @@ cmake --build --preset windows
 LAN/loopback; это ещё не готовый Internet multiplayer. Есть Windows HTML launcher
 и нативный master directory-прототип: opt-in публикация waiting host и список
 серверов с IP/доменом master в launcher. Записи UNVERIFIED, без port/NAT proof.
+Есть opt-in [direct + relay](docs/RELAY.md) через master при недоступном прямом
+порте; это дополнительный транспорт, не защищённый публичный game server.
 Игровой dedicated server, P2P/PK3 и DECORATE **ещё не реализованы**.
 Нативный Win32 backend пока без звука; для звука использовать SDL backend.
 Для игры со звуком есть проверенная Windows SDL2-сборка:

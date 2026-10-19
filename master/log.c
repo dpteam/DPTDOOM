@@ -13,7 +13,7 @@ static unsigned int max_size, bytes;
 static int failed;
 static struct { uint64_t start; unsigned int shown, suppressed; } limits[ML_EVENTS];
 static const char *names[ML_EVENTS]={"connect", "list", "register", "heartbeat", "remove", "expire",
-    "invalid-request", "unauthorized", "limit-rejected", "deadline", "transport-error", "response"};
+    "invalid-request", "unauthorized", "limit-rejected", "deadline", "transport-error", "response", "relay"};
 
 static void FileFailure(void)
 {

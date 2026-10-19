@@ -26,6 +26,12 @@ https://github.com/kgsws/doom_ace (в refs будет)
 
 ## Уточнения из рабочей сессии
 
+- Владелец явно разрешил **direct + native relay** через существующий master
+  TCP port как резерв недоступного прямого пути, с ограниченными сессиями/буферами,
+  без произвольного TCP proxy и без требования новых настроек роутера.
+- Startup игры: вместо чёрного окна статус штатным Doom HUD-font:
+  WAITING FOR PLAYER / CONNECTING / TRYING RELAY (пока ASCII/English).
+
 - Для hairpin NAT нужны 3 операторских режима публичного адреса: manual IPv4,
   DNS-резолв заданного домена и opt-in HTTPS API. Без хардкода IP владельца,
   с явными trusted hairpin-subnets, refresh/таймаутами/диагностикой; это не

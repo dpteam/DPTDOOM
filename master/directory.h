@@ -9,6 +9,7 @@ typedef struct
     // Authentication source never changes when a listing address is rewritten.
     unsigned char host[4], advertised[4], info[DM_INFO], id[16], token[24];
     uint64_t expires;
+    int relay_available;
 } dm_entry_t;
 #define DM_MAX_ADDRESS_MAPS 8
 typedef struct

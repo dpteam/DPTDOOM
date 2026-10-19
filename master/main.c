@@ -29,6 +29,7 @@ typedef int SOCKET;
 #include "directory.h"
 #include "log.h"
 #include "public_address.h"
+#include "relay.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -54,6 +55,7 @@ static dm_bucket_t rate_ips[DM_RATE_IPS], global_rate;
 static volatile sig_atomic_t stopping;
 static uint64_t next_client_id;
 static pa_state_t public_address;
+static int relay_enabled;
 
 static int LastSocketError(void)
 {
@@ -163,7 +165,12 @@ static int Reply(dm_client_t *client, uint64_t now)
     Prune(now);
     if(DM_RequestLength(client->request)>=0)
     {
-        if(op==DM_LIST) { length=DM_List(&directory,now,body); status=DM_OK; }
+        if(op==DM_RELAY_HOST||op==DM_RELAY_JOIN)
+        {
+            status=relay_enabled?MR_Attach(&directory,(uintptr_t)client->socket,op,client->host,client->request+DM_HEADER,now):DM_CAPACITY;
+            if(status==DM_OK){client->socket=INVALID_SOCKET;Drop(client);return 1;}
+        }
+        else if(op==DM_LIST) { length=DM_List(&directory,now,body); status=DM_OK; }
         else if(op==DM_REGISTER)
         {
             unsigned char entropy[DM_AUTH];
@@ -185,13 +192,13 @@ static int Reply(dm_client_t *client, uint64_t now)
         unsigned int event=op==DM_LIST?ML_LIST:op==DM_REGISTER?ML_REGISTER:op==DM_REMOVE?ML_REMOVE:ML_HEARTBEAT;
         char metadata[200];
         if(status==DM_BAD_REQUEST)reason=op==DM_REGISTER?DM_InfoError(client->request+DM_HEADER):"bad-request";
-        else if(status==DM_CONFLICT)reason="endpoint-already-registered-or-ID-collision;wait-TTL";
+        else if(status==DM_CONFLICT)reason=op>=DM_RELAY_HOST?"relay-channel-already-attached/not-waiting":"endpoint-already-registered-or-ID-collision;wait-TTL";
         else if(status==DM_CAPACITY)
         {
             unsigned int j,count=0,ip_count=0;
             for(j=0;j<DM_MAX_SERVERS;++j)if(directory.entries[j].active)
             {++count;if(!memcmp(directory.entries[j].host,client->host,4))++ip_count;}
-            reason=!DM_MappingReady(&directory,client->host)?"public-address-discovery-not-ready(retry)":ip_count>=DM_MAX_IP_SERVERS?"per-IP-registration-limit(4)":count>=DM_MAX_SERVERS?"directory-capacity(128)":"registration-capacity";
+            reason=op>=DM_RELAY_HOST?(relay_enabled?"relay-session-capacity":"relay-disabled-by-operator"):!DM_MappingReady(&directory,client->host)?"public-address-discovery-not-ready(retry)":ip_count>=DM_MAX_IP_SERVERS?"per-IP-registration-limit(4)":count>=DM_MAX_SERVERS?"directory-capacity(128)":"registration-capacity";
         }
         else if(status==DM_UNAUTHORIZED)
         {
@@ -301,10 +308,12 @@ static int Run(SOCKET listener)
             else FD_SET(client->socket,&reads);
             if(client->socket>maximum)maximum=client->socket;
         }
-        timeout.tv_sec=0; timeout.tv_usec=100000;
+        {uintptr_t high=(uintptr_t)maximum;MR_Prepare(&directory,&reads,&writes,&high,now);maximum=(SOCKET)high;}
+        timeout.tv_sec=0; timeout.tv_usec=10000;
         if(select((int)(maximum+1),&reads,&writes,NULL,&timeout)==SOCKET_ERROR)
         { if(WouldBlock() || stopping)continue; ML_Message("Master: select failed"); return 1; }
         now=Now();
+        MR_Poll(&reads,&writes,now);
         // Process old clients before accepting new ones: newly accepted sockets
         // are not in the ready fd_sets and must not be read speculatively.
         for(i=0;i<DM_CLIENTS;++i)
@@ -376,12 +385,14 @@ int main(int argc, char **argv)
     SOCKET listener;
     int result;
     directory.lease_seconds=60;
+    MR_Init();
     PA_Init(&public_address);
     for(i=1;i<(unsigned int)argc;++i)
     {
         if(!strcmp(argv[i],"--version")) { puts("DPT.DOOM master 0.1.0-dev"); return 0; }
         if(!strcmp(argv[i],"--help"))
-        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path]\nConfig: address-map=private-CIDR=public-IPv4 (optional operator hairpin policy).\nDefault loopback:25135, TTL 60s, no address rewriting, log dptdoom-master.log.\nExperimental directory v1; no TLS, game relay or port probing."); return 0; }
+        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path] [--relay]\nDefault loopback:25135, TTL 60s, no address rewriting, relay OFF.\n--relay: opt-in 8 bounded session pairs over this port, no arbitrary proxy or TLS.\nConfig: see docs/MASTER.md. No game-port probing or router changes."); return 0; }
+        if(!strcmp(argv[i],"--relay")){relay_enabled=1;continue;}
         if(i+1>=(unsigned int)argc)goto usage;
         if(!strcmp(argv[i],"--bind"))host=argv[++i];
         else if(!strcmp(argv[i],"--config")){if(config_path)goto usage;config_path=argv[++i];}
@@ -424,8 +435,10 @@ int main(int argc, char **argv)
     }
     {char message[360];snprintf(message,sizeof(message),"Public address discovery: mode=%s host=%s refresh_seconds=%u (API URL omitted; HTTPS request only in explicit api mode)",public_address.mode,public_address.host[0]?public_address.host:"none",public_address.refresh_seconds);ML_Message(message);}
     ML_Message("Master diagnostic v2: status 0=OK 1=BAD_REQUEST 2=UNAUTHORIZED 3=CONFLICT 4=CAPACITY; cid is local to this process, peer port is TCP source port, not game port");
+    ML_Message(relay_enabled?"Relay ENABLED: 8 session pairs, 4096-byte buffers/side, 64KiB/s/side, 120s idle, 6h lifetime; registered peers only; NO encryption":"Relay disabled (operator must explicitly pass --relay)");
     ML_Message("Requests are logged with byte progress and failure reason; no names/tokens/payload dumps. Missing remote events means no observed request, not proof of firewall cause.");
     result=Run(listener);
+    MR_Close();
     for(i=0;i<DM_CLIENTS;++i)Drop(&clients[i]);
     DM_Close(listener);
 cleanup:

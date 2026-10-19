@@ -93,6 +93,12 @@ portable-профиле. Ресурсы вне него остаются абс�
   Никаких auto refresh/download. Все записи UNVERIFIED; выбор только заполняет
   форму, окончательная совместимость — handshake. Подробнее `docs/MASTER.md`.
   Раздел «Игрок» по-прежнему недоступен; ping/favorites/filter пока нет.
+- Публикация host теперь также пытается прикрепить outgoing relay channel.
+  Если master запущен с --relay, карточка DIRECT + RELAY; guest после direct
+  connect failure/2s timeout использует relay той же session identity. Manual
+  direct без выбранной карточки не использует relay. Ожидание — 120s.
+  Это bandwidth master, без TLS; детали и limits — RELAY.md. Старые browser
+  builds могут не принять новое LIST flag: обновить оба клиента одной сборкой.
 - Закрытие launcher не завершает игру. «Лог сессии» открывает фиксированный
   системный Notepad, не файловые ассоциации/shell. Ошибки игры идут в лог (`-nogui`).
 

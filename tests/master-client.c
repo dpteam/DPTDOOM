@@ -51,7 +51,8 @@ int main(int argc,char **argv)
     memcpy(body+28,"Session",7);memcpy(body+28+116,"MAP01",5);DM_Put16(body+28+124,2342);body[28+126]=3;body[28+128]=2;
     body[20]=127;body[23]=1;DM_Put32(body+24,60);
     REQUIRE(MC_ValidList(body,sizeof(body)));
-    body[sizeof(body)-1]=1;REQUIRE(!MC_ValidList(body,sizeof(body)));body[sizeof(body)-1]=0;
+    body[sizeof(body)-1]=1;REQUIRE(MC_ValidList(body,sizeof(body)));
+    body[sizeof(body)-1]=2;REQUIRE(!MC_ValidList(body,sizeof(body)));body[sizeof(body)-1]=0;
     body[20]=224;REQUIRE(!MC_ValidList(body,sizeof(body)));
     MC_Init(&query); REQUIRE(MC_Begin(&query,"domain.invalid",25135,DM_LIST,NULL,0,1)<0);
     REQUIRE(MC_Begin(&query,"127.0.0.1",0,DM_LIST,NULL,0,1)<0);

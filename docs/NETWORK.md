@@ -6,6 +6,10 @@
 reconnect, late join, аутентификации или шифрования. Только доверенная LAN/loopback.
 Не выставлять порт в публичный Интернет как готовый защищённый сервер.
 
+Дополнительный транспорт **direct + relay** теперь описан в [RELAY.md](RELAY.md):
+explicit operator --relay, два исходящих соединения к master, fallback после
+отказа direct. Это не полноценный Internet-ready game server/NAT traversal.
+
 Нативное standalone directory-ядро (`dptdoom-master`) описано в [MASTER.md](MASTER.md).
 Оно поддерживает opt-in публикацию waiting host и выбор в launcher browser,
 не меняя direct protocol/lifecycle. CLI `-master IPv4:port -session-name "Name"`

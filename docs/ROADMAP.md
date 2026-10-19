@@ -41,6 +41,10 @@ OPL-синтез, мышь/геймпады. Дефолтный native Win32 bac
 
 ## Ближайшее
 
+- По подтверждению владельца: direct + opt-in native relay через master TCP
+  port, без новых пробросов; это не натягивание source IP и не смена роутера.
+  Scope/limits/security — docs/RELAY.md.
+
 1. Прогнать новый publication/browser на GitHub и двух машинах; затем улучшать
    reachability/compatibility UI. Player profiles пока план. Graceful engine
    startup/handshake recovery, reconnect/re-host lifecycle — отдельный этап.
@@ -336,6 +340,14 @@ partition может породить две отдельные локальны
   также world/map/physics/AI изменений, не только подключения Vulkan.
 
 ## Что не заявляется готовым
+
+Добавлен opt-in bounded relay как резерв прямого подключения, startup HUD-font
+экран ожидания и 120s launcher wait; master-relay / master-publish / UI tests
+проверяют недоступный direct → relay, traces и survivor. Remote run/две машины
+для этой ревизии ещё не подтверждены, Internet-hardening/TLS/auth отсутствуют.
+Локально: 33/33 MSVC SDL, 30/30 MinGW headless, 32/32 MSVC headless ASan;
+state baselines не менялись. Full SDL rerun зелёный после ожидания handshake в
+UI test (startup-окно теперь появляется раньше завершения подключения).
 
 README showcase обновлён по просьбе владельца: WebView screenshots обеих тем и
 три headless demo framebuffer PNG, без desktop/window borders/личных путей.
