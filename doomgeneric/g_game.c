@@ -222,6 +222,8 @@ static boolean *joybuttons = &joyarray[1];		// allow [-1]
  
 static int      savegameslot; 
 static char     savedescription[32]; 
+static boolean demo_save_pending;
+static void G_StopDemoForLoad(void);
  
 #define	BODYQUESIZE	32
 
@@ -902,6 +904,19 @@ void G_Ticker (void)
 	} 
     }
     
+    // Demo input replaces live ticcmds, so a menu save must not be delivered
+    // as a special button. Snapshot at this boundary without consuming demo.
+    if (demo_save_pending)
+    {
+        demo_save_pending = false;
+        if (demoplayback && gamestate == GS_LEVEL)
+        {
+            G_DoSaveGame();
+            printf("Demo snapshot saved; playback continues.\n");
+            fflush(stdout);
+        }
+    }
+
     // get commands, check consistancy,
     // and build new consistancy check
     buf = (gametic/ticdup)%BACKUPTICS; 
@@ -1570,6 +1585,8 @@ void G_DoLoadGame (void)
     }
 
     savedleveltime = leveltime;
+    G_StopDemoForLoad();
+    demo_save_pending = false;
     
     // load a base level 
     G_InitNew (gameskill, gameepisode, gamemap); 
@@ -1611,7 +1628,10 @@ G_SaveGame
         I_Error("Invalid savegame slot: %d", slot);
     savegameslot = slot;
     M_StringCopy(savedescription, description, SAVESTRINGSIZE);
-    sendsave = true;
+    if (demoplayback && gamestate == GS_LEVEL)
+        demo_save_pending = true;
+    else
+        sendsave = true;
 }
 
 void G_DoSaveGame (void) 
@@ -1619,6 +1639,8 @@ void G_DoSaveGame (void)
     char *savegame_file;
     char *temp_savegame_file;
     char *recovery_savegame_file;
+
+    demo_save_pending = false;
 
     recovery_savegame_file = NULL;
     temp_savegame_file = P_TempSaveGameFile();
@@ -2114,6 +2136,23 @@ void G_BeginRecording (void)
 //
 
 char*	defdemoname; 
+
+static void G_StopDemoForLoad(void)
+{
+    if (!demoplayback) return;
+    W_ReleaseLumpName(defdemoname);
+    demoplayback = false;
+    timingdemo = false;
+    singledemo = false;
+    singletics = false;
+    netdemo = false;
+    netgame = false;
+    deathmatch = 0;
+    consoleplayer = displayplayer = 0;
+    puts("Demo playback stopped: loading snapshot as single-player.");
+    fflush(stdout);
+    // G_InitNew restores usergame and rebuilds the level/player objects.
+}
  
 void G_DeferedPlayDemo (char* name) 
 { 
@@ -2170,6 +2209,8 @@ void G_DoPlayDemo (void)
     demobuffer = demo_p = W_CacheLumpName (defdemoname, PU_STATIC); 
 
     demoversion = *demo_p++;
+    printf("Playing demo %s (version %d).\n", defdemoname, demoversion);
+    fflush(stdout);
 
     if (demoversion == G_VanillaVersionCode())
     {

@@ -649,7 +649,7 @@ void M_SaveSelect(int choice)
 //
 void M_SaveGame (int choice)
 {
-    if (!usergame)
+    if (!usergame && !(demoplayback && gamestate == GS_LEVEL && !netgame))
     {
 	M_StartMessage(DEH_String(SAVEDEAD),NULL,false);
 	return;
@@ -680,7 +680,7 @@ void M_QuickSaveResponse(int key)
 
 void M_QuickSave(void)
 {
-    if (!usergame)
+    if (!usergame && !(demoplayback && gamestate == GS_LEVEL && !netgame))
     {
 	S_StartSound(NULL,sfx_oof);
 	return;
