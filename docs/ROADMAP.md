@@ -332,7 +332,15 @@ partition может породить две отдельные локальны
   прогон 34/35: второй WebView2/CDP launcher startup превысил test deadline;
   отдельная перепроверка deh-misc/master-client-wire/launcher-windows — 3/3.
   Не относить первый WebView failure к DeHackEd/macOS без evidence.
-- [ ] Следующие sections: Frame graph extensions, BEX и full string table. Не считать
+- [x] Аудит остатка classic-секций по reference source: classic `Sound N` в
+  csDoomNew помечен `(no longer supported)`, `Sprite N` использует
+  `Offset`/`toff[dversion]`, `Pointer N` — `codepconv`/`OrgActionPtrs`, то есть
+  DOS-EXE offsets и version-bound function pointers. Эти три секции осознанно
+  **не реализуются** в историческом виде; `Cheat` — отдельный сетевой класс.
+  Вывод: безопасно реализуемый classic-набор (Misc/Ammo/Weapon/Thing/Frame/Text)
+  закрыт. Детали — `docs/DEHACKED-MBF-AUDIT.md`.
+- [ ] Следующий слой — BEX: `[STRINGS]`, безопасные `[PARS]`, затем ограниченный
+  `[CODEPTR]` только с allowlist существующих DPT action functions. Не считать
   ограниченный subset полной совместимостью; arbitrary code pointers не принимать.
 - [x] Subset `DPT-deh-misc-ammo-v2`: Ammo Max ammo/Per ammo, Weapon Ammo type
   0..3, staged rollback всех таблиц, cross-field validation, engine firing/

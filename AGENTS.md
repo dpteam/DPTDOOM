@@ -168,6 +168,9 @@ ctest --preset windows-headless
   vanilla DSG/.lmp байт-совместимы. Версия DPT-deh-demomanifest-v15; Ammo max/per,
   Weapon Ammo type только 0..3, arbitrary frame/noammo/overflow tricks отклонять.
   Tests deh-misc/deh-engine, docs/DEHACKED.md.
+  Classic Sound/Sprite/Pointer осознанно не реализуются: это DOS-EXE offsets и
+  version-bound function pointers (см. DEHACKED-MBF-AUDIT.md). Cheat — отдельный
+  сетевой класс. Безопасный classic-набор считается закрытым; следующий слой BEX.
   Thing 1-based, optional (label); ID #/Bits/state/sound references bounded; health/reaction/pain/speed/
   radius/height/mass/damage bounded; Frame Duration1..32767, S_NULL и SARG fast range запрещены,
   bounded Text whitelist; durations only staged/reset; bounded Next frame and Weapon frame references only,

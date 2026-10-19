@@ -259,11 +259,19 @@ Unknown 2 = 64
 graph/resources/action compatibility.
 
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-Sound/Sprite/Pointer/Cheat, `[STRINGS]`, неподдерживаемые Frame/Thing fields,
+`Sound/Sprite/Pointer/Cheat`, `[STRINGS]`, неподдерживаемые Frame/Thing fields,
 BEX, include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
 после ведущих пробелов считаются комментариями. CRLF/LF поддерживаются.
+
+Classic `Sound`/`Sprite`/`Pointer` не планируются к реализации в историческом
+виде: `Sound` в современных портах помечен как unsupported, а `Sprite`/`Pointer`
+адресуют таблицы DOS-EXE (`Offset`, `toff[dversion]`, `OrgActionPtrs`). Это
+противоречит правилу «никаких executable offsets/произвольных function
+pointers». Современные эквиваленты — BEX `[STRINGS]`/`[PARS]`/`[CODEPTR]` с
+allowlist действий, отдельный compatibility level. Подробности и ссылки на
+проверенные места reference source — `DEHACKED-MBF-AUDIT.md`.
 
 Ограничения: максимум 16 источников, суммарно 256 KiB, строка до 2047 bytes,
 embedded NUL запрещён. Переполнение strtol/неверное число/пустой patch/unknown

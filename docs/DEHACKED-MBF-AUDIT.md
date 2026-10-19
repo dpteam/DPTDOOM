@@ -55,12 +55,34 @@ DOS address hooks или код, который рассчитывает на о
 ACE LICENSE — LGPL-2.1; это отдельная обязанность по notices/совместимости,
 не blanket license всего `refs`.
 
+## Проверенный предел classic-секций (по reference source)
+
+Проверка `refs/csDoomNew/client/d_dehacked.cpp` показала, что три оставшиеся
+classic-секции в современных портах **не реализуются безопасно** и не могут быть
+перенесены в DPT.DOOM:
+
+| Секция | Как устроена исторически | Вывод для DPT.DOOM |
+|---|---|---|
+| `Sound N` | старый вариант через `Offset` в EXE; в csDoomNew функция печатает `Sound %d (no longer supported)` и ничего не делает | не реализовывать: мёртвый формат |
+| `Sprite N` | `Offset` → `(offset - toff[dversion] - 22044) / 8`, то есть адрес в DOS-EXE | не реализовывать: executable offsets запрещены правилами проекта |
+| `Pointer N` | `codepconv[ptrNum]` + `OrgActionPtrs[...]` — таблица function pointers, привязанная к версии EXE | не реализовывать в classic-виде; современный аналог — `[CODEPTR]` с именованными действиями |
+
+Практический вывод: **classic-срез, безопасно реализуемый без DOS-смещений и
+произвольных function pointers, у нас закрыт** — это `Misc`, `Ammo`, `Weapon`,
+`Thing`, `Frame`, `Text`. Остальные classic-секции либо устарели, либо требуют
+исполнения/адресации чужого бинарника. Современные эквиваленты
+(`[STRINGS]`, `[PARS]`, `[CODEPTR]`) относятся к BEX-слою и реализуются отдельно,
+с allowlist действий и собственным compatibility level.
+
+`Cheat` — отдельный класс: не parser-проблема, а сетевые/привилегированные
+изменения, поэтому он не входит в bounded classic subset.
+
 ## Предлагаемая матрица совместимости
 
 | Уровень | Первый целевой scope | Пока |
 |---|---|---|
 | `vanilla` | Текущие IWAD/PWAD без patches | Работает, baseline закреплены |
-| `deh-classic` | bounded `.deh`, `DEHACKED` lump; Thing/Frame/Weapon/Ammo/Misc/Text | Thing numeric и Frame Duration реализованы; graph/Text остаются отдельными срезами |
+| `deh-classic` | bounded `.deh`, `DEHACKED` lump; Misc/Ammo/Weapon/Thing/Frame/Text | Реализовано; `Sound`/`Sprite`/`Pointer` classic небезопасны (см. выше) |
 | `bex-basic` | `[STRINGS]`, безопасные `[PARS]`, ограниченные compatibility aliases | После classic tests |
 | `bex-codeptr` | `[CODEPTR]` только allowlist существующих DPT action functions | Не исполнять произвольные pointers |
 | `boom` | generalized linedefs/sectors, Boom flags/specials, blockmap/physics cases | Отдельный map/runtime этап |
@@ -77,9 +99,11 @@ demo сохранять applied patch identity или запрещать нес�
 1. Отдельный C parser module с bounded line/section/number/string limits и
    overflow-safe assignments в DPT tables; внешний `.deh` и lump.
 2. Manifest applied patch digest до запуска уровня; ошибки/unknown fields в log.
-3. Только classic `Thing`, `Frame`, `Ammo`, `Weapon`, `Misc`, `Text` поля,
+3. Только classic `Misc`, `Ammo`, `Weapon`, `Thing`, `Frame`, `Text` поля,
    которые имеют прямой безопасный mapping на существующие структуры. Не
    включать arbitrary code pointers, новые states/actions и memory offsets.
+   Classic `Sound`/`Sprite`/`Pointer` отклоняются осознанно: их формат — DOS-EXE
+   offsets или version-bound function pointers.
 4. Synthetic PWAD/DEH fixtures в tests, не коммитить IWAD/extracted resources:
    changed monster health, weapon ammo, player start health, strings и state
    tics; malformed/truncated/duplicate/oversized/unknown cases.
