@@ -1471,6 +1471,11 @@ boolean M_Responder (event_t* ev)
         return true;
     }
 
+    // Chat owns keyboard editing (especially Escape cancel and +/- text).
+    // Do not open the menu before HU_Responder can process the key.
+    if (chat_on && !menuactive && (ev->type == ev_keydown || ev->type == ev_keyup))
+        return false;
+
     // key is the key pressed, ch is the actual character typed
   
     ch = 0;

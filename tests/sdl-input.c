@@ -54,6 +54,26 @@ static void Empty(void)
 
 void I_GetEvent(void);
 
+static void TestTypedSpace(void)
+{
+    int i, received = 0;
+    PushKey(SDL_KEYDOWN, SDL_SCANCODE_SPACE, SDLK_SPACE, 0);
+    PushKey(SDL_KEYUP, SDL_SCANCODE_SPACE, SDLK_SPACE, 0);
+    for (i = 0; i < 4 && received < 2; ++i)
+    {
+        event_t *event;
+        I_GetEvent();
+        while ((event = D_PopEvent()) != NULL)
+        {
+            CHECK(event->data1 == KEY_USE);
+            CHECK(event->type == (received ? ev_keyup : ev_keydown));
+            CHECK(event->data2 == (received ? 0 : ' '));
+            ++received;
+        }
+    }
+    CHECK(received == 2);
+}
+
 static void TestEngineQueue(void)
 {
     int i, received = 0;
@@ -89,6 +109,7 @@ int main(int argc, char **argv)
     DG_DrawFrame();
     Empty();
     TestEngineQueue();
+    TestTypedSpace();
     PushKey(SDL_KEYDOWN, SDL_SCANCODE_F1, SDLK_F1, 0);
     PushKey(SDL_KEYUP, SDL_SCANCODE_F1, SDLK_F1, 0);
     PushKey(SDL_KEYDOWN, SDL_SCANCODE_F12, SDLK_F12, 0);

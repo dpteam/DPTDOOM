@@ -297,6 +297,10 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-loopback.py"
                 --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}" --dmflags 3)
             set_tests_properties(net-loopback-dmflags PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+            add_test(NAME net-chat COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-loopback.py"
+                --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}" --chat)
+            set_tests_properties(net-chat PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
         endif()
     endif()
     if(DPTDOOM_BACKEND STREQUAL "sdl")

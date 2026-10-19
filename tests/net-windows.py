@@ -47,7 +47,7 @@ def main():
         logs = [(path / "game.log").open("w") for path in dirs]
         try:
             base = [str(exe), "-iwad", str(iwad), "-warp", "1", "-net-timeout", "5000", "-nosound", "-nogui",
-                    "-dmflags", args.dmflags]
+                    "-dmflags", args.dmflags, "-chat-debug"]
             processes.append(subprocess.Popen(base + ["-net-host", str(number)], cwd=dirs[0], stdout=logs[0], stderr=logs[0]))
             deadline = time.monotonic() + 15
             while "listening on" not in (dirs[0] / "game.log").read_text():
@@ -72,6 +72,29 @@ def main():
             key(1, 0x11, True)  # fire
             time.sleep(2)
             key(0, 0x26, False); key(1, 0x27, False); key(1, 0x11, False)
+            def tap(player, vk):
+                key(player, vk, True); time.sleep(0.06)
+                key(player, vk, False); time.sleep(0.06)
+
+            # T used to terminate both peers on the first chat destination
+            # byte. Exercise real input/HUD, not only scripted ticcmd bytes.
+            for player in (0, 1):
+                tap(player, ord('T'))
+                for char in "CANCEL": tap(player, ord(char))
+                tap(player, 0x1B)  # Escape cancels
+                tap(player, ord('T'))
+                for char in "HELLO PEEX": tap(player, ord(char))
+                tap(player, 0x08)  # backspace
+                tap(player, ord('R')); tap(player, 0x0D)
+            deadline = time.monotonic() + 5
+            while not all(f"Chat received from player {2-i}: HELLO PEER" in (path / "game.log").read_text()
+                          for i, path in enumerate(dirs)):
+                assert all(p.poll() is None for p in processes), [(path / "game.log").read_text() for path in dirs]
+                assert time.monotonic() < deadline, [(path / "game.log").read_text() for path in dirs]
+                time.sleep(0.05)
+            # Smaller viewport exercises input widget erase after open/cancel.
+            tap(0, 0xBD)  # OEM_MINUS
+            tap(0, ord('T')); tap(0, 0x1B)
             time.sleep(3)  # longer than BACKUPTICS, catches legacy consistency handling
             assert all(p.poll() is None for p in processes), [(path / "game.log").read_text() for path in dirs]
             assert user32.PostMessageW(handles[processes[0].pid], 0x0010, 0, 0)
@@ -80,7 +103,7 @@ def main():
             output = [(path / "game.log").read_text() for path in dirs]
             assert all("Network desync" not in log and "consistency failure" not in log for log in output), output
             assert "Network:" in output[1], output[1]
-            print("Window coop: distinct movement/fire/views, >128 tics, close/disconnect OK")
+            print("Window coop: movement/fire, T/chat/cancel/backspace in both directions, close/disconnect OK")
         finally:
             for process in processes:
                 if process.poll() is None: process.kill(); process.wait()

@@ -31,6 +31,7 @@
 #include "hu_lib.h"
 #include "m_controls.h"
 #include "m_misc.h"
+#include "m_argv.h"
 #include "w_wad.h"
 
 #include "s_sound.h"
@@ -103,6 +104,7 @@ static int		message_counter;
 extern int		showMessages;
 
 static boolean		headsupactive = false;
+static void HU_ResetChat(void);
 
 //
 // Builtin map names.
@@ -319,6 +321,7 @@ void HU_Start(void)
     message_dontfuckwithme = false;
     message_nottobefuckedwith = false;
     chat_on = false;
+    HU_ResetChat();
 
     // create the message widget
     HUlib_initSText(&w_message,
@@ -374,7 +377,7 @@ void HU_Start(void)
 
     // create the inputbuffer widgets
     for (i=0 ; i<MAXPLAYERS ; i++)
-	HUlib_initIText(&w_inputbuffer[i], 0, 0, 0, 0, &always_off);
+	HUlib_initIText(&w_inputbuffer[i], 0, 0, hu_font, HU_FONTSTART, &always_off);
 
     headsupactive = true;
 
@@ -439,8 +442,13 @@ void HU_Ticker(void)
 	    if (i != consoleplayer
 		&& (c = players[i].cmd.chatchar))
 	    {
-		if (c <= HU_BROADCAST)
-		    chat_dest[i] = c;
+		if ((unsigned char)c <= HU_BROADCAST)
+                {
+                    chat_dest[i] = c;
+                    HUlib_resetIText(&w_inputbuffer[i]);
+                }
+		else if ((unsigned char)c == KEY_ESCAPE)
+                    HUlib_resetIText(&w_inputbuffer[i]);
 		else
 		{
 		    rc = HUlib_keyInIText(&w_inputbuffer[i], c);
@@ -453,6 +461,11 @@ void HU_Ticker(void)
 			    HUlib_addMessageToSText(&w_message,
 						    DEH_String(player_names[i]),
 						    w_inputbuffer[i].l.l);
+                            if (M_ParmExists("-chat-debug"))
+                            {
+                                printf("Chat received from player %d: %s\n", i + 1, w_inputbuffer[i].l.l);
+                                fflush(stdout);
+                            }
 			    
 			    message_nottobefuckedwith = true;
 			    message_on = true;
@@ -478,12 +491,18 @@ static char	chatchars[QUEUESIZE];
 static int	head = 0;
 static int	tail = 0;
 
+static void HU_ResetChat(void)
+{
+    head = tail = 0;
+    memset(chat_dest, 0, sizeof(chat_dest));
+}
+
 
 void HU_queueChatChar(char c)
 {
     if (((head + 1) & (QUEUESIZE-1)) == tail)
     {
-	plr->message = DEH_String(HUSTR_MSGU);
+	if (plr) plr->message = DEH_String(HUSTR_MSGU);
     }
     else
     {
@@ -632,7 +651,11 @@ boolean HU_Responder(event_t *ev)
                 }
 	    }
 	    else if (c == KEY_ESCAPE)
+            {
+                HU_queueChatChar(KEY_ESCAPE);
+                HUlib_resetIText(&w_chat);
 		chat_on = false;
+            }
 	}
     }
 

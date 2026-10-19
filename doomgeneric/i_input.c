@@ -242,6 +242,9 @@ static unsigned char TranslateKey(unsigned char key)
 static unsigned char GetTypedChar(unsigned char key)
 {
     key = TranslateKey(key);
+    // Platform backends map Space to Doom's action key. Its typed character
+    // is still ASCII space (chat/save descriptions), not KEY_USE's high byte.
+    if (key == KEY_USE) key = ' ';
 
     // Is shift held down?  If so, perform a translation.
 

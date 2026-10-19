@@ -602,7 +602,9 @@ static void saveg_write_ticcmd_t(ticcmd_t *str)
     saveg_write16(str->consistancy);
 
     // byte chatchar;
-    saveg_write8(str->chatchar);
+    // HUD consumes remote chat locally; not a simulation difference. Real
+    // save files and the single-player checksum retain their existing bytes.
+    saveg_write8(net_checksum_active ? 0 : str->chatchar);
 
     // byte buttons;
     saveg_write8(str->buttons);
