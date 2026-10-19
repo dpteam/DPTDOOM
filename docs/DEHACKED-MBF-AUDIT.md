@@ -105,7 +105,7 @@ Boom/MBF/MBF21 не отмечать готовыми от наличия refere
 
 Реализованный subset описан в `DEHACKED.md`: **Misc 0, Ammo max/per, Weapon
 Ammo type и Thing numeric fields**, отдельный DPT_DEH_CLASSIC path, без включения
-полного FEATURE_DEHACKED. Добавлена bounded Frame Duration и ограниченный Next
-frame (existing state indices only, positive Duration, not S_NULL source/
-fast-transformed range). Thing state/flags/sounds, остальные Frame fields/Text,
+полного FEATURE_DEHACKED. Добавлена bounded Frame Duration, ограниченный Next
+frame и bounded Weapon frame references (existing states, без arbitrary action
+pointers). Thing state/flags/sounds, остальные Frame fields/Text, произвольные
 weapon frames и BEX остаются очередью следующих срезов.

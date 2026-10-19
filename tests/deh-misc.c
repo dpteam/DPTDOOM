@@ -32,6 +32,8 @@ int main(void)
     mobjinfo[MT_POSSESSED].spawnhealth=20;mobjinfo[MT_POSSESSED].speed=8;mobjinfo[MT_ROCKET].speed=20*FRACUNIT;
     mobjinfo[MT_POSSESSED].spawnstate=42;mobjinfo[MT_POSSESSED].flags=123;
     states[S_NULL].tics=-1;states[S_PISTOL1].tics=4;states[S_PISTOL1].nextstate=S_PISTOL2;
+    states[S_PISTOL2].nextstate=S_PISTOL3;states[S_PISTOL3].nextstate=S_PISTOL4;
+    states[S_PISTOL4].nextstate=S_PISTOL;
     states[S_PISTOL1].sprite=SPR_PISG;states[S_PISTOL1].frame=7;
     states[S_PISTOL1].action.acv=ActionSentinel;
     DPT_DehReset();DPT_DehChecksum(a);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));
@@ -68,6 +70,17 @@ int main(void)
     DPT_DehReset();REQUIRE(maxammo[0]==200&&clipammo[0]==10&&weaponinfo[wp_pistol].ammo==am_clip);
     REQUIRE(Load(HEADER "ammo 0\nPer ammo = 12\nweapon 1\nAmmo type = 2\n"));
     REQUIRE(clipammo[0]==12&&weaponinfo[wp_pistol].ammo==am_cell);DPT_DehReset();
+    REQUIRE(Load(HEADER "Weapon 1\nDeselect frame = 11\nSelect frame = 12\nBobbing frame = 10\nShooting frame = 13\nFiring frame = 17\n"));
+    REQUIRE(weaponinfo[wp_pistol].downstate==S_PISTOLDOWN&&weaponinfo[wp_pistol].upstate==S_PISTOLUP);
+    REQUIRE(weaponinfo[wp_pistol].readystate==S_PISTOL&&weaponinfo[wp_pistol].atkstate==S_PISTOL1);
+    REQUIRE(weaponinfo[wp_pistol].flashstate==S_PISTOLFLASH);
+    REQUIRE(!Load(HEADER "Weapon 1\nShooting frame = 999999\n"));
+    {char invalid_weapon[128];
+     snprintf(invalid_weapon,sizeof(invalid_weapon),HEADER "Weapon 1\nShooting frame = %d\n",S_BLOOD1);
+     REQUIRE(!Load(invalid_weapon));}
+    REQUIRE(!Load(HEADER "Weapon 1\nDeselect frame = 0\n"));
+    REQUIRE(!Load(HEADER "Weapon 1\nShooting frame = 1\n"));
+    DPT_DehReset();REQUIRE(weaponinfo[wp_pistol].ammo==am_clip&&weaponinfo[wp_pistol].upstate==S_PISTOLUP);
     REQUIRE(Load(HEADER "Thing 2 (Trooper)\nHit points = 123\nSpeed = 12\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 0\nReaction time = 20\nThing 34\nSpeed = 1966080\n"));
     REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==123&&mobjinfo[MT_POSSESSED].speed==12);
     REQUIRE(mobjinfo[MT_POSSESSED].radius==24*FRACUNIT&&mobjinfo[MT_POSSESSED].mass==250);
@@ -115,5 +128,5 @@ int main(void)
     DPT_DehReset();REQUIRE(states[S_PISTOL1].tics==4&&states[S_NULL].tics==-1);
     REQUIRE(states[S_PISTOL1].action.acv==ActionSentinel&&states[S_PISTOL1].nextstate==S_PISTOL2);
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
-    puts("DeHackEd Misc/Ammo/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
+    puts("DeHackEd Misc/Ammo/Weapon-frame/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
 }

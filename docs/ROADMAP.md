@@ -332,11 +332,11 @@ partition может породить две отдельные локальны
   прогон 34/35: второй WebView2/CDP launcher startup превысил test deadline;
   отдельная перепроверка deh-misc/master-client-wire/launcher-windows — 3/3.
   Не относить первый WebView failure к DeHackEd/macOS без evidence.
-- [ ] Следующие sections: Frame graph extensions/weapon frames, Text и BEX. Не считать
+- [ ] Следующие sections: Frame graph extensions, Text и BEX. Не считать
   ограниченный subset полной совместимостью; arbitrary code pointers не принимать.
 - [x] Subset `DPT-deh-misc-ammo-v2`: Ammo Max ammo/Per ammo, Weapon Ammo type
   0..3, staged rollback всех таблиц, cross-field validation, engine firing/
-  capacity и matching/mismatch network tests. Weapon frames/noammo-overflow
+  capacity и matching/mismatch network tests. Arbitrary weapon frames/noammo-overflow
   tricks и code pointers пока отклоняются; Thing/Frame/Text/BEX остаются частично
   или полностью неподдерживаемыми по отдельным ограничениям ниже.
 - [x] Следующий subset `DPT-deh-thing-v3`: 1-based Thing numeric fields,
@@ -349,6 +349,10 @@ partition может породить две отдельные локальны
   SARG range, zero/negative Duration, action/resource changes. Проверены реальный
   pistol cadence и action skip, state-table bounds, zero-tic cycle rejection,
   rollback/reset, same/different/fast network traces.
+- [x] `DPT-deh-weaponframes-v6`: пять bounded Weapon frame references с
+  vanilla weapon-state pool/domain checks, staged rollback/reset, real pistol
+  action-skip cadence и same/different network digest tests. Arbitrary states,
+  infinite states, unsafe S_NULL uses и action pointers остаются запрещены.
 - [x] Предыдущий Thing slice: полные MinGW headless 33/33 и MSVC SDL 35/35,
   целевые MSVC ASan parser/engine/baselines 3/3.
 - [x] Actions run 39304002144/ddd69cc success: macOS master-client-wire fixture

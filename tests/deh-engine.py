@@ -96,6 +96,9 @@ def main():
         transition=root/'transition.deh';transition_copy=root/'transition-copy.deh'
         transition.write_bytes(HEADER+b'Frame 13\nNext frame = 15\n')
         transition_copy.write_bytes(transition.read_bytes())
+        weapon_frames=root/'weapon-frames.deh';weapon_frames_copy=root/'weapon-frames-copy.deh'
+        weapon_frames.write_bytes(HEADER+b'Weapon 1\nShooting frame = 15\n')
+        weapon_frames_copy.write_bytes(weapon_frames.read_bytes())
         fire_ammo={}
         for name,extra in [('standard-fire',[]),('patched-fire',['-deh',str(ammo)]),('slow-fire',['-deh',str(duration)])]:
             work=root/name;work.mkdir()
@@ -168,6 +171,11 @@ def main():
         _,transition_text=run('transition-engine',['-deh',str(transition),'-headless-tics','140','-headless-input',str(inputs)])
         match=re.search(r'Session report: .* health=100 ammo=(\d+)',transition_text)
         assert match and int(match[1])==50,transition_text
+        _,weapon_text=run('weapon-frame-engine',['-deh',str(weapon_frames),'-headless-tics','140','-headless-input',str(inputs)])
+        match=re.search(r'Session report: .* health=100 ammo=(\d+)',weapon_text)
+        assert match and int(match[1])==50,weapon_text
+        pair('weapon-frame-same',[weapon_frames,weapon_frames_copy],True,'health=100',('-headless-input',str(inputs)))
+        pair('weapon-frame-different',[weapon_frames,first],False)
         print('DeHackEd engine: actual health/ammo/spawned Thing, Duration cadence, Next-frame graph, rejection/guards and network patch traces OK')
 
 

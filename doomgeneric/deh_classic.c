@@ -55,6 +55,8 @@ static mobjinfo_t staged_things[NUMMOBJTYPES];
 // pointers, sprites and state payloads never receive patch assignments.
 static int base_tics[NUMSTATES],staged_tics[NUMSTATES];
 static statenum_t base_nextstate[NUMSTATES],staged_nextstate[NUMSTATES];
+static boolean base_weapon_state[NUMSTATES];
+static weaponinfo_t staged_weapons[NUMWEAPONS];
 typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
 #define THING(name,field,low,high) {name,offsetof(mobjinfo_t,field),low,high}
 static const thing_field_t thing_fields[]={
@@ -133,7 +135,8 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
     }
     return Error(line,"unsupported Thing field (states/flags/sounds/IDs are not supported)");
 }
-static boolean ValidateFrameGraph(const int *tics,const statenum_t *next,unsigned int line)
+static boolean ValidateFrameGraph(const int *tics,const statenum_t *next,
+    const boolean *next_changed,unsigned int line)
 {
     int start;
     // P_SetMobjState/P_SetPsprite follow zero-tic states synchronously. A
@@ -142,16 +145,68 @@ static boolean ValidateFrameGraph(const int *tics,const statenum_t *next,unsigne
     for(start=1;start<NUMSTATES;++start)
     {
         int state=start,steps=0;
+        if(next_changed[state]&&next[state]!=S_NULL &&
+            base_weapon_state[state]!=base_weapon_state[next[state]])
+            return Error(line,"Frame transition crosses the weapon/non-weapon state domain");
         while(state!=S_NULL&&tics[state]==0)
         {
             if((int)next[state]<0||(int)next[state]>=NUMSTATES)
                 return Error(line,"Frame transition points outside the state table");
             state=(int)next[state];
+            if(next_changed[start]&&state!=S_NULL &&
+                base_weapon_state[state]!=base_weapon_state[start])
+                return Error(line,"Frame transition crosses the weapon/non-weapon state domain");
             if(++steps>NUMSTATES)
                 return Error(line,"Frame transitions create a zero-duration cycle");
         }
     }
     return true;
+}
+static void BuildWeaponStateSet(void)
+{
+    unsigned int weapon,slot;
+    boolean changed=true;
+    memset(base_weapon_state,0,sizeof(base_weapon_state));
+    for(weapon=0;weapon<NUMWEAPONS;++weapon)
+    {
+        const int frames[]={base_weapons[weapon].upstate,base_weapons[weapon].downstate,
+            base_weapons[weapon].readystate,base_weapons[weapon].atkstate,
+            base_weapons[weapon].flashstate};
+        for(slot=0;slot<sizeof(frames)/sizeof(frames[0]);++slot)
+            if(frames[slot]>=0&&frames[slot]<NUMSTATES)base_weapon_state[frames[slot]]=true;
+    }
+    while(changed)
+    {
+        changed=false;
+        for(weapon=1;weapon<NUMSTATES;++weapon)
+        {
+            statenum_t next;
+            if(!base_weapon_state[weapon])continue;
+            next=base_nextstate[weapon];
+            if(next!=S_NULL&&!base_weapon_state[next])
+            {base_weapon_state[next]=true;changed=true;}
+        }
+    }
+}
+static boolean ApplyWeaponFrame(int weapon,const char *field,int value,unsigned int line)
+{
+    int *destination=NULL;boolean firing=false;
+    if(Equal(field,"Deselect frame"))destination=&staged_weapons[weapon].downstate;
+    else if(Equal(field,"Select frame"))destination=&staged_weapons[weapon].upstate;
+    else if(Equal(field,"Bobbing frame"))destination=&staged_weapons[weapon].readystate;
+    else if(Equal(field,"Shooting frame"))destination=&staged_weapons[weapon].atkstate;
+    else if(Equal(field,"Firing frame")){destination=&staged_weapons[weapon].flashstate;firing=true;}
+    else return Error(line,"unsupported Weapon field (only Ammo type and frame references)");
+    if(value<0||value>=NUMSTATES)return Error(line,"Weapon frame outside the state table");
+    if(value==S_NULL)
+    {
+        if(!firing)return Error(line,"only Firing frame may use S_NULL");
+    }
+    else if(!base_weapon_state[value])
+        return Error(line,"Weapon frame is not in the vanilla weapon-state pool");
+    else if(states[value].tics==-1)
+        return Error(line,"Weapon frame cannot use an infinite state");
+    *destination=value;return true;
 }
 void DPT_DehReset(void)
 {
@@ -166,6 +221,7 @@ void DPT_DehReset(void)
             base_tics[i]=states[i].tics;
             base_nextstate[i]=states[i].nextstate;
         }
+        BuildWeaponStateSet();
     }
     memcpy(maxammo,base_maxammo,sizeof(base_maxammo));memcpy(clipammo,base_clipammo,sizeof(base_clipammo));
     memcpy(weaponinfo,base_weapons,sizeof(base_weapons));
@@ -183,7 +239,8 @@ void DPT_DehReset(void)
 boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
 {
     int staged[FIELD_COUNT];unsigned int i,line_number=0,assignments=0;
-    int staged_max[NUMAMMO],staged_clip[NUMAMMO],staged_weapon[NUMWEAPONS];
+    boolean next_changed[NUMSTATES];
+    int staged_max[NUMAMMO],staged_clip[NUMAMMO];
     size_t offset=0;boolean signature=false,doom=false,format=false;
     enum { NONE, MISC, AMMO, WEAPON, THING, FRAME } section=NONE;
     int index=0;
@@ -195,12 +252,13 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     if(memchr(data,0,size))return Error(0,"embedded NUL is not valid text");
     for(i=0;i<FIELD_COUNT;++i)staged[i]=*fields[i].destination;
     memcpy(staged_max,maxammo,sizeof(staged_max));memcpy(staged_clip,clipammo,sizeof(staged_clip));
-    for(i=0;i<NUMWEAPONS;++i)staged_weapon[i]=weaponinfo[i].ammo;
+    memcpy(staged_weapons,weaponinfo,sizeof(staged_weapons));
     memcpy(staged_things,mobjinfo,sizeof(staged_things));
     for(i=0;i<NUMSTATES;++i)
     {
         staged_tics[i]=states[i].tics;
         staged_nextstate[i]=states[i].nextstate;
+        next_changed[i]=false;
     }
     while(offset<size)
     {
@@ -248,7 +306,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
                     section=ammo?AMMO:WEAPON;continue;
                 }
             }
-            return Error(line_number,"unsupported section (Misc, Ammo, Weapon-ammo, Thing-numeric, Frame Duration only)");
+            return Error(line_number,"unsupported section (Misc, Ammo, Weapon-ammo/frames, Thing-numeric, Frame graph only)");
         }
         equals=strchr(text,'=');
         if(!equals)return Error(line_number,"unsupported section");
@@ -271,7 +329,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
             if(Equal(text,"Next frame"))
             {
                 if(value<0||value>=NUMSTATES)return Error(line_number,"Next frame outside the state table");
-                staged_nextstate[index]=(statenum_t)value;++assignments;continue;
+                staged_nextstate[index]=(statenum_t)value;
+                next_changed[index]=true;++assignments;continue;
             }
             return Error(line_number,"unsupported Frame field (only Duration and Next frame)");
         }
@@ -291,12 +350,16 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         }
         if(section==WEAPON)
         {
-            if(!Equal(text,"Ammo type"))return Error(line_number,"unsupported Weapon field (only Ammo type)");
-            // Historical overflow/noammo tricks intentionally not supported.
-            // In this engine ammo type 5 on a shooting action targets maxammo;
-            // do not advertise that memory-layout behavior as safe compatibility.
-            if(value<0||value>=NUMAMMO)return Error(line_number,"Weapon Ammo type must be 0..3");
-            staged_weapon[index]=value;++assignments;continue;
+            if(Equal(text,"Ammo type"))
+            {
+                // Historical overflow/noammo tricks intentionally not supported.
+                // In this engine ammo type 5 on a shooting action targets maxammo;
+                // do not advertise that memory-layout behavior as safe compatibility.
+                if(value<0||value>=NUMAMMO)return Error(line_number,"Weapon Ammo type must be 0..3");
+                staged_weapons[index].ammo=(ammotype_t)value;++assignments;continue;
+            }
+            if(!ApplyWeaponFrame(index,text,value,line_number))return false;
+            ++assignments;continue;
         }
         for(i=0;i<FIELD_COUNT;++i)if(Equal(text,fields[i].name))break;
         if(i==FIELD_COUNT)return Error(line_number,"unsupported Misc field in " DPT_DEH_SUBSET);
@@ -305,11 +368,11 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     }
     if(!section||!assignments)return Error(line_number,"patch has no supported assignments");
     if(staged[1]>staged_max[am_clip])return Error(line_number,"Initial Bullets exceeds Max ammo for bullets");
-    if(!ValidateFrameGraph(staged_tics,staged_nextstate,line_number))return false;
+    if(!ValidateFrameGraph(staged_tics,staged_nextstate,next_changed,line_number))return false;
     // Commit only after the entire source has passed validation.
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=staged[i];
     memcpy(maxammo,staged_max,sizeof(staged_max));memcpy(clipammo,staged_clip,sizeof(staged_clip));
-    for(i=0;i<NUMWEAPONS;++i)weaponinfo[i].ammo=(ammotype_t)staged_weapon[i];
+    memcpy(weaponinfo,staged_weapons,sizeof(staged_weapons));
     memcpy(mobjinfo,staged_things,sizeof(staged_things));
     for(i=0;i<NUMSTATES;++i)states[i].tics=staged_tics[i];
     for(i=0;i<NUMSTATES;++i)states[i].nextstate=staged_nextstate[i];
