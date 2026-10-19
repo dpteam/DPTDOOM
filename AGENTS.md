@@ -111,6 +111,11 @@ ctest --preset windows-headless
   рядом с EXE. Game CWD постоянный `game/profileN`, logs — `sessions/`.
   `launcher-model` — data-free; `launcher-windows` — interactive + IWAD/Runtime.
   Server browser/master ещё не готов; MinGW engine: DPTDOOM_LAUNCHER=OFF.
+- Master и будущий игровой сервер по требованию владельца — native C/C++, не
+  Python-сервисы. `master/` → `dptdoom-master`, опция DPTDOOM_MASTER default ON;
+  протокол/limits — `docs/MASTER.md`. Windows MSVC/MinGW tests: master-model,
+  master-loopback (Python только клиент теста). Не называть directory игровым
+  server: публикации игры/browser/query-reachability пока нет, TLS/auth тоже нет.
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.

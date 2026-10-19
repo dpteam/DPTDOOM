@@ -28,7 +28,7 @@ def main():
         raise SystemExit("Refusing bundle: tracked source differs from HEAD; commit changes first")
     installed = args.install.resolve(strict=True)
     expected_binary = "dptdoom.exe" if args.kind == "windows-sdl" else "dptdoom-headless" + (".exe" if os.name == "nt" else "")
-    binaries = {expected_binary}
+    binaries = {expected_binary, "dptdoom-master" + (".exe" if os.name == "nt" else "")}
     if args.kind == "windows-sdl":
         binaries |= {"SDL2.dll", "SDL2_mixer.dll", "dptdoom-launcher.exe", "WebView2Loader.dll"}
     files = {Path("bin") / name for name in binaries} | {
@@ -73,6 +73,11 @@ Portable: create an empty portable.txt NEXT TO the launcher; data goes to bin/us
 Otherwise launcher data stays in LocalAppData/DPTDOOM. Logs: sessions/; saves/config: game/profileN/.
 Headless: dptdoom-headless[.exe] -iwad /path/to/doom2.wad -headless-frames 70
 Use --version to check startup without game data.
+
+Native directory prototype: bin/dptdoom-master[.exe] --help
+Default: loopback TCP 2343, directory protocol v1, experimental LAN only.
+This is NOT a dedicated game server. Launcher listing/automatic publication
+are not integrated yet. No TLS, game-port reachability proof or NAT traversal.
 
 Direct coop is experimental, exactly 2 players, trusted LAN only (TCP).
 Both peers need the same build, IWAD/PWAD contents/order and skill/map flags.

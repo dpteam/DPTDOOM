@@ -67,6 +67,9 @@
 - Master server: регистрация/heartbeat/TTL, проверка доступности, лимиты запросов,
   защита от подмены/спама/amplification; локальное/прямое подключение не должно
   требовать доступности master. Это не то же самое, что игровой dedicated server.
+- Текущее standalone C99 directory-ядро — `docs/MASTER.md`; game publication,
+  port reachability и launcher browser ещё не подключены. По уточнению владельца
+  master и будущий игровой сервер — нативные C/C++, Python только для tests/tools.
 - Уточнение владельца: **список серверов прямо в launcher** после реализации
   master; выбор адреса master по IP **или домену**, с редактируемым портом/endpoint.
   Не зашивать один обязательный master. Проверять URL/адрес/разрешённую схему,

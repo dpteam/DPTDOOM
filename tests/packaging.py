@@ -25,7 +25,8 @@ def main():
         install = repo / "install"
         (install / "bin").mkdir(parents=True)
         (install / "share/dptdoom").mkdir(parents=True)
-        for name in ("dptdoom.exe", "dptdoom-launcher.exe", "WebView2Loader.dll", "SDL2.dll", "SDL2_mixer.dll"):
+        master = "dptdoom-master" + (".exe" if sys.platform == "win32" else "")
+        for name in ("dptdoom.exe", "dptdoom-launcher.exe", master, "WebView2Loader.dll", "SDL2.dll", "SDL2_mixer.dll"):
             (install / "bin" / name).write_bytes(b"synthetic fixture, not an executable")
         for name in ("LICENSE", "SDL-LICENSES.txt", "WebView2-LICENSE.txt", "WebView2-NOTICE.txt"):
             (install / "share/dptdoom" / name).write_text("test notice")
@@ -41,6 +42,7 @@ def main():
             names = zipped.namelist()
             assert "DPTDOOM/bin/dptdoom.exe" in names and "DPTDOOM/SOURCE.zip" in names
             assert "DPTDOOM/bin/dptdoom-launcher.exe" in names
+            assert "DPTDOOM/bin/" + master in names
             assert "DPTDOOM/bin/WebView2Loader.dll" in names
             assert "DPTDOOM/share/dptdoom/WebView2-LICENSE.txt" in names
             assert not any(name.lower().endswith((".wad", ".cfg")) for name in names)

@@ -26,6 +26,9 @@ https://github.com/kgsws/doom_ace (в refs будет)
 
 ## Уточнения из рабочей сессии
 
+- Master server и будущий игровой сервер — нативные C/C++, как движок Doom,
+  не Python-сервисы. Python допустим для автотестов/инструментов разработки.
+
 - Launcher: EXE с локальным HTML/CSS-интерфейсом внутри минибраузера, не прежние
   Win32 controls. Portable по наличию любого `portable.txt` рядом с launcher:
   профили/конфиги/saves/cache/logs в `user/` рядом с ним; перенос из AppData с

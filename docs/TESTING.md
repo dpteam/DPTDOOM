@@ -5,6 +5,11 @@
 Python 3 нужен для smoke tests, но не для сборки игры.
 CI без игровых данных и его ограничения описаны в [CI.md](CI.md).
 
+Native master directory собирается вместе с engine (`DPTDOOM_MASTER=ON`).
+`master-model` и `master-loopback` — data-free, без окон; второй тест запускает
+настоящий C EXE и общается с ним по loopback TCP. Протокол и ограничения —
+[MASTER.md](MASTER.md). Python используется только как тестовый клиент.
+
 ## Windows: обычная сборка
 
 Нужны CMake 3.21+ и Visual Studio 2022 с компонентами C++ и Windows SDK.

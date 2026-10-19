@@ -231,6 +231,25 @@ partition может породить две отдельные локальны
 
 ### Дальнейший master/server этап
 
+### Этап 3.2 — нативное directory-ядро
+
+- [x] По уточнению владельца — C99 standalone `dptdoom-master`, без Python runtime.
+- [x] Directory protocol v1/TCP, register/list/heartbeat/remove, OS random lease
+  secrets + source IPv4, монотонный TTL, фиксированные лимиты/буферы/deadlines.
+- [x] Data-free C model + real native EXE loopback tests; MSVC/MinGW Windows.
+- [x] Regression Windows: 20/20 MinGW headless, 22/22 MSVC headless ASan,
+  18/18 SDL без interactive; игровой engine/handshake не менялись.
+- [ ] Автопубликация waiting-host из игры/launcher, снятие при подключении/выходе.
+- [ ] Browser в launcher, выбор IP/домена/порта master; статус unverified,
+  совместимость build/resources/map/rules и join без зависимости direct от master.
+- [ ] Отдельный безопасный game-query/challenge для port reachability; текущий
+  single accept нельзя занимать проверочным подключением master.
+
+Протокол/запуск/ограничения — `docs/MASTER.md`. Это directory, **не игровой server**,
+не Internet-ready сервис. Launcher browser остаётся недоступным до интеграции.
+
+### Последующие задачи master/server
+
 - После работающего игрового подключения: heartbeat, TTL, список серверов,
   challenge/проверка источника, лимиты и защита от UDP amplification.
 - Изучить `refs/csDoomMaster`, но не копировать небезопасную сетевую обработку.
@@ -267,6 +286,7 @@ partition может породить две отдельные локальны
 
 ## Что не заявляется готовым
 
-Полноценный Internet multiplayer, мастер-сервер DPT.DOOM, launcher, PK3 и
-DECORATE ещё отсутствуют. Доступен только экспериментальный direct coop (protocol v2).
+Полноценный Internet multiplayer, integrated server browser/master publication,
+игровой dedicated server, PK3 и DECORATE ещё отсутствуют. Windows HTML launcher
+и standalone directory-ядро есть; игра — экспериментальный direct coop (protocol v2).
 Первый этап не является реализацией всего ТЗ.

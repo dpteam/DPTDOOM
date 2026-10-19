@@ -88,6 +88,8 @@ portable-профиле. Ресурсы вне него остаются абс�
 - Нет PK3/ZIP/DECORATE, drag/drop/search, nickname/color/voice profiles.
 - Server browser и player разделы **явно недоступны**, не рабочие заглушки.
   Список серверов и редактируемый IP/домен master запланированы в `docs/IDEAS.md`.
+  Standalone C-directory теперь есть (`docs/MASTER.md`), но launcher не
+  регистрирует/не загружает объявления до следующего этапа интеграции.
 - Закрытие launcher не завершает игру. «Лог сессии» открывает фиксированный
   системный Notepad, не файловые ассоциации/shell. Ошибки игры идут в лог (`-nogui`).
 
