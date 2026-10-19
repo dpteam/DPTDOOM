@@ -53,7 +53,7 @@ def main():
         first=root/'first.deh';second=root/'second.deh';same=root/'other-path.deh';bad=root/'bad.deh';overlay=root/'patches.wad'
         first.write_bytes(HEADER+b'Initial Health = 77\nInitial Bullets = 23\n')
         same.write_bytes(first.read_bytes());second.write_bytes(HEADER+b'Initial Health = 88\n')
-        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 13\nUnknown 1 = 1\n')
+        bad.write_bytes(HEADER+b'Initial Health = 42\nFrame 13\nUnknown 3 = 1\n')
         wad(overlay,[HEADER+b'Initial Health = 90\n',HEADER+b'Initial Health = 91\n'])
         base=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-session-report']
 
@@ -124,6 +124,27 @@ def main():
         repaired=root/'repaired-frame.deh'
         repaired.write_bytes(missing_frame.read_bytes()+b'Frame 806\nSprite subnumber = 0\n')
         run('repaired-frame',['-file',str(map_wad),'-deh',str(repaired)])
+        # Psprite offsets: the raising pistol starts at 64/64 map units instead
+        # of the vanilla bottom-of-screen position.
+        offset=root/'psprite-offset.deh';offset_copy=root/'psprite-offset-copy.deh'
+        offset.write_bytes(HEADER+b'Frame 12\nUnknown 1 = 64\nUnknown 2 = 64\n')
+        offset_copy.write_bytes(offset.read_bytes())
+        offset_plain_work,offset_plain_text=run('offset-plain',['-headless-dump','frame.ppm'])
+        offset_work,text=run('offset-patched',['-deh',str(offset),'-headless-dump','frame.ppm'])
+        assert 'sx=4194304' in text and 'sy=3801088' in text,text
+        assert 'Patch weapon visual' not in offset_plain_text,offset_plain_text
+        assert offset_plain_work.joinpath('frame.ppm').read_bytes()!=offset_work.joinpath('frame.ppm').read_bytes()
+        offset_repeat,_=run('offset-repeat',['-deh',str(offset),'-headless-dump','frame.ppm'])
+        offset_lump=root/'offset-lump.wad';wad(offset_lump,[offset.read_bytes()])
+        offset_embedded,_=run('offset-lump',['-file',str(offset_lump),'-dehlump','-headless-dump','frame.ppm'])
+        assert offset_work.joinpath('frame.ppm').read_bytes()==offset_repeat.joinpath('frame.ppm').read_bytes()
+        assert offset_work.joinpath('frame.ppm').read_bytes()==offset_embedded.joinpath('frame.ppm').read_bytes()
+        for name,patch in [('offset-mobj',HEADER+b'Frame 806\nUnknown 1 = 4\n'),
+                           ('offset-range',HEADER+b'Frame 12\nUnknown 1 = 129\n'),
+                           ('offset-neg',HEADER+b'Frame 12\nUnknown 2 = -129\n')]:
+            rejected=root/(name+'.deh');rejected.write_bytes(patch)
+            _,text=run(name,['-deh',str(rejected)],False)
+            assert 'Unknown 1/2' in text and 'Session report:' not in text,text
         # Identical attack commands: standard pistol burns bullets; patched
         # pistol uses empty shell reserve and must not burn the 50 bullets.
         inputs=root/'attack.bin';inputs.write_bytes(b''.join(struct.pack('!bbhBBBB',0,0,0,1 if tic%30>=15 else 0,0,0,0) for tic in range(200)))
@@ -203,6 +224,8 @@ def main():
         pair('thing-different',[things,first],False,extra=('-file',str(patched_map)))
         pair('visual-same',[visual,visual_copy],True,'Patch weapon visual: sprite=1 frame=32769')
         pair('visual-different',[visual,first],False)
+        pair('offset-same',[offset,offset_copy],True,'sx=4194304')
+        pair('offset-different',[offset,first],False)
         pair('duration-same',[duration,duration_copy],True,'health=100',('-headless-input',str(inputs)))
         pair('duration-different',[duration,first],False)
         # Repeating -fast initialization must not mutate the patched pistol
@@ -220,7 +243,7 @@ def main():
         assert match and int(match[1])==50,weapon_text
         pair('weapon-frame-same',[weapon_frames,weapon_frames_copy],True,'health=100',('-headless-input',str(inputs)))
         pair('weapon-frame-different',[weapon_frames,first],False)
-        print('DeHackEd engine: actual health/ammo/Thing, Frame visuals and resource rejection, file/lump pixels, firing cadence, guards and network traces OK')
+        print('DeHackEd engine: actual health/ammo/Thing, Frame visuals/psprite offsets and resource rejection, file/lump pixels, firing cadence, guards and network traces OK')
 
 
 if __name__=='__main__':main()

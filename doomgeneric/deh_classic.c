@@ -63,6 +63,9 @@ static statenum_t base_nextstate[NUMSTATES],staged_nextstate[NUMSTATES];
 static spritenum_t base_sprite[NUMSTATES],staged_sprite[NUMSTATES];
 static int base_frame[NUMSTATES],staged_frame[NUMSTATES];
 static boolean visual_patched[NUMSTATES],staged_visual_patched[NUMSTATES];
+// Psprite coordinate offsets. Vanilla only consumes these on weapon states.
+static int base_misc1[NUMSTATES],staged_misc1[NUMSTATES];
+static int base_misc2[NUMSTATES],staged_misc2[NUMSTATES];
 static boolean base_weapon_state[NUMSTATES];
 static weaponinfo_t staged_weapons[NUMWEAPONS];
 typedef struct { const char *original; char replacement[TEXT_MAX+1]; boolean present; } text_replacement_t;
@@ -347,6 +350,7 @@ void DPT_DehReset(void)
             base_tics[i]=states[i].tics;
             base_nextstate[i]=states[i].nextstate;
             base_sprite[i]=states[i].sprite;base_frame[i]=states[i].frame;
+            base_misc1[i]=states[i].misc1;base_misc2[i]=states[i].misc2;
         }
         BuildWeaponStateSet();
     }
@@ -358,6 +362,7 @@ void DPT_DehReset(void)
         states[i].tics=base_tics[i];
         states[i].nextstate=base_nextstate[i];
         states[i].sprite=base_sprite[i];states[i].frame=base_frame[i];
+        states[i].misc1=base_misc1[i];states[i].misc2=base_misc2[i];
         visual_patched[i]=false;
     }
     for(i=0;i<TEXT_COUNT;++i)
@@ -397,6 +402,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         staged_tics[i]=states[i].tics;
         staged_nextstate[i]=states[i].nextstate;
         staged_sprite[i]=states[i].sprite;staged_frame[i]=states[i].frame;
+        staged_misc1[i]=states[i].misc1;staged_misc2[i]=states[i].misc2;
         staged_visual_patched[i]=visual_patched[i];
         next_changed[i]=false;
     }
@@ -494,6 +500,20 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
                 staged_frame[index]=value;
                 staged_visual_patched[index]=true;++assignments;continue;
             }
+            if(Equal(text,"Unknown 1")||Equal(text,"Unknown 2"))
+            {
+                // P_SetPsprite applies these as psprite coordinate offsets, so
+                // a mobj-state assignment would be inert in this engine. Bound
+                // them to whole map units and reject non-psprite states instead
+                // of silently accepting a value nothing reads.
+                if(!base_weapon_state[index])
+                    return Error(line_number,"Unknown 1/2 is supported only on weapon states");
+                if(value<-128||value>128)
+                    return Error(line_number,"Unknown 1/2 must be -128..128 map units");
+                if(Equal(text,"Unknown 1"))staged_misc1[index]=value;
+                else staged_misc2[index]=value;
+                ++assignments;continue;
+            }
             if(Equal(text,"Duration"))
             {
                 if(value<1||value>32767)return Error(line_number,"Frame Duration must be 1..32767 (zero/negative unsupported)");
@@ -505,7 +525,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
                 staged_nextstate[index]=(statenum_t)value;
                 next_changed[index]=true;++assignments;continue;
             }
-            return Error(line_number,"unsupported Frame field (Duration, Next frame, Sprite number/subnumber only)");
+            return Error(line_number,"unsupported Frame field (Duration, Next frame, Sprite number/subnumber, Unknown 1/2 only)");
         }
         if(section==TEXT)
             return Error(line_number,"Text payload must follow its Text header");
@@ -555,6 +575,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     for(i=0;i<NUMSTATES;++i)
     {
         states[i].sprite=staged_sprite[i];states[i].frame=staged_frame[i];
+        states[i].misc1=staged_misc1[i];states[i].misc2=staged_misc2[i];
         visual_patched[i]=staged_visual_patched[i];
     }
     memcpy(text_replacements,staged_text,sizeof(staged_text));

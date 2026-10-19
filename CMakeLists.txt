@@ -461,7 +461,7 @@ if(BUILD_TESTING)
         if(DPTDOOM_NETWORK)
             add_test(NAME deh-engine COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/deh-engine.py"
                 --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
-            set_tests_properties(deh-engine PROPERTIES TIMEOUT 150 RUN_SERIAL TRUE)
+            set_tests_properties(deh-engine PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
         endif()
         set(smoke_args --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
         if(DPTDOOM_TEST_GAMEVERSION)

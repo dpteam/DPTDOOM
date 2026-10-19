@@ -254,8 +254,9 @@ void D_DiagnosticsTic(void)
                     clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
                 printf("Patch text: armor=%s saved=%s\n",DPT_DehString(GOTARMOR),DPT_DehString(GGSAVED));
                 if(p->psprites[ps_weapon].state)
-                    printf("Patch weapon visual: sprite=%d frame=%d\n",
-                        (int)p->psprites[ps_weapon].state->sprite,p->psprites[ps_weapon].state->frame);
+                    printf("Patch weapon visual: sprite=%d frame=%d sx=%d sy=%d\n",
+                        (int)p->psprites[ps_weapon].state->sprite,p->psprites[ps_weapon].state->frame,
+                        p->psprites[ps_weapon].sx,p->psprites[ps_weapon].sy);
                 // Report an actual spawned entity, not just the patched table.
                 // Entity fields are copied at spawn, while speed/mass/damage
                 // are consumed through info during gameplay.

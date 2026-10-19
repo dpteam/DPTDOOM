@@ -372,6 +372,10 @@ partition может породить две отдельные локальны
   before simulation. Barrel/weapon visuals, repeated/file/lump framebuffer,
   missing-frame rejection, matching/mismatch peer traces. No new sprite names,
   Sprite section, misc/action pointers or full DeHackEd compatibility.
+- [x] `DPT-deh-pspriteoffset-v12`: classic Frame `Unknown 1/2` → `misc1/misc2`
+  для weapon states, bounded -128..128 map units, отказ для mobj states,
+  staged/reset. Engine больше не сдвигает отрицательный `int` (умножение вместо
+  `<<`), psprite `sx/sy` и framebuffer проверены file/lump и same/different peers.
 - [x] Проверки v11 на Windows: полный MinGW headless **33/33**, MSVC SDL
   **35/35**, MSVC headless ASan **35/35**. Vanilla state baselines не менялись;
   deh-engine проверяет real visual fields/framebuffer и loaded-resource rejects.

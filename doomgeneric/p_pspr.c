@@ -73,8 +73,10 @@ P_SetPsprite
 	if (state->misc1)
 	{
 	    // coordinate set
-	    psp->sx = state->misc1 << FRACBITS;
-	    psp->sy = state->misc2 << FRACBITS;
+	    // Multiplication, not a left shift: DeHackEd allows negative offsets
+	    // and shifting a negative int is undefined behavior in C.
+	    psp->sx = state->misc1 * FRACUNIT;
+	    psp->sy = state->misc2 * FRACUNIT;
 	}
 	
 	// Call action routine.

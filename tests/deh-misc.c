@@ -169,7 +169,7 @@ int main(void)
     {const char *invalid[]={HEADER "Frame 0\nDuration = 1\n",HEADER "Frame -1\nDuration = 1\n",
       HEADER "Frame 999999999999999999999\nDuration = 1\n",HEADER "Frame 13 (Pistol)\nDuration = 1\n",
       HEADER "Frame 13\nDuration = 0\n",HEADER "Frame 13\nDuration = -1\n",HEADER "Frame 13\nDuration = 32768\n",
-      HEADER "Frame 13\nNext frame = 999999\n",HEADER "Frame 13\nUnknown 1 = 1\n",
+      HEADER "Frame 13\nNext frame = 999999\n",HEADER "Frame 13\nUnknown 3 = 1\n",
       HEADER "Initial Health = 5\nAmmo 0\nPer ammo = 12\nThing 2\nHit points = 42\nFrame 13\nDuration = 2\nFrame 14\nDuration = 0\n"};
      for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i){REQUIRE(!Load(invalid[i]));REQUIRE(states[S_PISTOL1].tics==30&&states[S_PISTOL2].tics==31);
       REQUIRE(deh_initial_health==100&&clipammo[0]==10&&mobjinfo[MT_POSSESSED].spawnhealth==20);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
@@ -216,6 +216,28 @@ int main(void)
         REQUIRE(!DPT_DehValidateSpriteFrames(counts,NUMSPRITES));
         DPT_DehReset();REQUIRE(states[S_PISTOL1].sprite==SPR_PISG&&states[S_PISTOL1].frame==7);
         REQUIRE(states[S_PISTOL1].action.acv==ActionSentinel&&DPT_DehValidateSpriteFrames(NULL,0));
+    }
+    {
+        char patch[256];
+        REQUIRE(Load(HEADER "Frame 13\nUnknown 1 = -8\nUnknown 2 = 16\n"));
+        REQUIRE(states[S_PISTOL1].misc1==-8&&states[S_PISTOL1].misc2==16);
+        REQUIRE(states[S_PISTOL1].sprite==SPR_PISG&&states[S_PISTOL1].frame==7);
+        REQUIRE(states[S_PISTOL1].tics==4&&states[S_PISTOL1].action.acv==ActionSentinel);
+        DPT_DehChecksum(a);
+        {const char *invalid[]={HEADER "Frame 13\nUnknown 1 = 129\n",
+          HEADER "Frame 13\nUnknown 2 = -129\n",HEADER "Frame 13\nUnknown 1 = 99999999999999999999\n",
+          HEADER "Initial Health = 5\nFrame 13\nUnknown 1 = 4\nFrame 14\nUnknown 2 = -129\n"};
+         for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i)
+         {REQUIRE(!Load(invalid[i]));REQUIRE(states[S_PISTOL1].misc1==-8&&states[S_PISTOL1].misc2==16);
+          REQUIRE(deh_initial_health==100);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
+        // Mobj states never consume misc1/misc2 in this engine, so reject them.
+        snprintf(patch,sizeof(patch),HEADER "Frame %d\nUnknown 1 = 4\n",S_BLOOD1);
+        REQUIRE(!Load(patch));REQUIRE(strstr(DPT_DehLastError(),"weapon states"));
+        REQUIRE(Load(HEADER "Frame 13\nUnknown 1 = 128\nUnknown 2 = -128\n"));
+        REQUIRE(states[S_PISTOL1].misc1==128&&states[S_PISTOL1].misc2==-128);
+        REQUIRE(Load(HEADER "Frame 13\nUnknown 1 = 0\n"));
+        REQUIRE(states[S_PISTOL1].misc1==0&&states[S_PISTOL1].misc2==-128);
+        DPT_DehReset();REQUIRE(states[S_PISTOL1].misc1==0&&states[S_PISTOL1].misc2==0);
     }
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
     puts("DeHackEd Misc/Ammo/Weapon-frame/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;

@@ -1,7 +1,7 @@
 # DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-framevisual-v11` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-pspriteoffset-v12` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -184,10 +184,11 @@ Next frame = 15
 `S_PISTOL3`, пропуская `S_PISTOL2` и его action. Индексы — нулевые, диапазон
 `0..NUMSTATES-1`; `0` (`S_NULL`) разрешён как конечный переход.
 
-Меняются только `state.tics`, `state.nextstate`, `state.sprite` и `state.frame`.
+Меняются только `state.tics`, `state.nextstate`, `state.sprite`, `state.frame`
+и (для weapon states) `state.misc1/misc2`.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v11, чтобы peers не путали разные semantics.
+обновлён до v12, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -229,9 +230,32 @@ Sprite subnumber = 32769
 не меняет action, длительность или урон оружия. Новые sprite names/ресурсы,
 самостоятельная секция `Sprite` и произвольные executable offsets не добавлены.
 
-`Unknown 1/2`, code pointers,
-произвольные weapon state references и новые state индексы по-прежнему
-отклоняются. Для них нужны отдельные проверки graph/resources/action compatibility.
+#### Unknown 1 / Unknown 2 (psprite offsets)
+
+- Classic `Unknown 1`/`Unknown 2` мапятся на `state.misc1`/`state.misc2` и
+  допустимы **только для weapon states**: в этом движке их читает лишь
+  `P_SetPsprite` для координат оружия на экране. Mobj-state assignment отклоняется,
+  чтобы не принимать значение, которое движок никогда не прочитает.
+- Диапазон `-128..128` целых map units; переполнение и значения вне диапазона
+  отклоняются. Значение переводится в fixed-point умножением, а не сдвигом
+  отрицательного числа (сдвиг отрицательного `int` — undefined behavior в C).
+- `misc1 == 0` означает «координаты не задавать», поэтому `Unknown 2` без
+  ненулевого `Unknown 1` не даёт визуального эффекта — это vanilla-семантика.
+- Ready-состояния (`A_WeaponReady`) каждый тик пересчитывают bob и перезаписывают
+  `sx/sy`, поэтому offset на них не виден; для постоянного смещения используют
+  firing/raising состояния без bob-перезаписи. Это тоже vanilla-поведение, не
+  ошибка parser-а.
+- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v12.
+
+```text
+Frame 12
+Unknown 1 = 64
+Unknown 2 = 64
+```
+
+`code pointers`, произвольные weapon state references и новые state индексы
+по-прежнему отклоняются. Для них нужны отдельные проверки
+graph/resources/action compatibility.
 
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
 `Monsters Infight`, Sound/Sprite/Pointer/Cheat, `[STRINGS]`, неподдерживаемые Frame/Thing fields,
@@ -291,10 +315,13 @@ traces с `-fast`.
 Frame visual tests: spawned barrel и psprite report, изменившийся framebuffer,
 повторяемость и file/lump pixel equivalence, validation отсутствующего TROO frame
 до уровня, исправление поздним assignment, полная проверка range/fullbright,
-reset и atomic rollback/digest/count. Matching peers сравнивают tic traces;
-framebuffer checksum не считается доказательством полной сетевой детерминированности.
+reset и atomic rollback/digest/count. Psprite-offset tests проверяют точные
+`sx/sy` raising-состояния, изменение кадра, отказ для mobj state и границ,
+file/lump pixel equivalence и same/different peer patches. Matching peers
+сравнивают tic traces; framebuffer checksum не считается доказательством полной
+сетевой детерминированности.
 `deh-engine` имеет общий
-deadline 150s из-за дополнительных настоящих игровых прогонов, а не снятия
-таймаутов отдельных network/child operations.
+deadline 240s из-за дополнительных настоящих игровых прогонов (visual/psprite
+framebuffer и network pairs), а не снятия таймаутов отдельных child operations.
 
 Полная compatibility matrix/будущие модули — `DEHACKED-MBF-AUDIT.md`.
