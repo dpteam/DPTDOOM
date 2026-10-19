@@ -7,6 +7,7 @@
 #include "m_argv.h"
 
 #include "doomgeneric.h"
+#include "dpt_debug_console.h"
 
 pixel_t* DG_ScreenBuffer = NULL;
 
@@ -24,6 +25,7 @@ void doomgeneric_Create(int argc, char **argv)
 		exit(0);
 	}
 
+    DPT_DebugConsoleInit();
 	// save arguments
     myargc = argc;
     myargv = argv;

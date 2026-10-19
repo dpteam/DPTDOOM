@@ -123,6 +123,10 @@ ctest --preset windows-headless
   play.dartpower.xyz:25135 (не перезаписывать пользовательский адрес).
   По просьбе владельца допустим тестовый --bind 0.0.0.0:25135, но не создавать
   firewall/router rules и не заявлять внешнюю доступность без проверки.
+- Debug graphical Windows client: AllocConsole + stdout/stderr tee/file,
+  `dpt_debug_console.c`; Release/RelWithDebInfo/headless без него. --version тихий.
+  debug-console test interactive. Master `--log`, `--log-max-bytes`: 1MiB + .1,
+  event suppression 4/type/5s; токены/packet strings не логировать.
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.

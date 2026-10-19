@@ -50,19 +50,36 @@ def main():
         assert result.returncode == 0
         if arg == "--version":
             assert b"DPT.DOOM" in result.stdout
-    for args in (["--port", "0"], ["--port", "65536"], ["--port", "-1"], ["--bind", "example.invalid"],
+    for args in (["--port", "0"], ["--port", "65536"], ["--port", "-1"],
                  ["--lease-seconds", "2"], ["--lease-seconds", "301"], ["--unknown"], ["--port"]):
         result = subprocess.run([exe] + args, capture_output=True, timeout=10)
         assert result.returncode != 0, args
     with tempfile.TemporaryDirectory(prefix="dptdoom-master-") as temporary:
         root = Path(temporary)
+        for options, expected in ((["--bind", "example.invalid", "--log", str(root / "invalid-bind.log")], b"numeric IPv4"),
+                                  (["--log", str(root / "missing/events.log")], b"cannot open event log"),
+                                  (["--log-max-bytes", "4095"], b"Invalid/missing option")):
+            result = subprocess.run([exe] + options, cwd=root, capture_output=True, timeout=10)
+            assert result.returncode != 0 and expected in result.stdout + result.stderr
+        # BSD/macOS does not promise all of 127/8 is configured as a local alias.
+        # Discover test capability without privileged network configuration.
+        aliases = True
+        try:
+            for number in range(2, 101):
+                with socket.socket() as probe:
+                    probe.bind((f"127.0.0.{number}", 0))
+        except OSError:
+            aliases = False
+            print("Loopback aliases unavailable: multi-source wire cases covered by master-model; no aliases added", flush=True)
 
         def run_case(test):
             with socket.socket() as reservation:
                 reservation.bind(("127.0.0.1", 0))
                 port = reservation.getsockname()[1]
             with (root / (test.__name__ + ".log")).open("wb") as log:
-                process = subprocess.Popen([exe, "--port", str(port), "--lease-seconds", "3"],
+                event_log = root / (test.__name__ + ".events.log")
+                lease_seconds = "60" if test.__name__ == "maximum_list" else "3"
+                process = subprocess.Popen([exe, "--port", str(port), "--lease-seconds", lease_seconds, "--log", str(event_log)],
                                            cwd=root, stdout=log, stderr=log)
                 try:
                     deadline = time.monotonic() + 10
@@ -87,11 +104,20 @@ def main():
                             return reply(sock, op)
                     test(port, request)
                     assert process.poll() is None, (root / (test.__name__ + ".log")).read_text(errors="replace")
+                except Exception:
+                    print(f"Master loopback case FAILED: {test.__name__}, port={port}, aliases={aliases}", flush=True)
+                    print((root / (test.__name__ + ".log")).read_text(errors="replace"), flush=True)
+                    raise
                 finally:
                     process.terminate()
                     process.wait(10)
             text = (root / (test.__name__ + ".log")).read_text(errors="replace")
             assert "AddressSanitizer" not in text and "runtime error:" not in text, text
+            events = event_log.read_text()
+            assert "listening on" in events
+            if test.__name__ == "lifecycle":
+                for event in ("register:", "heartbeat:", "remove:", "expire:", "unauthorized:"):
+                    assert event in events, (event, events)
 
         def lifecycle(port, request):
             assert request(1) == (0, struct.pack("!I", 0))
@@ -106,7 +132,8 @@ def main():
             assert request(2, info())[0] == 3
             bad = auth[:16] + bytes(24)
             assert request(3, bad)[0] == 2 and request(4, bad)[0] == 2
-            assert request(3, auth, source="127.0.0.2")[0] == 2
+            if aliases:
+                assert request(3, auth, source="127.0.0.2")[0] == 2
             time.sleep(2)
             assert request(3, auth) == (0, struct.pack("!I", 3))
             time.sleep(1.2)
@@ -119,8 +146,11 @@ def main():
             time.sleep(3.2)
             assert listing(request(1)[1]) == []
             assert request(3, new[:40])[0] == 2
+            events = (root / "lifecycle.events.log").read_bytes()
+            for secret in (auth[16:], new[16:40]):
+                assert secret not in events and secret.hex().encode() not in events
             # Same bind must fail, not silently share or steal the listener.
-            duplicate = subprocess.run([exe, "--port", str(port)], capture_output=True, timeout=10)
+            duplicate = subprocess.run([exe, "--port", str(port), "--log", str(root / "bind-error.log")], cwd=root, capture_output=True, timeout=10)
             assert duplicate.returncode != 0
 
         def malformed(port, request):
@@ -203,12 +233,18 @@ def main():
             for number in range(128):
                 source = f"127.0.0.{number // 4 + 2}"
                 assert request(2, info(2400 + number % 4), source=source)[0] == 0
+                # Capacity is not a rate-limit test. Pace below global refill
+                # on fast Linux runners; Windows socket latency hid this race.
+                time.sleep(.02)
             status, body = request(1)
             assert status == 0 and len(listing(body)) == 128
             assert len(body) == 20484
             assert request(2, info(), source="127.0.0.100")[0] == 4
 
-        for test in (lifecycle, malformed, limits, connections, maximum_list):
+        cases = [lifecycle, malformed, limits]
+        if aliases:
+            cases += [connections, maximum_list]
+        for test in cases:
             run_case(test)
     print("Native master: real TCP lifecycle/fragmentation/auth/expiry, schema, slow/truncated peers, rate/capacity and bind/startup errors OK")
 

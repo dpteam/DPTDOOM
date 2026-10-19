@@ -64,8 +64,8 @@
   Release без дополнительной консоли. У master — полезные события одновременно
   в stdout/консоль и файловый лог, с ограничением повторов/ротацией; lease
   secret не логировать, heartbeat не должен бесконтрольно раздувать файлы.
-  Пока master печатает startup и некоторые ошибки; полноценный event logging
-  и Debug-client console **ещё не реализованы**.
+  Реализованы console+file events master с bounded rotation/suppression и
+  Debug-client console/tee. См. `MASTER.md` / `TESTING.md`; browser остаётся планом.
 
 - Удобный единый launcher: выбор IWAD/профиля модов, порядок ресурсов, параметры
   клиента/хоста/сервера, понятные ошибки и запуск в один-два действия.

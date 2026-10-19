@@ -1,8 +1,18 @@
 # Непрерывная интеграция
 
 Workflow: `.github/workflows/ci.yml`. Запускается на push, pull request и вручную
-через `workflow_dispatch`. **В этой сессии workflow не запускался на GitHub**:
-без команды владельца push не выполняется. Наличие YAML не означает зелёный CI.
+через `workflow_dispatch`. Push выполняет владелец; агент без отдельной команды
+не пушит. Подтверждённые remote runs перечислены ниже; наличие YAML не означает
+зелёный CI текущей ревизии.
+
+Обновление 19.10.2026: через public GitHub API подтверждён успешный run
+[#7, 21aae1e](https://github.com/dpteam/DPTDOOM/actions/runs/39262022307) до master.
+В run [#9, 330fcd8](https://github.com/dpteam/DPTDOOM/actions/runs/39265440252)
+Windows headless/SDL/ASan jobs успешны, Linux/macOS jobs падают после добавления
+master-loopback. Подробный traceback без авторизации недоступен. Подготовлены
+test portability fixes (loopback alias capability, paced full-list test с TTL60)
+и case-level failure logs; успешный remote rerun нового master пока не подтверждён.
+Это не полная ручная проверка игры Linux/macOS.
 
 ## Матрица
 

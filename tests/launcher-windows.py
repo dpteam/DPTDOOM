@@ -95,6 +95,7 @@ def main():
     callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user.EnumWindows.argtypes = [callback, wintypes.LPARAM]
     user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     processes, clients, game_pids = [], [], []
@@ -106,7 +107,10 @@ def main():
             owner = wintypes.DWORD()
             user.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
             if owner.value == pid:
-                handles.append(hwnd)
+                classname = ctypes.create_unicode_buffer(256)
+                user.GetClassNameW(hwnd, classname, len(classname))
+                if classname.value != "ConsoleWindowClass":
+                    handles.append(hwnd)
             return True
         user.EnumWindows(visit, 0)
         return handles

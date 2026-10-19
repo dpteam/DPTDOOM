@@ -28,6 +28,25 @@ cmake --build --preset windows-sdl --target dptdoom-master
 Ctrl+C завершает цикл. Закрытие/перезапуск master теряет все записи — базы нет.
 Никакие firewall rules, автозапуск, службы или настройки роутера не создаются.
 
+## Консоль и файловые события
+
+Master печатает UTC-время и события в stdout **и** `dptdoom-master.log` в рабочем
+каталоге: startup/stop, connect/list/register/heartbeat/remove/expire,
+invalid/auth failures/limits/deadlines/transport errors. `--log path` меняет путь;
+папка должна существовать. Ошибка открытия файла — понятный отказ startup, а не
+незаметная работа без лога. `--version`/`--help` файлов не создают.
+
+По умолчанию файл ограничен 1 MiB, один backup `<log>.1`;
+`--log-max-bytes 4096..16777216` меняет лимит. Ротация удаляет только предыдущий
+backup с этим точным именем, не каталоги. При ошибке записи/ротации файловый sink
+отключается с предупреждением, консоль остаётся. Не направлять несколько master
+процессов в один log path. Медленный диск/перенаправленный stdout может задержать
+event loop: это локальная диагностика, не асинхронный production log collector.
+
+На каждый тип события — максимум 4 подробные строки за 5 секунд, далее одна
+сводка `suppressed=N`. Client name/packet bytes/public id/lease secret не
+логируются. IP/порт — сетевые данные, учитывать их при публикации логов.
+
 По просьбе владельца тестовый внешний адрес — `play.dartpower.xyz:25135`.
 Для ручного проброса: `dptdoom-master.exe --bind 0.0.0.0 --port 25135`.
 Пробрасывать **TCP**, не UDP. Это не игровой порт и не подтверждение внешней
@@ -147,6 +166,13 @@ malformed headers/info, slow/truncated peers, rate/capacity и startup/bind erro
 Также проверяются 32 одновременных partial peers (8/IP), восстановление слотов
 после deadline и реальная выдача максимального списка из 128 записей.
 Временный loopback port и рабочий каталог; ни IWAD, ни окно не нужны.
+`master-log` отдельно проверяет ограничение повторов, размер/backup rotation
+и отказ при недоступном пути/ошибке ротации.
+
+На платформах без настроенных loopback aliases тест не создаёт их с root:
+multi-source wire cases пропускаются с явным сообщением (модель проверяется),
+остальные lifecycle/framing/rate сценарии выполняются. Capacity wire test
+использует TTL 60s и pacing ниже global refill, не смешивая capacity и rate limit.
 
 ```powershell
 ctest --preset headless -R '^master-'

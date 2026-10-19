@@ -243,9 +243,17 @@ partition может породить две отдельные локальны
   `play.dartpower.xyz:25135` в launcher.ini при сохранении; custom не затирается.
   Тестовый bind 0.0.0.0:25135 локально ответил; внешний port forwarding/DNS не проверены.
 - [ ] Автопубликация waiting-host из игры/launcher, снятие при подключении/выходе.
-- [ ] По просьбе владельца: Debug-only AllocConsole игрового клиента + file log;
+- [x] По просьбе владельца: Debug-only AllocConsole игрового клиента + file log;
   Release не открывает диагностическую консоль. Master — console + file events
   (startup/registration/heartbeat/expiry/errors), без токенов и packet spam.
+- [x] Debug tee сохраняет inherited stdout/stderr/session log, tests для file/pipe,
+  normal exit flush; master rotation/suppression/secrets tests.
+- [x] Полный локальный прогон: 23/23 MinGW headless, 25/25 MSVC headless ASan;
+  27/27 MSVC SDL; настоящий Debug SDL windows-smoke и launcher SP/COOP suite
+  тоже прошли. Simulation baselines не обновлялись.
+- [ ] CI run #9: Windows jobs успешны; Linux/macOS master-loopback падает.
+  Исправлены предпосылки теста (loopback aliases, capacity pacing/TTL), добавлены
+  case diagnostics; точный remote traceback ещё ожидается, rerun не выполнен.
 - [ ] Browser в launcher, выбор IP/домена/порта master; статус unverified,
   совместимость build/resources/map/rules и join без зависимости direct от master.
 - [ ] Отдельный безопасный game-query/challenge для port reachability; текущий

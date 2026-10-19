@@ -3,6 +3,7 @@
 *.exe
 *.DS_Store
 *.log
+*.log.1
 *.user
 *~
 .vs/

@@ -12,6 +12,31 @@ Native master directory собирается вместе с engine (`DPTDOOM_MA
 
 ## Windows: обычная сборка
 
+### Debug-консоль (Windows graphical backend)
+
+Только конфигурация **Debug** для Win32/SDL клиента вызывает AllocConsole, если
+нет видимой консоли. Для launcher `CREATE_NO_WINDOW` скрытая console association
+сначала отсоединяется. Release/RelWithDebInfo/headless не получают этот код.
+`--version` остаётся тихим probe, без консоли и Debug-файла.
+
+stdout и stderr сохраняются отдельно в унаследованных pipes/files; одновременно
+обе строки идут в консоль и уникальный `dptdoom-debug-<pid>-<ticks>.log` в CWD игры
+(для launcher — `game/profileN/`). Session log launcher не теряется. Relay
+выводит строки/блоки до 4096 bytes, без гарантии общего межпоточного порядка
+stdout/stderr; при нормальном exit дочитывает хвост. Если файл недоступен, есть
+предупреждение в остальных sinks. Это Debug-диагностика: логи не ротируются и
+могут содержать локальные пути/сообщения; не публиковать их без просмотра.
+
+```powershell
+cmake --build build/windows-sdl --config Debug --target dptdoom
+```
+
+`debug-console` — interactive data-free probe реального AllocConsole, больших
+stdout/stderr, file/pipe tee и exit flush. `release-console` — отсутствие
+дополнительной консоли/Debug-файла. Тесты не меняют реальные профили игрока.
+
+### Обычная сборка
+
 Нужны CMake 3.21+ и Visual Studio 2022 с компонентами C++ и Windows SDK.
 
 ```powershell
