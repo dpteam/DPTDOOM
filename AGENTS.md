@@ -44,7 +44,7 @@ ctest --preset windows-headless
   `cmake --preset windows-sdl`, build/test с тем же preset. Зависимости лежат
   только в `build/deps`, официальный ZIP проверяется SHA-256. Полные инструкции
   и ограничения — `docs/TESTING.md`. Владелец подтвердил звук через RDP.
-- `ctest --preset windows-sdl -E windows-smoke` не открывает видимые окна:
+- `ctest --preset windows-sdl -LE interactive` не открывает видимые окна:
   input/audio tests и sdl-engine используют dummy SDL drivers. Они не доказывают
   работу аппаратного MIDI; для него нужна ручная оконная проверка.
 - Тесты создают временные рабочие каталоги, не меняя конфиги игрока.
@@ -63,6 +63,17 @@ ctest --preset windows-headless
   после load с непрерывным демо как будто это полный snapshot.
 
 ## Архитектурные ограничения
+
+- `windows-asan` preset — MSVC x64 headless RelWithDebInfo. Ограничения и команды:
+  `docs/SANITIZERS.md`. Runtime DLL копируется рядом с EXE. Сначала проверить
+  `--version`; не множить missing-DLL диалоги при поломанной среде.
+- ASan zone probes намеренно падают только в дочерних тестовых процессах;
+  wrapper требует настоящий ASan report. UBSan/Linux/macOS пока не проверены.
+- Сохранение во время attract-demo — **желаемая фича владельца**, не баг для
+  удаления: F2/menu сохраняет, playback продолжается, load передаёт управление
+  single-player. Тест `demo-snapshot` открывает окно (метка `interactive`).
+- Будущая сеть: разрешить online snapshot; load только в SP с подтверждением
+  отключения от сервера. Сейчас netcode отсутствует, заглушку не изображать.
 
 - `FEATURE_MULTIPLAYER` выключен, `net_*.c` отсутствуют. Заголовки не означают,
   что сеть работает. В `refs/csDoomMaster` — только мастер-сервер, не netcode.

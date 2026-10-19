@@ -51,7 +51,7 @@ software fallback. Мышь/геймпады пока не добавлены.
 Частые проверки без видимых окон:
 
 ```powershell
-ctest --preset windows-sdl -E windows-smoke
+ctest --preset windows-sdl -LE interactive
 ```
 
 SDL-тесты ввода используют dummy video, аудио — dummy audio и синтетические
@@ -63,6 +63,16 @@ SDL-тесты ввода используют dummy video, аудио — dummy
 При заданном IWAD `sdl-engine` прогоняет настоящий движок с dummy video/audio,
 проверяет flags/shutdown и graceful failure. Никаких extracted IWAD ресурсов
 или сгенерированных WAV не сохраняется в Git.
+
+Тесты с меткой `interactive` открывают окно: обычный `windows-smoke` и
+`demo-snapshot` (F2-save в attract-demo, F3-load, переход к живому игроку).
+Они выполняются последовательно. Для обычной игры демо-сохранение включено
+по умолчанию: дождаться игрового attract-demo, F2 → слот → имя → Enter.
+Демо продолжится; F3 загружает сохранённый момент как single-player.
+На title/credit screen без игрового уровня сохранение не предлагается.
+Применяются ограничения ванильного DSG; это не полный rewind с RNG.
+
+ASan-сборка и реальные границы проверки: [SANITIZERS.md](SANITIZERS.md).
 
 ## Headless
 
