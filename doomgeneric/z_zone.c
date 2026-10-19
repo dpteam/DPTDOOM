@@ -20,6 +20,15 @@
 #include "z_zone.h"
 #include "i_system.h"
 #include "doomtype.h"
+#include <limits.h>
+#ifdef DPTDOOM_ASAN
+#include <sanitizer/asan_interface.h>
+#define Z_Poison(ptr, size) __asan_poison_memory_region((ptr), (size))
+#define Z_Unpoison(ptr, size) __asan_unpoison_memory_region((ptr), (size))
+#else
+#define Z_Poison(ptr, size) ((void)(ptr), (void)(size))
+#define Z_Unpoison(ptr, size) ((void)(ptr), (void)(size))
+#endif
 
 
 //
@@ -71,6 +80,8 @@ memzone_t*	mainzone;
 void Z_ClearZone (memzone_t* zone)
 {
     memblock_t*		block;
+
+    Z_Unpoison(zone, zone->size);
 	
     // set the entire zone to one free block
     zone->blocklist.next =
@@ -87,6 +98,7 @@ void Z_ClearZone (memzone_t* zone)
     block->tag = PU_FREE;
 
     block->size = zone->size - sizeof(memzone_t);
+    Z_Poison((byte *)block + sizeof(*block), block->size - sizeof(*block));
 }
 
 
@@ -117,6 +129,7 @@ void Z_Init (void)
     block->tag = PU_FREE;
     
     block->size = mainzone->size - sizeof(memzone_t);
+    Z_Poison((byte *)block + sizeof(*block), block->size - sizeof(*block));
 }
 
 
@@ -138,6 +151,10 @@ void Z_Free (void* ptr)
     	// clear the user's mark
 	    *block->user = 0;
     }
+
+    // Keep metadata readable for coalescing, but catch accesses to dead
+    // thinkers/lumps even though the surrounding zone is one OS allocation.
+    Z_Poison(ptr, block->size - sizeof(*block));
 
     // mark as free
     block->tag = PU_FREE;
@@ -193,6 +210,10 @@ Z_Malloc
     memblock_t* newblock;
     memblock_t*	base;
     void *result;
+    int requested = size;
+
+    if (size < 0 || size > INT_MAX - (int)sizeof(memblock_t) - (int)MEM_ALIGN)
+        I_Error("Z_Malloc: invalid allocation size %d", size);
 
     size = (size + MEM_ALIGN - 1) & ~(MEM_ALIGN - 1);
     
@@ -250,6 +271,7 @@ Z_Malloc
 
     
     // found a block big enough
+    Z_Unpoison(base, base->size);
     extra = base->size - size;
     
     if (extra >  MINFRAGMENT)
@@ -266,6 +288,7 @@ Z_Malloc
 
         base->next = newblock;
         base->size = size;
+        Z_Poison((byte *)newblock + sizeof(*newblock), newblock->size - sizeof(*newblock));
     }
 	
 	if (user == NULL && tag >= PU_PURGELEVEL)
@@ -275,6 +298,8 @@ Z_Malloc
     base->tag = tag;
 
     result  = (void *) ((byte *)base + sizeof(memblock_t));
+    // Alignment slack is not part of the caller's requested object.
+    Z_Poison((byte *)result + requested, base->size - sizeof(*base) - requested);
 
     if (base->user)
     {

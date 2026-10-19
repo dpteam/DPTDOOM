@@ -492,7 +492,9 @@ void R_InitTextures (void)
 
     for (i = 0; i < nummappatches; i++)
     {
-        M_StringCopy(name, name_p + i * 8, sizeof(name));
+        // PNAMES stores fixed-width 8-byte names, not NUL-terminated strings.
+        memcpy(name, name_p + i * 8, 8);
+        name[8] = '\0';
         patchlookup[i] = W_CheckNumForName(name);
     }
     W_ReleaseLumpName(DEH_String("PNAMES"));

@@ -254,6 +254,9 @@ void R_RenderSegLoop (void)
 	{
 	    // calculate texture offset
 	    angle = (rw_centerangle + xtoviewangle[rw_x])>>ANGLETOFINESHIFT;
+	    // Tangent repeats every 180 degrees. Rounding near a wall edge can
+	    // leave the stored half-circle table; never read adjacent globals.
+	    angle &= FINEANGLES / 2 - 1;
 	    texturecolumn = rw_offset-FixedMul(finetangent[angle],rw_distance);
 	    texturecolumn >>= FRACBITS;
 	    // calculate lighting

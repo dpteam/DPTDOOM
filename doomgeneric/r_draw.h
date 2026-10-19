@@ -32,6 +32,8 @@ extern fixed_t		dc_texturemid;
 
 // first pixel in a column
 extern byte*		dc_source;		
+// Nonzero only while drawing a bounded opaque post (sprite/masked texture).
+extern int dc_postlength;
 
 
 // The span blitting interface.

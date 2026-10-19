@@ -846,7 +846,9 @@ static void InterceptsOverrun(int num_intercepts, intercept_t *intercept)
 
     InterceptsMemoryOverrun(location, intercept->frac);
     InterceptsMemoryOverrun(location + 4, intercept->isaline);
-    InterceptsMemoryOverrun(location + 8, (int) intercept->d.thing);
+    // Deliberate low 32 bits for the legacy DOS overrun emulation, not a
+    // usable native pointer. Correct DOS address translation remains TODO.
+    InterceptsMemoryOverrun(location + 8, (int)(uint32_t)(uintptr_t)intercept->d.thing);
 }
 
 

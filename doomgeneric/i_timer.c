@@ -33,6 +33,19 @@
 //
 
 static uint32_t basetime = 0;
+static boolean timer_started = false;
+
+static uint32_t ElapsedMilliseconds(void)
+{
+    uint32_t ticks = DG_GetTicksMs();
+    if (!timer_started)
+    {
+        basetime = ticks;
+        timer_started = true;
+    }
+    // Unsigned subtraction also handles the platform's 32-bit clock wrap.
+    return ticks - basetime;
+}
 
 
 int I_GetTicks(void)
@@ -42,16 +55,8 @@ int I_GetTicks(void)
 
 int  I_GetTime (void)
 {
-    uint32_t ticks;
-
-    ticks = I_GetTicks();
-
-    if (basetime == 0)
-        basetime = ticks;
-
-    ticks -= basetime;
-
-    return (ticks * TICRATE) / 1000;
+    // Widen before multiplication: the old expression wrapped after ~34h.
+    return (int)(((uint64_t)ElapsedMilliseconds() * TICRATE) / 1000);
 }
 
 
@@ -61,14 +66,7 @@ int  I_GetTime (void)
 
 int I_GetTimeMS(void)
 {
-    uint32_t ticks;
-
-    ticks = I_GetTicks();
-
-    if (basetime == 0)
-        basetime = ticks;
-
-    return ticks - basetime;
+    return (int)ElapsedMilliseconds();
 }
 
 // Sleep for a specified number of ms

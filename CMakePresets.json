@@ -29,6 +29,13 @@
       "cacheVariables": { "DPTDOOM_BACKEND": "headless" }
     },
     {
+      "name": "windows-asan",
+      "inherits": "windows-headless",
+      "displayName": "Windows x64 MSVC AddressSanitizer (headless)",
+      "binaryDir": "${sourceDir}/build/windows-asan",
+      "cacheVariables": { "DPTDOOM_SANITIZER": "address", "DPTDOOM_LTO": "OFF" }
+    },
+    {
       "name": "headless",
       "displayName": "Headless (Ninja, compiler from environment)",
       "generator": "Ninja",
@@ -38,12 +45,14 @@
   ],
   "buildPresets": [
     { "name": "windows", "configurePreset": "windows", "configuration": "Release" },
+    { "name": "windows-asan", "configurePreset": "windows-asan", "configuration": "RelWithDebInfo" },
     { "name": "windows-sdl", "configurePreset": "windows-sdl", "configuration": "Release" },
     { "name": "windows-headless", "configurePreset": "windows-headless", "configuration": "Release" },
     { "name": "headless", "configurePreset": "headless" }
   ],
   "testPresets": [
     { "name": "windows", "configurePreset": "windows", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "windows-asan", "configurePreset": "windows-asan", "configuration": "RelWithDebInfo", "environment": { "ASAN_OPTIONS": "halt_on_error=1:detect_leaks=0" }, "output": { "outputOnFailure": true } },
     { "name": "windows-sdl", "configurePreset": "windows-sdl", "configuration": "Release", "output": { "outputOnFailure": true } },
     { "name": "windows-headless", "configurePreset": "windows-headless", "configuration": "Release", "output": { "outputOnFailure": true } },
     { "name": "headless", "configurePreset": "headless", "output": { "outputOnFailure": true } }

@@ -88,6 +88,22 @@ fixed_t			dc_texturemid;
 
 // first pixel in a column (possibly virtual) 
 byte*			dc_source;		
+int dc_postlength;
+
+static int ColumnIndex(fixed_t frac, boolean wrap_wall)
+{
+    int index = frac >> FRACBITS;
+    if (dc_postlength)
+    {
+        // Fixed-point rounding at a post boundary must not sample a header,
+        // next post or bytes outside the patch lump.
+        if (index < 0) index = 0;
+        if (index >= dc_postlength) index = dc_postlength - 1;
+    }
+    else if (wrap_wall)
+        index &= 127;
+    return index;
+}
 
 // just for profiling 
 int			dccount;
@@ -136,7 +152,7 @@ void R_DrawColumn (void)
     {
 	// Re-map color indices from wall texture column
 	//  using a lighting/special effects LUT.
-	*dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
+	*dest = dc_colormap[dc_source[ColumnIndex(frac, true)]];
 	
 	dest += SCREENWIDTH; 
 	frac += fracstep;
@@ -242,7 +258,7 @@ void R_DrawColumnLow (void)
     do 
     {
 	// Hack. Does not work corretly.
-	*dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
+	*dest2 = *dest = dc_colormap[dc_source[ColumnIndex(frac, true)]];
 	dest += SCREENWIDTH;
 	dest2 += SCREENWIDTH;
 	frac += fracstep; 
@@ -458,7 +474,7 @@ void R_DrawTranslatedColumn (void)
 	//  used with PLAY sprites.
 	// Thus the "green" ramp of the player 0 sprite
 	//  is mapped to gray, red, black/indigo. 
-	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
+	*dest = dc_colormap[dc_translation[dc_source[ColumnIndex(frac, false)]]];
 	dest += SCREENWIDTH;
 	
 	frac += fracstep; 
@@ -508,8 +524,8 @@ void R_DrawTranslatedColumnLow (void)
 	//  used with PLAY sprites.
 	// Thus the "green" ramp of the player 0 sprite
 	//  is mapped to gray, red, black/indigo. 
-	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
-	*dest2 = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
+	*dest = dc_colormap[dc_translation[dc_source[ColumnIndex(frac, false)]]];
+	*dest2 = dc_colormap[dc_translation[dc_source[ColumnIndex(frac, false)]]];
 	dest += SCREENWIDTH;
 	dest2 += SCREENWIDTH;
 	

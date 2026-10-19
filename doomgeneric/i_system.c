@@ -411,8 +411,8 @@ void I_Error (char *error, ...)
         wchar_t wmsgbuf[512];
 
         MultiByteToWideChar(CP_ACP, 0,
-                            msgbuf, strlen(msgbuf) + 1,
-                            wmsgbuf, sizeof(wmsgbuf));
+                            msgbuf, -1,
+                            wmsgbuf, (int)arrlen(wmsgbuf));
 
         MessageBoxW(NULL, wmsgbuf, L"", MB_OK);
     }

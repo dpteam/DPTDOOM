@@ -34,6 +34,7 @@ def main():
 
         def run(options, success=True):
             result = subprocess.run(command + options, cwd=work, capture_output=True, text=True, timeout=60)
+            assert "ERROR: AddressSanitizer:" not in result.stderr and "runtime error:" not in result.stderr, result.stderr
             if success:
                 assert result.returncode == 0, (options, result.returncode, result.stdout, result.stderr)
             else:

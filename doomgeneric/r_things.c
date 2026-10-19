@@ -363,15 +363,17 @@ void R_DrawMaskedColumn (column_t* column)
 	if (dc_yl <= mceilingclip[dc_x])
 	    dc_yl = mceilingclip[dc_x]+1;
 
-	if (dc_yl <= dc_yh)
+	if (dc_yl <= dc_yh && column->length > 0)
 	{
 	    dc_source = (byte *)column + 3;
+            dc_postlength = column->length;
 	    dc_texturemid = basetexturemid - (column->topdelta<<FRACBITS);
 	    // dc_source = (byte *)column + 3 - column->topdelta;
 
 	    // Drawn by either R_DrawColumn
 	    //  or (SHADOW) R_DrawFuzzColumn.
 	    colfunc ();	
+            dc_postlength = 0;
 	}
 	column = (column_t *)(  (byte *)column + column->length + 4);
     }

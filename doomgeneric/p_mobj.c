@@ -571,6 +571,20 @@ int		iquetail;
 
 void P_RemoveMobj (mobj_t* mobj)
 {
+    // HUD/death camera only need the last attacker's coordinates. Missiles
+    // can disappear immediately after doing damage; retain a coordinate-only
+    // record instead of letting players dereference a freed zone object.
+    static mobj_t last_attackers[MAXPLAYERS];
+    int player;
+    for (player = 0; player < MAXPLAYERS; ++player)
+    {
+        if (players[player].attacker == mobj && players[player].mo != mobj)
+        {
+            last_attackers[player].x = mobj->x;
+            last_attackers[player].y = mobj->y;
+            players[player].attacker = &last_attackers[player];
+        }
+    }
     if ((mobj->flags & MF_SPECIAL)
 	&& !(mobj->flags & MF_DROPPED)
 	&& (mobj->type != MT_INV)
