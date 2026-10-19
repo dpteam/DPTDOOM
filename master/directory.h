@@ -16,6 +16,7 @@ typedef struct
 } dm_directory_t;
 void DM_Prune(dm_directory_t *directory, uint64_t now);
 int DM_ValidInfo(const unsigned char *info);
+const char *DM_InfoError(const unsigned char *info);
 // Entropy is supplied by the OS-backed transport, not rand()/timestamps.
 unsigned int DM_Register(dm_directory_t *directory, const unsigned char host[4], const unsigned char *info,
                          const unsigned char entropy[DM_AUTH], uint64_t now, unsigned char reply[DM_LEASE]);

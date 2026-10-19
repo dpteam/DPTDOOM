@@ -10,17 +10,23 @@ static int Text(const unsigned char *p, unsigned int size)
     while(i<size)if(p[i++])return 0;
     return 1;
 }
-int DM_ValidInfo(const unsigned char *p)
+const char *DM_InfoError(const unsigned char *p)
 {
     unsigned int map,i;
-    if(!Text(p,64) || !Text(p+116,8) || !DM_Get16(p+124) || p[126]<1 || p[126]>5
-        || p[127]>31 || p[128]!=DM_GAME_PROTOCOL || p[129] || p[130] || p[131])return 0;
-    for(i=104;i<116;++i)if(p[i])return 0;
+    if(!Text(p,64))return "invalid-name-ASCII/padding";
+    if(!Text(p+116,8))return "invalid-map-text/padding";
+    if(!DM_Get16(p+124))return "invalid-game-port";
+    if(p[126]<1||p[126]>5)return "invalid-skill";
+    if(p[127]>31)return "unknown-rule-bits";
+    if(p[128]!=DM_GAME_PROTOCOL)return "game-protocol-mismatch";
+    if(p[129]||p[130]||p[131])return "nonzero-reserved";
+    for(i=104;i<116;++i)if(p[i])return "nonzero-reserved";
     if(p[116]=='M' && p[117]=='A' && p[118]=='P' && p[119]>='0' && p[119]<='3'
         && p[120]>='0' && p[120]<='9' && !p[121])
-    { map=(unsigned int)(p[119]-'0')*10+p[120]-'0'; return map>=1 && map<=32; }
-    return p[116]=='E' && p[117]>='1' && p[117]<='4' && p[118]=='M' && p[119]>='1' && p[119]<='9' && !p[120];
+    { map=(unsigned int)(p[119]-'0')*10+p[120]-'0'; return map>=1 && map<=32?NULL:"map-out-of-range"; }
+    return p[116]=='E' && p[117]>='1' && p[117]<='4' && p[118]=='M' && p[119]>='1' && p[119]<='9' && !p[120]?NULL:"invalid-map-name/range";
 }
+int DM_ValidInfo(const unsigned char *p) { return DM_InfoError(p)==NULL; }
 void DM_Prune(dm_directory_t *d, uint64_t now)
 {
     unsigned int i;

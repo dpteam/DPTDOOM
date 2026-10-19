@@ -48,6 +48,40 @@ event loop: это локальная диагностика, не асинхр�
 сводка `suppressed=N`. Client name/packet bytes/public id/lease secret не
 логируются. IP/порт — сетевые данные, учитывать их при публикации логов.
 
+### Диагностика подключения v2
+
+Клиентский `game.log` теперь содержит endpoint master, UTC-время, operation/
+attempt, локальный адрес/порт сокета, этап connect/send/receive-header/body,
+системный Winsock/errno code, server status и прогресс sent/received/elapsed.
+Системная ошибка сохраняется **до закрытия socket**, чтобы cleanup её не затёр.
+`reason=deadline` на connect отличается от deadline ожидания ответа после
+TCP-connect; `reply-magic-not-DPTM` явно указывает на чужой service/proxy response.
+Никаких дампов ответа/lease secrets.
+
+Master пишет process-local `cid`, peer source TCP port, byte progress, response
+status и конкретные причины: неверное metadata field/header/version/length,
+duplicate endpoint, per-IP/global capacity, source-IP change, wrong token,
+unknown/expired lease, no-request TCP probe, truncated request, receive/send
+deadline и OS socket error. `response-delivered-to-TCP` — передача в TCP stack,
+не доказательство получения приложением peer. Подавление повторов сохранено.
+
+В launcher данные DNS (домен → выбранный IPv4, native resolver error) сохраняются
+в уникальный `launcher-network-<pid>-<ticks>.log` в каталоге данных; лимит около
+1 MiB + один `.1` backup на запуск. При публикации DNS context пишется **перед
+запуском дочерней игры** в начало session `game.log`, чтобы основного клиентского
+лога хватало и без отдельного launcher network log. На ошибке browser подробность
+и путь к логу видны в статусе.
+
+Для разбора прислать полный клиентский `game.log` и master event log за ту же
+попытку. Если игра не запустилась/DNS завис — ещё launcher-network log. В логах
+есть IP/пути: отправлять адресно после просмотра. Отсутствие remote events и
+connect timeout не дают права автоматически обвинить Firewall/NAT/VPN: это
+граница наблюдений; логи показывают точную последнюю достигнутую стадию.
+
+`accept timeout` отдельно объясняет, что второй игрок не подключился вовремя,
+а master не является relay. Для ручного ожидания CLI `-net-timeout 120000`;
+таймауты и правила Firewall автоматически не изменяются.
+
 По просьбе владельца тестовый внешний адрес — `play.dartpower.xyz:25135`.
 Для ручного проброса: `dptdoom-master.exe --bind 0.0.0.0 --port 25135`.
 Пробрасывать **TCP**, не UDP. Это не игровой порт и не подтверждение внешней

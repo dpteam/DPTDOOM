@@ -40,4 +40,13 @@ static inline int DM_RequestLength(const unsigned char *p)
     if((op==DM_HEARTBEAT || op==DM_REMOVE) && length==DM_AUTH)return DM_AUTH;
     return -1;
 }
+static inline const char *DM_HeaderError(const unsigned char *p)
+{
+    if(memcmp(p,"DPTM",4))return "magic-not-DPTM(wrong-service/proxy/probe)";
+    if(DM_Get16(p+4)!=DM_VERSION)return "directory-version-mismatch";
+    if(DM_Get16(p+12)||DM_Get16(p+14))return "nonzero-request-status/reserved";
+    if(DM_Get16(p+6)<DM_LIST||DM_Get16(p+6)>DM_REMOVE)return "unknown-operation";
+    if(DM_RequestLength(p)<0)return "invalid-body-length";
+    return NULL;
+}
 #endif

@@ -33,6 +33,24 @@ static const wchar_t *uiOrigin=L"https://dptdoom.local.invalid/";
 static std::deque<std::wstring> pendingMessages;
 static bool processingMessage;
 static std::wstring masterEndpoint=LP_MASTER_ENDPOINT;
+static std::wstring networkLogPath, resolvedEndpoint;
+static void NetworkLog(const std::string &text)
+{
+    if(networkLogPath.empty())return;
+    SYSTEMTIME t;GetSystemTime(&t);char stamp[64];
+    sprintf(stamp,"[%04u-%02u-%02uT%02u:%02u:%02uZ] ",t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond);
+    HANDLE file=CreateFileW(networkLogPath.c_str(),FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(file==INVALID_HANDLE_VALUE)return;
+    LARGE_INTEGER size;
+    if(GetFileSizeEx(file,&size)&&size.QuadPart>1047552)
+    {
+        CloseHandle(file);
+        if(!MoveFileExW(networkLogPath.c_str(),(networkLogPath+L".1").c_str(),MOVEFILE_REPLACE_EXISTING))return;
+        file=CreateFileW(networkLogPath.c_str(),FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+        if(file==INVALID_HANDLE_VALUE)return;
+    }
+    DWORD written;std::string line=stamp+text+"\r\n";WriteFile(file,line.data(),static_cast<DWORD>(line.size()),&written,nullptr);CloseHandle(file);
+}
 static std::string resolvedMaster;
 static bool publishHost;
 static bool masterSettingsValid=true;
@@ -44,6 +62,7 @@ struct DirectoryJob
     unsigned int port=0;
     bool list=false,ok=false;
     std::string ip;
+    std::string diagnostic;
     std::vector<unsigned char> rows;
 };
 static DirectoryJob *directoryJob;
@@ -100,15 +119,19 @@ static DWORD WINAPI DirectoryWorker(void *argument)
 {
     auto job=static_cast<DirectoryJob*>(argument);
     WSADATA wsa;
-    if(WSAStartup(MAKEWORD(2,2),&wsa))return 0;
+    int startup=WSAStartup(MAKEWORD(2,2),&wsa);
+    if(startup){job->diagnostic="WSAStartup error="+std::to_string(startup);return 0;}
     addrinfo hints={},*addresses=nullptr;hints.ai_family=AF_INET;hints.ai_socktype=SOCK_STREAM;
-    if(!getaddrinfo(job->host.c_str(),nullptr,&hints,&addresses))
+    int dns=getaddrinfo(job->host.c_str(),nullptr,&hints,&addresses);
+    if(!dns&&addresses)
     {
         char ip[INET_ADDRSTRLEN];
         auto address=reinterpret_cast<sockaddr_in*>(addresses->ai_addr);
         if(inet_ntop(AF_INET,&address->sin_addr,ip,sizeof(ip)))job->ip=ip;
         freeaddrinfo(addresses);
     }
+    job->diagnostic="dns_host="+job->host+" port="+std::to_string(job->port)+" dns_error="+std::to_string(dns)
+        +" resolved_IPv4="+(job->ip.empty()?"none":job->ip)+" (first IPv4 result; OS route may use VPN/tunnel)";
     if(!job->ip.empty())
     {
         if(!job->list)job->ok=true;
@@ -118,6 +141,7 @@ static DWORD WINAPI DirectoryWorker(void *argument)
             MC_Begin(&query,job->ip.c_str(),job->port,DM_LIST,nullptr,0,GetTickCount64());
             int result=0;
             while(!result){result=MC_Poll(&query,GetTickCount64());if(!result)Sleep(5);}
+            char diagnostic[1024];MC_Diagnostic(&query,diagnostic,sizeof(diagnostic));job->diagnostic+="; ";job->diagnostic+=diagnostic;
             if(result>0&&!query.status)
             {
                 unsigned count=DM_Get32(query.response+DM_HEADER);
@@ -146,6 +170,7 @@ static bool StartDirectory(bool list)
     std::string endpoint(masterEndpoint.begin(),masterEndpoint.end());char host[254];unsigned port;
     if(!MC_Endpoint(endpoint.c_str(),host,&port)){Status(L"Master: нужен IP/домен:порт без URL, пути и пробелов.",true);return false;}
     directoryJob=new DirectoryJob;directoryJob->host=host;directoryJob->port=port;directoryJob->list=list;
+    NetworkLog(std::string(list?"LIST requested ":"publication DNS requested ")+host+":"+std::to_string(port));
     directoryThread=CreateThread(nullptr,0,DirectoryWorker,directoryJob,0,nullptr);
     if(!directoryThread){delete directoryJob;directoryJob=nullptr;Status(L"Не удалось создать запрос master.",true);return false;}
     directoryDeadline=GetTickCount64()+5000;directoryTimedOut=false;
@@ -320,6 +345,11 @@ static void Launch()
     SIZE_T size=0;InitializeProcThreadAttributeList(nullptr,1,0,&size);
     std::vector<unsigned char> attributes(size);startup.lpAttributeList=reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributes.data());
     HANDLE inherit[]={log,input,gameLock};PROCESS_INFORMATION process={};
+    if(profile.mode==1&&publishHost)
+    {
+        std::string context="Launcher master DNS: "+std::string(resolvedEndpoint.begin(),resolvedEndpoint.end())+" resolved_IPv4="+resolvedMaster+"\r\n";
+        DWORD written;WriteFile(log,context.data(),static_cast<DWORD>(context.size()),&written,nullptr);
+    }
     bool initialized=InitializeProcThreadAttributeList(startup.lpAttributeList,1,0,&size)!=FALSE;
     BOOL created=FALSE;
     if(initialized&&UpdateProcThreadAttribute(startup.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,inherit,sizeof(inherit),nullptr,nullptr))
@@ -329,6 +359,7 @@ static void Launch()
     CloseHandle(log);CloseHandle(input);
     if(!created){unlock();Status(L"Ошибка запуска Windows "+std::to_wstring(failure)+L". Проверьте EXE и DLL. Лог: "+logPath,true);return;}
     child=process.hProcess;CloseHandle(process.hThread);
+    NetworkLog("game PID="+std::to_string(process.dwProcessId)+" mode="+std::to_string(profile.mode)+" publish="+std::to_string(publishHost));
     Status(L"Игра запущена · PID "+std::to_wstring(process.dwProcessId)+L"\nНастройки и saves: "+workDir);
 }
 
@@ -475,10 +506,12 @@ static LRESULT CALLBACK WindowProc(HWND hwnd,UINT message,WPARAM wparam,LPARAM l
             {
                 CloseHandle(directoryThread);directoryThread=nullptr;
                 auto job=directoryJob;directoryJob=nullptr;
+                NetworkLog(job->diagnostic+(directoryTimedOut?"; discarded-after-UI-deadline":""));
                 bool launch=launchAfterResolve;launchAfterResolve=false;
                 if(!directoryTimedOut&&job->ok)
                 {
                     resolvedMaster=job->ip;
+                    resolvedEndpoint=masterEndpoint;
                     if(job->list){serverRows=std::move(job->rows);rowsReceived=GetTickCount64();DirectoryState();Status(L"Список получен: "+std::to_wstring(serverRows.size()/DM_ROW)+L". Все записи unverified; ресурсы проверяет игра.");}
                     delete job;
                     if(launch)
@@ -489,10 +522,10 @@ static LRESULT CALLBACK WindowProc(HWND hwnd,UINT message,WPARAM wparam,LPARAM l
                         else Launch();
                     }
                 }
-                else{delete job;Status(L"Master недоступен: DNS/таймаут/неверный ответ. Direct-connect доступен; для хоста можно отключить публикацию.",true);}
+                else{std::wstring detail(job->diagnostic.begin(),job->diagnostic.end());delete job;Status(L"Master недоступен. "+detail+L"\nДиагностика: "+networkLogPath,true);}
             }
             else if(!directoryTimedOut&&GetTickCount64()>=directoryDeadline)
-            {directoryTimedOut=true;launchAfterResolve=false;Status(L"Master: истёк срок запроса; DNS ещё завершается. Интерфейс/direct-connect доступны.",true);}
+            {directoryTimedOut=true;launchAfterResolve=false;NetworkLog("UI deadline 5000ms: DNS/query worker still running; late result will be discarded");Status(L"Master: истёк срок запроса; DNS ещё завершается. Лог: "+networkLogPath,true);}
         }
         if(child&&WaitForSingleObject(child,0)==WAIT_OBJECT_0){DWORD code=0;GetExitCodeProcess(child,&code);CloseHandle(child);child=nullptr;CloseHandle(gameLock);gameLock=nullptr;Status(L"Игра завершена · код "+std::to_wstring(code)+(code?L". Проверь лог сессии.":L". Настройки сохранены."),code!=0);}return 0;
     case WM_CLOSE:if(child&&MessageBoxW(hwnd,L"Закрыть лаунчер? Игра продолжит работать.",L"DPT.DOOM",MB_YESNO|MB_DEFBUTTON2)!=IDYES)return 0;DestroyWindow(hwnd);return 0;
@@ -521,6 +554,8 @@ int WINAPI wWinMain(HINSTANCE app,HINSTANCE,PWSTR,int show)
     {Error(L"Каталог данных недоступен для записи. Portable требует user рядом с EXE. Переместите лаунчер в доступный каталог; скрытого перехода в AppData нет.");return 1;}
     if(!overrideDir.empty())portable=FALSE;
     data=directory;ini=data+L"\\launcher.ini";
+    networkLogPath=data+L"\\launcher-network-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L".log";
+    NetworkLog("DPT.DOOM launcher diagnostic v2; explicit master actions only; no tokens/names logged");
     {wchar_t endpoint[261],name[64];GetPrivateProfileStringW(L"Master",L"Endpoint",LP_MASTER_ENDPOINT,endpoint,261,ini.c_str());masterEndpoint=endpoint;
      GetPrivateProfileStringW(L"Master",L"SessionName",L"DPT.DOOM COOP",name,64,ini.c_str());sessionName=name;
      publishHost=GetPrivateProfileIntW(L"Master",L"Publish",0,ini.c_str())!=0;}

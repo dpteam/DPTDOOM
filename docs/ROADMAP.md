@@ -261,6 +261,11 @@ partition может породить две отдельные локальны
   unverified metadata; join с переносом map/rules, ресурсы проверяет handshake.
 - [x] Regression: 29/29 Windows MSVC SDL, 26/26 MinGW headless,
   28/28 MSVC headless ASan. Новые client-wire и actual game publication tests.
+- [x] После remote test владельца добавлена network diagnostic v2: client
+  endpoint/local socket/stage/OS error/status/bytes/time, launcher DNS context,
+  master cid/source port/specific reject/progress reasons без secrets.
+  Refusal/timeout/truncated/wrong-service/rejected cases покрыты tests, полные
+  локальные 29/26/28 suites повторно зелёные. Реальная внешняя причина ещё не установлена.
 - [ ] Browser compatibility badges/ping/filter/favorites; сейчас не обещать
   совпадение build/resources до handshake и game-port reachability.
 - [ ] Отдельный безопасный game-query/challenge для port reachability; текущий

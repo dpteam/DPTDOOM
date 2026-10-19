@@ -133,6 +133,11 @@ ctest --preset windows-headless
 - CI run #11/6061a13 подтверждён success GitHub API/владельцем: data-free
   Windows/Linux/macOS SDL/headless + Windows ASan; ручная игра Unix не проверена.
   Новые publication/browser изменения требуют следующего remote run.
+- Master diagnostic v2: game.log содержит endpoint/DNS context/stage/OS error/
+  sent/received/status/UTC; master log — cid/source TCP port/reject reason/bytes.
+  Launcher DNS failures: launcher-network-<pid>-<ticks>.log в data dir.
+  Не логировать raw packet/auth/name; Firewall/NAT/VPN не менять автоматически
+  и не выдавать connect timeout за доказанную причину сетевой неисправности.
 - P2P — план: PWAD, PK3 после загрузчика, без commercial IWAD; точный hash
   allowlist только Freedoom 1/2 + shareware DOOM1.WAD (не full Doom I).
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная

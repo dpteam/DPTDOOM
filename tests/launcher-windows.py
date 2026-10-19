@@ -268,6 +268,9 @@ def main():
             logs = [f.read_text(errors="replace") for d in (storage, storage2) for f in d.glob("sessions/*/game.log")]
             assert sum("connected" in text for text in logs) >= 2, logs
             assert not any("desync" in text.lower() for text in logs), logs
+            assert any('Launcher master DNS:' in text and 'localhost:' in text and 'Master diagnostic v2:' in text for text in logs)
+            network_logs = [f.read_text() for d in (storage, storage2) for f in d.glob('launcher-network-*.log')]
+            assert any('dns_error=0' in text and 'resolved_IPv4=127.0.0.1' in text and 'op=LIST' in text for text in network_logs)
             # Blocking navigation must keep the trusted page/bridge in place.
             c.js("location.href='https://example.invalid/blocked'")
             time.sleep(.3)

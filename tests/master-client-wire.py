@@ -10,7 +10,7 @@ import time
 exe = str(Path(sys.argv[1]).resolve(strict=True))
 
 
-def case(response, expected="bad", slow=False):
+def case(response, expected="bad", slow=False, diagnostic=None):
     errors = []
     with socket.socket() as server:
         server.bind(("127.0.0.1", 0))
@@ -40,6 +40,10 @@ def case(response, expected="bad", slow=False):
         worker.join(10)
         assert not worker.is_alive() and not errors, errors
         assert result.returncode == 0, (result.stdout, result.stderr)
+        if diagnostic:
+            assert diagnostic.encode() in result.stdout, result.stdout
+        for field in (b'endpoint=127.0.0.1:', b'local=', b'stage=', b'os_error=', b'elapsed_ms=', b'sent=', b'received='):
+            assert field in result.stdout, result.stdout
 
 
 def header(length, **changes):
@@ -54,4 +58,16 @@ for value in (header(0xffffffff), header(4, magic=b'EVIL'), header(4, version=2)
               header(4, status=1), header(3), header(4)+bytes(2), header(4)+struct.pack('!I',129)):
     case(value)
 case(b'', slow=True)
+case(header(4, magic=b'HTTP'), diagnostic='reply-magic-not-DPTM')
+case(header(4, version=2), diagnostic='reply-directory-version')
+case(header(4)+bytes(2), diagnostic='peer-closed-before-complete-reply')
+case(b'', slow=True, diagnostic='stage=receive-header result=FAILED reason=deadline')
+for status, name in ((1,'BAD_REQUEST'),(2,'UNAUTHORIZED'),(3,'CONFLICT'),(4,'CAPACITY')):
+    case(header(0,status=status),'reject',diagnostic=name)
+# A reserved-but-not-listening local port produces a real OS refusal code.
+with socket.socket() as reservation:
+    reservation.bind(('127.0.0.1',0))
+    result=subprocess.run([exe,str(reservation.getsockname()[1]),'bad'],capture_output=True,timeout=12)
+    assert result.returncode==0 and b'reason=connect' in result.stdout, result.stdout
+    assert b'os_error=0 ' not in result.stdout, result.stdout
 print('Shared C master client: fragmented valid list, hostile headers/lengths, truncated/count mismatch and deadline OK')

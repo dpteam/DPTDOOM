@@ -36,6 +36,7 @@ typedef int SOCKET;
 #include <limits.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <time.h>
 #include "../master/client.h"
 
 static dm_client_query_t master_query;
@@ -46,6 +47,15 @@ static byte master_info[DM_INFO], master_auth[DM_AUTH];
 static boolean master_has_lease;
 static uint32_t master_next;
 static unsigned int master_interval=20;
+static unsigned int master_attempt;
+
+static void MasterDiagnostic(const char *event)
+{
+    char diagnostic[1024],stamp[32];time_t wall=time(NULL);struct tm *utc=gmtime(&wall);
+    if(!utc||!strftime(stamp,sizeof(stamp),"%Y-%m-%dT%H:%M:%SZ",utc))strcpy(stamp,"unknown-time");
+    MC_Diagnostic(&master_query,diagnostic,sizeof(diagnostic));
+    printf("Master [%s]: %s attempt=%u %s\n",stamp,event,master_attempt,diagnostic);fflush(stdout);
+}
 
 static void MasterPoll(void)
 {
@@ -56,6 +66,7 @@ static void MasterPoll(void)
     {
         MC_Begin(&master_query,master_ip,master_port,master_has_lease?DM_HEARTBEAT:DM_REGISTER,
             master_has_lease?master_auth:master_info,master_has_lease?DM_AUTH:DM_INFO,now);
+        ++master_attempt;MasterDiagnostic("request-start");
         master_waiting=true;
     }
     if(!master_waiting)return;
@@ -65,10 +76,12 @@ static void MasterPoll(void)
     if(result<0 || master_query.status)
     {
         if(result>0 && master_query.status==DM_UNAUTHORIZED)master_has_lease=false;
-        puts("Master: directory unavailable/rejected; direct host still waiting"); fflush(stdout);
+        MasterDiagnostic("request-failed");
+        puts("Master: direct host still waiting; retry_ms=10000. No automatic firewall/router changes."); fflush(stdout);
     }
     else
     {
+        MasterDiagnostic("request-complete");
         if(!master_has_lease)
         {
             memcpy(master_auth,master_query.response+DM_HEADER,DM_AUTH); master_has_lease=true;
@@ -92,6 +105,7 @@ static void MasterRemove(void)
         int result=0;
         while(!result && (uint32_t)(DG_GetTicksMs()-start)<250)
         { result=MC_Poll(&master_query,DG_GetTicksMs()); if(!result)DG_SleepMs(1); }
+        MasterDiagnostic(result?"pending-register-complete":"pending-register-cleanup-budget-exhausted");
         if(result>0 && !master_query.status)
         { memcpy(master_auth,master_query.response+DM_HEADER,DM_AUTH); master_has_lease=true; }
     }
@@ -103,6 +117,7 @@ static void MasterRemove(void)
         MC_Begin(&master_query,master_ip,master_port,DM_REMOVE,master_auth,DM_AUTH,start);
         while(!result && (uint32_t)(DG_GetTicksMs()-start)<250)
         { result=MC_Poll(&master_query,DG_GetTicksMs()); if(!result)DG_SleepMs(1); }
+        MasterDiagnostic(result?"remove-complete":"remove-cleanup-budget-exhausted");
         puts(result>0 && !master_query.status?"Master: advertisement removed":"Master: remove not confirmed; advertisement expires by TTL");
         fflush(stdout); MC_Close(&master_query);
     }
@@ -176,6 +191,12 @@ static boolean Wait(uint32_t start, const char *operation)
     if ((uint32_t)(now - start) >= timeout_ms)
     {
         if (active) return PeerLost("Network timeout: peer no longer responding");
+        if(!strcmp(operation,"accept"))
+        {
+            printf("Direct coop diagnostic: accept wait expired after %u ms; no second player connected.\n",timeout_ms);
+            puts("Master publication and game TCP port are separate. A master listing does not relay game traffic or prove game-port reachability.");
+            puts("For a longer host wait use -net-timeout 120000; firewall/NAT/VPN cause cannot be inferred from accept timeout alone.");fflush(stdout);
+        }
         return SessionFailure("Network timeout during %s", operation);
     }
     if ((uint32_t)(now - last_pump) >= 20)
@@ -357,6 +378,11 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
         master_info[128]=2;
         if(!DM_ValidInfo(master_info))I_Error("Invalid master session metadata/name");
         master_enabled=true; master_waiting=false; master_has_lease=false; master_next=DG_GetTicksMs();
+        master_attempt=0;
+        printf("Master diagnostic v2: endpoint=%s:%u directory_protocol=%u game_port=%s request_deadline_ms=2500 retry_ms=10000 accept_timeout_ms=%u\n",
+            master_ip,master_port,DM_VERSION,host,timeout_ms);
+        printf("Master metadata: map=%s skill=%u flags=%u game_protocol=%u (name/auth omitted)\n",master_info+116,master_info[126],master_info[127],master_info[128]);
+        fflush(stdout);
     }
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -371,6 +397,7 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
         if (bind(listener, (struct sockaddr *)&address, sizeof(address)) == SOCKET_ERROR
             || listen(listener, 1) == SOCKET_ERROR) I_Error("Network: cannot bind/listen on requested address/port");
         printf("Direct coop: listening on %s:%s, waiting for one player\n", bind_ip ? bind_ip : "127.0.0.1", host);
+        printf("Direct coop diagnostic: accept_timeout_ms=%u master=%s build=%s\n",timeout_ms,master?master:"disabled",DPT_NET_BUILD_ID);
         fflush(stdout);
         start = DG_GetTicksMs();
         while ((connection = accept(listener, NULL, NULL)) == INVALID_SOCKET)

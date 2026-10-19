@@ -13,7 +13,7 @@ static unsigned int max_size, bytes;
 static int failed;
 static struct { uint64_t start; unsigned int shown, suppressed; } limits[ML_EVENTS];
 static const char *names[ML_EVENTS]={"connect", "list", "register", "heartbeat", "remove", "expire",
-    "invalid-request", "unauthorized", "limit-rejected", "deadline", "transport-error"};
+    "invalid-request", "unauthorized", "limit-rejected", "deadline", "transport-error", "response"};
 
 static void FileFailure(void)
 {
@@ -76,18 +76,20 @@ void ML_Flush(uint64_t now, int force)
         }
     }
 }
-void ML_Event(unsigned int event, const unsigned char *host, unsigned int port, uint64_t now)
+void ML_Detail(unsigned int event, const unsigned char *host, unsigned int port, uint64_t now, const char *detail)
 {
-    char message[192];
+    char message[448];
     if(event>=ML_EVENTS)return;
     ML_Flush(now,0);
     if(limits[event].shown>=4)
     { if(limits[event].suppressed<UINT_MAX)++limits[event].suppressed; return; }
     ++limits[event].shown;
-    if(host)snprintf(message,sizeof(message),"%s: peer=%u.%u.%u.%u port=%u",names[event],host[0],host[1],host[2],host[3],port);
-    else snprintf(message,sizeof(message),"%s",names[event]);
+    if(host)snprintf(message,sizeof(message),"%s: peer=%u.%u.%u.%u port=%u %s",names[event],host[0],host[1],host[2],host[3],port,detail?detail:"");
+    else snprintf(message,sizeof(message),"%s %s",names[event],detail?detail:"");
     Line(message);
 }
+void ML_Event(unsigned int event, const unsigned char *host, unsigned int port, uint64_t now)
+{ ML_Detail(event,host,port,now,NULL); }
 void ML_Close(void)
 {
     ML_Flush(0,1);

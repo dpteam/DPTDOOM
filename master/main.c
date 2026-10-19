@@ -42,12 +42,33 @@ typedef struct
     unsigned char host[4], request[DM_HEADER+DM_INFO], response[DM_HEADER+DM_MAX_BODY];
     unsigned int received, wanted, response_size, sent;
     uint64_t deadline;
+    uint64_t began, id;
+    unsigned int peer_port;
 } dm_client_t;
 typedef struct { unsigned char host[4]; uint64_t time; unsigned int credit; int used; } dm_bucket_t;
 static dm_directory_t directory;
 static dm_client_t clients[DM_CLIENTS];
 static dm_bucket_t rate_ips[DM_RATE_IPS], global_rate;
 static volatile sig_atomic_t stopping;
+static uint64_t next_client_id;
+
+static int LastSocketError(void)
+{
+#ifdef _WIN32
+    return WSAGetLastError();
+#else
+    return errno;
+#endif
+}
+static void ClientEvent(dm_client_t *c,unsigned int event,const char *reason,unsigned int status,int error,uint64_t now)
+{
+    char detail[352];
+    unsigned int op=c->received>=DM_HEADER?DM_Get16(c->request+6):0;
+    snprintf(detail,sizeof(detail),"cid=%llu op=%u status=%u reason=%s os_error=%d elapsed_ms=%llu received=%u/%u sent=%u/%u",
+        (unsigned long long)c->id,op,status,reason,error,(unsigned long long)(now-c->began),
+        c->received,c->wanted,c->sent,c->response_size);
+    ML_Detail(event,c->host,c->peer_port,now,detail);
+}
 
 static void Prune(uint64_t now)
 {
@@ -139,30 +160,61 @@ static int Reply(dm_client_t *client, uint64_t now)
     Prune(now);
     if(DM_RequestLength(client->request)>=0)
     {
-        if(op==DM_LIST) { length=DM_List(&directory,now,body); status=DM_OK; ML_Event(ML_LIST,client->host,0,now); }
+        if(op==DM_LIST) { length=DM_List(&directory,now,body); status=DM_OK; }
         else if(op==DM_REGISTER)
         {
             unsigned char entropy[DM_AUTH];
-            if(!Entropy(entropy,sizeof(entropy))) { ML_Event(ML_IO,client->host,0,now); return 0; }
+            if(!Entropy(entropy,sizeof(entropy))) { ClientEvent(client,ML_IO,"OS-random-unavailable",0,0,now); return 0; }
             status=DM_Register(&directory,client->host,client->request+DM_HEADER,entropy,now,body);
-            if(status==DM_OK) { length=DM_LEASE; ML_Event(ML_REGISTER,client->host,DM_Get16(client->request+DM_HEADER+124),now); }
+            if(status==DM_OK)length=DM_LEASE;
             memset(entropy,0,sizeof(entropy));
         }
         else
         {
             status=DM_Renew(&directory,client->host,client->request+DM_HEADER,now,op==DM_REMOVE,body);
-            if(status==DM_OK) { length=4; ML_Event(op==DM_REMOVE?ML_REMOVE:ML_HEARTBEAT,client->host,0,now); }
+            if(status==DM_OK)length=4;
         }
     }
-    if(status!=DM_OK)ML_Event(status==DM_UNAUTHORIZED?ML_AUTH:ML_INVALID,client->host,0,now);
     DM_Header(client->response,op,length,status);
     client->response_size=DM_HEADER+length;
+    {
+        const char *reason="accepted";
+        unsigned int event=op==DM_LIST?ML_LIST:op==DM_REGISTER?ML_REGISTER:op==DM_REMOVE?ML_REMOVE:ML_HEARTBEAT;
+        char metadata[144];
+        if(status==DM_BAD_REQUEST)reason=op==DM_REGISTER?DM_InfoError(client->request+DM_HEADER):"bad-request";
+        else if(status==DM_CONFLICT)reason="endpoint-already-registered-or-ID-collision;wait-TTL";
+        else if(status==DM_CAPACITY)
+        {
+            unsigned int j,count=0,ip_count=0;
+            for(j=0;j<DM_MAX_SERVERS;++j)if(directory.entries[j].active)
+            {++count;if(!memcmp(directory.entries[j].host,client->host,4))++ip_count;}
+            reason=ip_count>=DM_MAX_IP_SERVERS?"per-IP-registration-limit(4)":count>=DM_MAX_SERVERS?"directory-capacity(128)":"registration-capacity";
+        }
+        else if(status==DM_UNAUTHORIZED)
+        {
+            unsigned int j;reason="unknown-or-expired-lease";
+            for(j=0;j<DM_MAX_SERVERS;++j)
+            {
+                const dm_entry_t *entry=&directory.entries[j];
+                if(entry->active&&!memcmp(entry->id,client->request+DM_HEADER,16))
+                {reason=memcmp(entry->host,client->host,4)?"lease-source-IP-changed(check-VPN-egress)":"lease-token-mismatch";break;}
+            }
+        }
+        if(status!=DM_OK)event=status==DM_UNAUTHORIZED?ML_AUTH:ML_INVALID;
+        if(op==DM_REGISTER&&status==DM_OK)
+        {
+            const unsigned char *p=client->request+DM_HEADER;
+            snprintf(metadata,sizeof(metadata),"accepted-game-port=%u-skill=%u-flags=%u-game-protocol=%u-TTL=%u",
+                DM_Get16(p+124),p[126],p[127],p[128],directory.lease_seconds);reason=metadata;
+        }
+        ClientEvent(client,event,reason?reason:"invalid-metadata",status,0,now);
+    }
     return 1;
 }
 static void ReadClient(dm_client_t *client, uint64_t now)
 {
     int got=(int)recv(client->socket,(char*)client->request+client->received,(int)(client->wanted-client->received),0);
-    if(got<=0) { if(!got || !WouldBlock()) { ML_Event(ML_IO,client->host,0,now); Drop(client); } return; }
+    if(got<=0) { if(!got || !WouldBlock()) { int error=got<0?LastSocketError():0;ClientEvent(client,ML_IO,got?"receive-failed":client->received?"peer-closed-truncated-request":"peer-closed-no-DPTM-request(TCP-probe)",0,error,now); Drop(client); } return; }
     client->received+=(unsigned int)got;
     if(client->received!=client->wanted)return;
     if(client->wanted==DM_HEADER)
@@ -171,7 +223,7 @@ static void ReadClient(dm_client_t *client, uint64_t now)
         if(length>0) { client->wanted=DM_HEADER+(unsigned int)length; return; }
         if(length<0)
         {
-            ML_Event(ML_INVALID,client->host,0,now);
+            ClientEvent(client,ML_INVALID,DM_HeaderError(client->request),DM_BAD_REQUEST,0,now);
             DM_Header(client->response,DM_Get16(client->request+6),0,DM_BAD_REQUEST);
             client->response_size=DM_HEADER; return;
         }
@@ -186,9 +238,9 @@ static void WriteClient(dm_client_t *client)
 #else
     sent=(int)send(client->socket,(const char*)client->response+client->sent,(int)(client->response_size-client->sent),0);
 #endif
-    if(sent<=0) { if(!sent || !WouldBlock()) { ML_Event(ML_IO,client->host,0,Now()); Drop(client); } return; }
+    if(sent<=0) { if(!sent || !WouldBlock()) { int error=sent<0?LastSocketError():0;ClientEvent(client,ML_IO,"response-send-failed",0,error,Now()); Drop(client); } return; }
     client->sent+=(unsigned int)sent;
-    if(client->sent==client->response_size)Drop(client);
+    if(client->sent==client->response_size) { ClientEvent(client,ML_RESPONSE,"response-delivered-to-TCP",DM_Get16(client->response+12),0,Now());Drop(client); }
 }
 static void Accept(SOCKET listener, uint64_t now)
 {
@@ -210,16 +262,17 @@ static void Accept(SOCKET listener, uint64_t now)
 #ifndef _WIN32
         if(socket>=FD_SETSIZE) { DM_Close(socket); continue; }
 #endif
-        if(!Rate(host,now)) { ML_Event(ML_LIMIT,host,0,now); DM_Close(socket); continue; }
+        if(!Rate(host,now)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=connection-rate-limit"); DM_Close(socket); continue; }
         if(!Nonblocking(socket)) { ML_Event(ML_IO,host,0,now); DM_Close(socket); continue; }
         for(i=0;i<DM_CLIENTS;++i)
             if(clients[i].socket!=INVALID_SOCKET && !memcmp(clients[i].host,host,4))++ip_clients;
-        if(ip_clients>=DM_IP_CLIENTS) { ML_Event(ML_LIMIT,host,0,now); DM_Close(socket); continue; }
+        if(ip_clients>=DM_IP_CLIENTS) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=per-IP-active-connection-limit"); DM_Close(socket); continue; }
         for(i=0;i<DM_CLIENTS;++i)if(clients[i].socket==INVALID_SOCKET)break;
-        if(i==DM_CLIENTS) { ML_Event(ML_LIMIT,host,0,now); DM_Close(socket); continue; }
+        if(i==DM_CLIENTS) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=global-active-connection-limit"); DM_Close(socket); continue; }
         clients[i].socket=socket; clients[i].wanted=DM_HEADER; clients[i].deadline=now+DM_DEADLINE;
         memcpy(clients[i].host,host,4);
-        ML_Event(ML_CONNECT,host,0,now);
+        clients[i].began=now;clients[i].id=++next_client_id;clients[i].peer_port=ntohs(peer.sin_port);
+        ClientEvent(&clients[i],ML_CONNECT,"TCP-accepted-awaiting-DPTM",0,0,now);
     }
 }
 static int Run(SOCKET listener)
@@ -237,7 +290,7 @@ static int Run(SOCKET listener)
         {
             dm_client_t *client=&clients[i];
             if(client->socket==INVALID_SOCKET)continue;
-            if(now>=client->deadline) { ML_Event(ML_TIMEOUT,client->host,0,now); Drop(client); continue; }
+            if(now>=client->deadline) { ClientEvent(client,ML_TIMEOUT,client->response_size?"response-send-deadline":client->received<DM_HEADER?"receive-header-deadline":"receive-body-deadline",0,0,now); Drop(client); continue; }
             if(client->response_size)FD_SET(client->socket,&writes);
             else FD_SET(client->socket,&reads);
             if(client->socket>maximum)maximum=client->socket;
@@ -325,6 +378,8 @@ int main(int argc, char **argv)
     if(!Nonblocking(listener) || bind(listener,(struct sockaddr*)&address,sizeof(address))==SOCKET_ERROR || listen(listener,DM_CLIENTS)==SOCKET_ERROR)
     { ML_Message("Master: nonblocking/bind/listen failed; check address and port"); DM_Close(listener); result=1; goto cleanup; }
     { char message[256]; snprintf(message,sizeof(message),"DPT.DOOM master: listening on %s:%u (directory v1, TTL %us, experimental LAN; no TLS)",host,port,directory.lease_seconds); ML_Message(message); }
+    ML_Message("Master diagnostic v2: status 0=OK 1=BAD_REQUEST 2=UNAUTHORIZED 3=CONFLICT 4=CAPACITY; cid is local to this process, peer port is TCP source port, not game port");
+    ML_Message("Requests are logged with byte progress and failure reason; no names/tokens/payload dumps. Missing remote events means no observed request, not proof of firewall cause.");
     result=Run(listener);
     for(i=0;i<DM_CLIENTS;++i)Drop(&clients[i]);
     DM_Close(listener);

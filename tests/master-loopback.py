@@ -118,6 +118,11 @@ def main():
             if test.__name__ == "lifecycle":
                 for event in ("register:", "heartbeat:", "remove:", "expire:", "unauthorized:"):
                     assert event in events, (event, events)
+                for field in ('cid=', 'received=', 'status=3', 'endpoint-already-registered', 'status=2', 'unknown-or-expired-lease'):
+                    assert field in events, (field,events)
+            if test.__name__ == "malformed":
+                assert 'reason=map-out-of-range' in events
+                assert 'receive-header-deadline' in events and 'receive-body-deadline' in events
 
         def lifecycle(port, request):
             assert request(1) == (0, struct.pack("!I", 0))

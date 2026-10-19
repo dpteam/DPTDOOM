@@ -90,9 +90,14 @@ def main():
             gp = port()
             host, hlog = start("offline", common + ["-net-host", gp, "-master", f"127.0.0.1:{dead}"])
             wait(lambda: "still waiting" in hlog.read_text())
+            offline=hlog.read_text()
+            for field in ('Master diagnostic v2:', 'request-start', 'request-failed', 'endpoint=127.0.0.1:', 'stage=connect', 'os_error=', 'retry_ms=10000'):
+                assert field in offline, (field, offline)
             guest, glog = start("offline-guest", common + ["-net-join", f"127.0.0.1:{gp}"])
             assert host.wait(20) == 0, hlog.read_text()
             assert guest.wait(20) == 0, glog.read_text()
+            timeout_text=(root/'timeout/stdout.log').read_text()
+            assert 'no second player connected' in timeout_text and 'separate' in timeout_text
             print("Master publication: actual game metadata, heartbeat beyond TTL, remove on join/timeout, direct connect during outage OK")
         finally:
             for p in processes:

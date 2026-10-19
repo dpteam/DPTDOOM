@@ -10,6 +10,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define REQUIRE(x) do { if(!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); exit(1); } } while(0)
+static uint64_t Now(void)
+{
+#ifdef _WIN32
+    return GetTickCount64();
+#else
+    struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);return (uint64_t)ts.tv_sec*1000+ts.tv_nsec/1000000;
+#endif
+}
 int main(int argc,char **argv)
 {
     char host[254]; unsigned port,i;
@@ -18,13 +26,11 @@ int main(int argc,char **argv)
     dm_client_query_t query;
     if(argc==3)
     {
-        // Wire probe driven by Python fake peers. Caller provides controlled
-        // monotonic ticks, so timeout coverage does not need a wall-clock sleep.
-        uint64_t now=0;int result=0;
+        uint64_t now=Now();int result=0;
         MC_Init(&query);MC_Begin(&query,"127.0.0.1",(unsigned int)atoi(argv[1]),DM_LIST,NULL,0,now);
         while(!result)
         {
-            result=MC_Poll(&query,now++);
+            result=MC_Poll(&query,Now());
 #ifdef _WIN32
             Sleep(1);
 #else
@@ -32,7 +38,9 @@ int main(int argc,char **argv)
 #endif
         }
         if(!strcmp(argv[2],"ok"))REQUIRE(result==1&&!query.status);
+        else if(!strcmp(argv[2],"reject"))REQUIRE(result==1&&query.status);
         else REQUIRE(result<0);
+        {char diagnostic[1024];MC_Diagnostic(&query,diagnostic,sizeof(diagnostic));puts(diagnostic);}
         MC_Close(&query);puts("Master client wire probe OK");return 0;
     }
     REQUIRE(MC_Endpoint("play.dartpower.xyz:25135",host,&port)&&port==25135);
