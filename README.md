@@ -1,4 +1,54 @@
-# doomgeneric
+# DPT.DOOM
+
+Свой source port Doom на основе [DoomGeneric](https://github.com/ozkl/doomgeneric).
+Основная платформа разработки — Windows; переносимые бэкенды сохраняются.
+
+![DPT.DOOM icon](resources/dptdoom.png)
+
+## Быстрый старт: Windows
+
+Нужны CMake 3.21+, Visual Studio 2022 (C++/Windows SDK) и собственный IWAD.
+Для локальной разработки положить Doom II в `refs/iwads/doom2.wad`.
+`refs/` и WAD-файлы не попадают в Git.
+
+```powershell
+cmake --preset windows
+cmake --build --preset windows
+& ./build/windows/Release/dptdoom.exe -iwad refs/iwads/doom2.wad
+```
+
+В текущем этапе есть Win32-сборка, брендинг/иконка и headless для автоматических
+проверок. Мультиплеер, мастер-сервер, лаунчер, PK3 и DECORATE **ещё не реализованы**.
+Нативный Win32 backend пока без звука; SDL-аудио требует отдельной сборки и проверки.
+
+- [Сборка и тестирование, включая headless](docs/TESTING.md)
+- [План и текущее состояние](docs/ROADMAP.md)
+- [Разбор upstream PR](docs/UPSTREAM.md)
+- [Требования владельца](PROMPT.md)
+
+## Другие платформы и настройки
+
+Корневой CMake выбирает Win32 на Windows, X11 на Linux/Unix и SDL на macOS.
+Можно явно указать `-DDPTDOOM_BACKEND=win32|x11|sdl|headless`.
+Для SDL нужны CMake-пакеты SDL2 и, с `-DDPTDOOM_SOUND=ON`, SDL2_mixer.
+Конфигурации Linux/macOS/SDL в форке пока не протестированы.
+
+Release/MinSizeRel используют LTO при поддержке компилятора; отключение:
+`-DDPTDOOM_LTO=OFF`. CRT остаётся штатным. `fast-math` не используется.
+Старые Makefile и VS solution сохранены как legacy; рекомендуемый путь — CMake.
+Названия исходных файлов/API DoomGeneric пока намеренно сохранены для upstream diff.
+
+## Лицензия и происхождение
+
+См. [LICENSE](LICENSE) и copyright-заголовки исходных файлов. DPT.DOOM сохраняет
+происхождение DoomGeneric, Chocolate Doom и оригинального Doom от id Software.
+Коммерческие игровые данные не включены; лицензия движка не распространяет права
+на IWAD. README.TXT — исторический документ исходной кодовой базы.
+
+---
+
+## Исходная документация DoomGeneric
+
 The purpose of doomgeneric is to make porting Doom easier.
 Of course Doom is already portable but with doomgeneric it is possible with just a few functions.
 
