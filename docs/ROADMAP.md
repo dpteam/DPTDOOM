@@ -51,6 +51,8 @@ OPL-синтез, мышь/геймпады. Дефолтный native Win32 bac
 - [x] Startup/error smoke без IWAD; тесты timer/zone/input/audio не требуют игры.
 - [x] Actions pinned SHA, read-only token, timeout/cancel, failure logs без build tree.
 - [x] Workflow прошёл actionlint; Windows data-free build проверен с чистого дерева сборки.
+- [x] Добавлены downloadable Windows SDL/headless build artifacts с инструкцией,
+  commit ID, SHA-256 и соответствующим source ZIP; remote upload ещё не выполнен.
 - [x] Исправлены X11 null display handling и неверная высота XImage (runtime не проверен).
 - [ ] Выполнить workflow на GitHub и устранить реальные cross-platform failures.
 
@@ -88,6 +90,29 @@ WSL-инструменты по решению владельца не уста�
 Это не полный snapshot сети и не обещание hardened-загрузки враждебных DSG.
 
 ## Этап 2 — кооператив с друзьями
+
+### Этап 2.1 — direct coop v1 (экспериментальный Windows loopback)
+
+- [x] Собственный DPT protocol v1, TCP lockstep, ровно два игрока, explicit IPv4.
+- [x] По умолчанию bind только localhost, LAN bind только явным аргументом.
+- [x] Handshake: fingerprint исходников/build версии, содержимое/порядок lumps,
+  skill/map/monster flags/gameversion и противоположные player IDs.
+- [x] Endian-safe codec, command bounds, reserved fields, номер тика, checksum,
+  fragmented stream, EOF, disconnect и bounded timeout.
+- [x] Два headless процесса: scripted movement/fire + monsters, 210 тиков с
+  одинаковыми потиковыми трассами. Проверено MinGW и MSVC ASan на Windows.
+- [x] Два SDL-окна: различный живой ввод/камеры, более 128 тиков, close/disconnect.
+- [x] Смешанный Windows loopback MinGW host + MSVC ASan guest, 210 тиков.
+- [x] Artifacts allowlist/source/dirty/overwrite checks в изолированном git fixture.
+- [x] Регрессионные state-baselines сохранены без обновления.
+- [ ] Реальная сессия двух машин/друзей, проверка latency/packet loss.
+- [ ] Online snapshots и load-to-SP с предупреждением/подтверждением отключения.
+- [ ] Graceful disconnect-to-menu/reconnect; сейчас peer failure завершает процесс.
+
+Команды и строгие ограничения: `docs/NETWORK.md`. Это не сетевой протокол
+Chocolate Doom и не готовый публичный Internet server. UDP/prediction/NAT не
+реализованы. Старый `FEATURE_MULTIPLAYER` остаётся выключен; новый путь включён
+через CMake `DPTDOOM_NETWORK` и не использует заголовки как подмену реализации.
 
 - Требование владельца: разрешить локальный snapshot во время онлайн-игры.
   Загрузка snapshot запускает single-player; в подключённой МП-сессии сначала
@@ -127,5 +152,6 @@ WSL-инструменты по решению владельца не уста�
 
 ## Что не заявляется готовым
 
-Мультиплеер, мастер-сервер DPT.DOOM, launcher, PK3 и DECORATE ещё отсутствуют.
+Полноценный Internet multiplayer, мастер-сервер DPT.DOOM, launcher, PK3 и
+DECORATE ещё отсутствуют. Доступен только экспериментальный direct coop v1.
 Первый этап не является реализацией всего ТЗ.

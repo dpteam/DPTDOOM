@@ -30,7 +30,37 @@ Workflow: `.github/workflows/ci.yml`. Запускается на push, pull req
 - Не используется `pull_request_target`, публикация релизов или push из workflow.
 - Устаревшие запуски отменяются, матрица не останавливается после первой ошибки.
 - При ошибке загружается только конкретный `LastTest.log` на 7 дней;
-  бинарники, whole build tree и игровые ресурсы не публикуются.
+  whole build tree и игровые ресурсы не публикуются.
+
+## Скачать тестовые сборки (Artifacts)
+
+После успешного будущего Actions run открыть GitHub → Actions → нужный запуск →
+Artifacts. GitHub обычно требует вход в аккаунт для скачивания artifacts.
+
+- `dptdoom-windows-x64-sdl-<commit>` — игровой ZIP, EXE + SDL DLL, без IWAD.
+- `dptdoom-headless-<os>-<commit>` — диагностический tar.gz, без окна/аудио.
+- Срок хранения — 30 дней. Это CI playtest builds, **не релизы**.
+- Пакеты содержат `START-HERE.txt`, `BUILD.json`, `SHA256SUMS.txt`, лицензии и
+  `SOURCE.zip` с исходниками того же коммита (для GPL и воспроизводимости).
+- Проверка `packaging` на синтетическом git fixture проверяет allowlist,
+  запрет dirty/overwrite и недопущение tracked game data в source ZIP.
+- Игровой Windows preset использует статический MSVC CRT; SDL DLL копируются
+  через CMake install. Если нужны дополнительные системные компоненты Windows,
+  инструкция должна уточняться после проверки на чистой машине.
+- Unix-пакеты пока только headless. Playable Linux/macOS SDL binary bundle не
+  публикуется, пока не настроена корректная упаковка системных SDL-зависимостей.
+- ASan runtime не публикуется как обычная игровая сборка.
+
+Упаковщик `tools/package-build.py` берёт **строгий allowlist** файлов из CMake
+install, не целый build directory. Источник — `git archive HEAD`; упаковка
+отказывается работать при изменённых tracked sources и не затирает существующий
+архив. Поэтому коммитить перед упаковкой. Проверка source ZIP запрещает game
+data/save/config/frame/log файлы. Будущие tracked config templates потребуют
+отдельного осмысленного изменения allowlist, не отключения проверки.
+
+Пакеты не создаются при провалившихся тестах соответствующего job. Объём
+проверки без IWAD ограничен; перед игрой с друзьями дополнительно прогнать
+локальные network tests и убедиться, что оба скачали **один и тот же artifact**.
 
 ## Что проверено локально
 

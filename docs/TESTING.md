@@ -74,6 +74,7 @@ SDL-тесты ввода используют dummy video, аудио — dummy
 Применяются ограничения ванильного DSG; это не полный rewind с RNG.
 
 ASan-сборка и реальные границы проверки: [SANITIZERS.md](SANITIZERS.md).
+Direct coop loopback/packet/window tests: [NETWORK.md](NETWORK.md).
 
 ## Headless
 

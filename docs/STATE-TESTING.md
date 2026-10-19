@@ -54,6 +54,12 @@ Checkpoint вызывает тот же `G_DoSaveGame`, что и меню, но
 автоматизируется. Сообщение `Diagnostics: loaded ...` печатается **до** первого
 возобновлённого тика: его archive-checksum должен совпадать с checkpoint.
 
+В direct coop `-headless-save-tic` пока запрещён. Для net trace используется
+тот же archive projection, но render-only ML_MAPPED исключён: разные игроки
+видят разные линии. `-headless-input path.bin` подаёт scripted ticcmd (8-byte
+codec) для теста обоих игроков; встроенный legacy consistency сохраняется.
+См. `NETWORK.md`. Single-player baselines используют прежнюю схему без изменений.
+
 ## Формат `dptdoom-state-v1`
 
 Строки: `tick gametic leveltime archive-fnv1a sim-fnv1a`. Все хеши FNV-1a 32-bit;

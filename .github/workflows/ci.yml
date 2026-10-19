@@ -27,11 +27,22 @@ jobs:
         with:
           python-version: '3.11'
       - name: Configure (no IWAD, no display dependencies)
-        run: cmake -S . -B build/ci -DDPTDOOM_BACKEND=headless -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build/ci -DDPTDOOM_BACKEND=headless -DDPTDOOM_STATIC_CRT=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build/ci --config Release --parallel 4
       - name: Test
         run: ctest --test-dir build/ci -C Release --output-on-failure
+      - name: Install and package headless diagnostic build
+        run: |
+          cmake --install build/ci --config Release --prefix build/install-headless
+          python tools/package-build.py --install build/install-headless --output build/packages --name dptdoom-headless-${{ matrix.os }} --kind headless --format tar.gz
+      - name: Downloadable headless build (with corresponding source)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dptdoom-headless-${{ matrix.os }}-${{ github.sha }}
+          path: build/packages/*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
       - name: Test report on failure (no game data)
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -58,6 +69,17 @@ jobs:
         run: cmake --build --preset windows-sdl --parallel 4
       - name: Test without visible windows or physical audio
         run: ctest --preset windows-sdl -LE interactive
+      - name: Install and package playable Windows SDL build
+        run: |
+          cmake --install build/windows-sdl --config Release --prefix build/install-sdl
+          python tools/package-build.py --install build/install-sdl --output build/packages --name dptdoom-windows-x64-sdl --kind windows-sdl
+      - name: Downloadable Windows build for playtesting (with corresponding source)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dptdoom-windows-x64-sdl-${{ github.sha }}
+          path: build/packages/*.zip
+          if-no-files-found: error
+          retention-days: 30
       - name: Test report on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -73,15 +73,23 @@ ctest --preset windows-headless
   удаления: F2/menu сохраняет, playback продолжается, load передаёт управление
   single-player. Тест `demo-snapshot` открывает окно (метка `interactive`).
 - Будущая сеть: разрешить online snapshot; load только в SP с подтверждением
-  отключения от сервера. Сейчас netcode отсутствует, заглушку не изображать.
+  отключения от сервера. В текущем direct coop online save/load заблокированы
+  до отдельной реализации; не изображать их рабочими заглушками.
 - CI подготовлен в `.github/workflows/ci.yml`, прошёл actionlint, но remote run
   ещё не выполнен. См. `docs/CI.md`: не называть Linux/macOS проверенными до
   реального успешного запуска. Коммерческие IWAD в CI не передавать.
 - Владелец отказался от установки build tools/SDL в локальный WSL Debian на
   текущем этапе; не устанавливать их без нового разрешения.
 
-- `FEATURE_MULTIPLAYER` выключен, `net_*.c` отсутствуют. Заголовки не означают,
-  что сеть работает. В `refs/csDoomMaster` — только мастер-сервер, не netcode.
+- Старый `FEATURE_MULTIPLAYER` выключен. Новый `dpt_net.c` включён CMake option
+  `DPTDOOM_NETWORK`: TCP lockstep ровно на 2 игроков, Windows loopback проверен
+  headless/ASan/SDL. См. `docs/NETWORK.md`; не заявлять публичную Internet-ready
+  сеть, NAT, reconnect или совместимость с Chocolate/csDoom. В `refs/csDoomMaster`
+  — только старый мастер-сервер, не используемый новым прототипом.
+- Artifacts: `.github/workflows/ci.yml` + `tools/package-build.py`. Windows SDL
+  build использует static CRT. Пакеты только из allowlist CMake install и
+  `git archive HEAD`; source должен совпадать с HEAD, не паковать dirty builds.
+  Включать commit/source/licenses, не включать IWAD/config/save/screenshots.
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
