@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", type=Path, required=True)
     parser.add_argument("--iwad", type=Path, required=True)
+    parser.add_argument("--dmflags", choices=("0", "1", "2", "3"), default="0")
     args = parser.parse_args()
     exe, iwad = args.exe.resolve(strict=True), args.iwad.resolve(strict=True)
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -45,7 +46,8 @@ def main():
             number = reservation.getsockname()[1]
         logs = [(path / "game.log").open("w") for path in dirs]
         try:
-            base = [str(exe), "-iwad", str(iwad), "-warp", "1", "-net-timeout", "5000", "-nosound", "-nogui"]
+            base = [str(exe), "-iwad", str(iwad), "-warp", "1", "-net-timeout", "5000", "-nosound", "-nogui",
+                    "-dmflags", args.dmflags]
             processes.append(subprocess.Popen(base + ["-net-host", str(number)], cwd=dirs[0], stdout=logs[0], stderr=logs[0]))
             deadline = time.monotonic() + 15
             while "listening on" not in (dirs[0] / "game.log").read_text():

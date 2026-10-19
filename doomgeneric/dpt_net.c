@@ -23,6 +23,7 @@ typedef int SOCKET;
 #endif
 #include "dpt_net.h"
 #include "dpt_protocol.h"
+#include "dpt_rules.h"
 #include "config.h"
 #include "doomstat.h"
 #include "d_event.h"
@@ -270,10 +271,10 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     { int flag = 1; setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE, &flag, sizeof(flag)); }
 #endif
     { int flag = 1; setsockopt(connection, IPPROTO_TCP, TCP_NODELAY, (const char *)&flag, sizeof(flag)); }
-    memcpy(hello, "DPTNET01", 8);
+    memcpy(hello, "DPTNET02", 8);
     DPT_Put32(hello + 8, DPT_NET_PROTOCOL);
     SHA1_Init(&context);
-    SHA1_UpdateString(&context, PACKAGE_STRING " direct-coop-v1 " DPT_NET_BUILD_ID);
+    SHA1_UpdateString(&context, PACKAGE_STRING " direct-coop-v2 " DPT_NET_BUILD_ID);
     SHA1_Final(hello + 12, &context);
     ResourceDigest(hello + 32);
     values[0] = gamemode; values[1] = gamemission; values[2] = settings->gameversion;
@@ -282,11 +283,14 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     values[8] = settings->respawn_monsters; values[9] = local_player;
     values[10] = 2;
     for (i = 0; i < 11; ++i) DPT_Put32(hello + 52 + i * 4, (uint32_t)values[i]);
+    DPT_Put32(hello + 96, dpt_dmflags);
     Transfer(hello, sizeof(hello), true); Transfer(remote, sizeof(remote), false);
     if (memcmp(remote, hello, 12)) I_Error("Network protocol mismatch");
     if (memcmp(remote + 12, hello + 12, 20)) I_Error("Network engine version mismatch");
     if (memcmp(remote + 32, hello + 32, 20)) I_Error("Network resource content/order mismatch");
     if (memcmp(remote + 52, hello + 52, 36)) I_Error("Network game settings mismatch (skill/map/flags/version)");
+    if (DPT_Get32(remote + 96) != dpt_dmflags)
+        I_Error("Network dmflags mismatch (both players must use the same rules)");
     if (DPT_Get32(remote + 88) != (unsigned int)(1 - local_player) || DPT_Get32(remote + 92) != 2)
         I_Error("Network: invalid player assignment");
     active = true;
@@ -294,13 +298,17 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     settings->ticdup = 1; settings->new_sync = 0; settings->lowres_turn = false;
     settings->loadgame = -1;
     printf("Direct coop: connected as player %d of 2 (protocol %d)\n", local_player + 1, DPT_NET_PROTOCOL);
+    printf("Match rules: dmflags=%u coop-no-extra-weapons=%s players-pass-through=%s\n",
+        dpt_dmflags, dpt_dmflags & DPT_DMF_COOP_NO_EXTRA_WEAPONS ? "on" : "off",
+        dpt_dmflags & DPT_DMF_PLAYERS_PASS_THROUGH ? "on" : "off");
     fflush(stdout);
 }
 
 unsigned int DPT_NetStateChecksum(void)
 {
     // Projection deliberately masks renderer-discovered automap flags.
-    return P_NetArchiveChecksum() ^ ((unsigned int)prndindex * 0x9e3779b9u);
+    return P_NetArchiveChecksum() ^ ((unsigned int)prndindex * 0x9e3779b9u)
+        ^ (dpt_dmflags * 0x85ebca6bu);
 }
 
 void DPT_NetExchange(ticcmd_t *commands, unsigned int tic)

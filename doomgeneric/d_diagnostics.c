@@ -3,6 +3,7 @@
 #include "d_diagnostics.h"
 #include "dpt_net.h"
 #include "dpt_protocol.h"
+#include "dpt_rules.h"
 #include "doomstat.h"
 #include "g_game.h"
 #include "i_system.h"
@@ -19,6 +20,7 @@ static unsigned int tic_limit, save_tic, ticks;
 static FILE *trace_file;
 static FILE *input_file;
 static boolean enabled;
+static boolean rules_probe;
 extern int prndindex;
 extern boolean sendsave;
 void G_DoSaveGame(void);
@@ -54,6 +56,7 @@ void D_DiagnosticsInit(void)
     int p = M_CheckParm("-headless-trace");
     tic_limit = PositiveArg("-headless-tics");
     save_tic = PositiveArg("-headless-save-tic");
+    rules_probe = M_ParmExists("-headless-rules-probe");
     {
         int input = M_CheckParm("-headless-input");
         if (input)
@@ -75,7 +78,7 @@ void D_DiagnosticsInit(void)
             I_Error("Failed writing diagnostic trace");
         I_AtExit(CloseTrace, true);
     }
-    enabled = trace_file != NULL || tic_limit || save_tic;
+    enabled = trace_file != NULL || tic_limit || save_tic || rules_probe;
 }
 
 static uint32_t Add32(uint32_t hash, uint32_t value)
@@ -133,6 +136,8 @@ static uint32_t SimulationChecksum(uint32_t archive)
     hash = Add32(hash, respawnparm);
     hash = Add32(hash, fastparm);
     hash = Add32(hash, nomonsters);
+    // Keep existing single-player baseline schema unchanged at flags=0.
+    if (dpt_dmflags) hash = Add32(hash, dpt_dmflags);
     for (th = thinkercap.next; th != &thinkercap; th = th->next)
         if (th->function.acp1 == (actionf_p1)P_MobjThinker)
         {
@@ -181,6 +186,35 @@ void D_DiagnosticsTic(void)
     ++ticks;
     if (gamestate == GS_LEVEL)
     {
+        if (rules_probe && ticks == 1)
+        {
+            thinker_t *th;
+            unsigned int weapons = 0, extra_weapons = 0;
+            boolean overlap;
+            if (!DPT_NetActive() || !players[0].mo || !players[1].mo)
+                I_Error("Rules probe requires direct coop with two spawned players");
+            for (th = thinkercap.next; th != &thinkercap; th = th->next)
+                if (th->function.acp1 == (actionf_p1)P_MobjThinker)
+                {
+                    mobj_t *mo = (mobj_t *)th;
+                    if (DPT_WeaponMapType(mobjinfo[mo->type].doomednum))
+                    {
+                        ++weapons;
+                        if (mo->spawnpoint.options & 16) ++extra_weapons;
+                    }
+                }
+            // Query actual movement clipping at the other player's valid spot.
+            // Disable pickup side effects for this diagnostic-only query.
+            {
+                int flags = players[0].mo->flags;
+                players[0].mo->flags &= ~MF_PICKUP;
+                overlap = P_CheckPosition(players[0].mo, players[1].mo->x, players[1].mo->y);
+                players[0].mo->flags = flags;
+            }
+            printf("Rules probe: dmflags=%u weapons=%u extra-weapons=%u player-overlap=%s\n",
+                dpt_dmflags, weapons, extra_weapons, overlap ? "pass" : "block");
+            fflush(stdout);
+        }
         archive = (trace_file || ticks == save_tic)
             ? (DPT_NetActive() ? P_NetArchiveChecksum() : P_ArchiveChecksum()) : 0;
         if (trace_file && fprintf(trace_file, "%u %d %d %08x %08x\n", ticks, gametic,

@@ -19,6 +19,9 @@
 #include <stdio.h>
 
 #include "doomstat.h"
+#include "dpt_rules.h"
+
+unsigned int dpt_dmflags;
 
 
 // Game Mode - identify IWAD as shareware, retail etc.

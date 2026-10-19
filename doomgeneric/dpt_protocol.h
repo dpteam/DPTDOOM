@@ -2,8 +2,8 @@
 #ifndef DPT_PROTOCOL_H
 #define DPT_PROTOCOL_H
 #include "d_ticcmd.h"
-#define DPT_NET_PROTOCOL 1
-#define DPT_NET_HELLO_SIZE 96
+#define DPT_NET_PROTOCOL 2
+#define DPT_NET_HELLO_SIZE 100
 #define DPT_NET_TIC_SIZE 24
 
 static inline void DPT_Put32(byte *p, uint32_t value)

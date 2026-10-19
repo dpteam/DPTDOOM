@@ -35,6 +35,7 @@
 
 // State.
 #include "doomstat.h"
+#include "dpt_rules.h"
 #include "r_state.h"
 // Data.
 #include "sounds.h"
@@ -113,6 +114,11 @@ boolean PIT_StompThing (mobj_t* thing)
     // don't clip against self
     if (thing == tmthing)
 	return true;
+
+    // Passing teammates should not telefrag each other. Monsters still obey
+    // vanilla teleport rules, projectiles/hitscan retain their damage paths.
+    if (DPT_PlayersPass(dpt_dmflags, netgame, tmthing, thing))
+        return true;
     
     // monsters don't stomp things except on boss level
     if ( !tmthing->player && gamemap != 30)
@@ -294,6 +300,10 @@ boolean PIT_CheckThing (mobj_t* thing)
     if (thing == tmthing)
 	return true;
     
+    // Only active player bodies pass; missiles, monsters and damage stay solid.
+    if (DPT_PlayersPass(dpt_dmflags, netgame, tmthing, thing))
+        return true;
+
     // check for skulls slamming into things
     if (tmthing->flags & MF_SKULLFLY)
     {

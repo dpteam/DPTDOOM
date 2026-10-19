@@ -30,6 +30,8 @@ def main():
                         ["-net-host", "1234", "-net-join", "127.0.0.1:1234"],
                         ["-net-join", "localhost:1234"], ["-net-join", "127.0.0.1"],
                         ["-net-host", "1234", "-net-timeout", "abc"],
+                        ["-net-host", "1234", "-dmflags", "4"], ["-dmflags", "2"],
+                        ["-dmflags"], ["-net-host", "1234", "-dmflags", "-1"],
                         ["-net-host", "1234", "-record", "test"]):
             result = subprocess.run([str(exe), "-iwad", str(iwad)] + options, cwd=root,
                                     capture_output=True, text=True, timeout=10)
@@ -38,6 +40,7 @@ def main():
         print("Network argument validation: OK")
         for scenario, expected in (("version", "protocol mismatch"), ("engine", "engine version mismatch"),
                                    ("resources", "resource content/order mismatch"), ("settings", "game settings mismatch"),
+                                   ("dmflags", "dmflags mismatch"),
                                    ("disconnect", "Network:"), ("truncated", "Network:"),
                                    ("silent", "Network timeout"), ("order", "out-of-order"),
                                    ("desync", "Network desync"), ("command", "invalid player command")):
@@ -58,9 +61,9 @@ def main():
                         assert time.monotonic() < deadline
                         time.sleep(0.02)
                     with socket.create_connection(("127.0.0.1", number), timeout=3) as peer:
-                        hello = bytearray(read_exact(peer, 96))
+                        hello = bytearray(read_exact(peer, 100))
                         struct.pack_into(">I", hello, 88, 1)  # opposite player
-                        field = {"version": 8, "engine": 12, "resources": 32, "settings": 52}.get(scenario)
+                        field = {"version": 8, "engine": 12, "resources": 32, "settings": 52, "dmflags": 96}.get(scenario)
                         if field is not None:
                             hello[field] ^= 1
                         if scenario == "truncated":

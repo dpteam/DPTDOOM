@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--exe", type=Path, required=True)
     parser.add_argument("--iwad", type=Path, required=True)
     parser.add_argument("--guest-exe", type=Path, help="Optional second compiler/backend build")
+    parser.add_argument("--dmflags", choices=("0", "1", "2", "3"), default="0")
     args = parser.parse_args()
     exe, iwad = args.exe.resolve(strict=True), args.iwad.resolve(strict=True)
     guest_exe = args.guest_exe.resolve(strict=True) if args.guest_exe else exe
@@ -34,6 +35,7 @@ def main():
                             256 if index else -256, 1 if tic % 20 < 10 else 0, 0, 0, 0)
                 for tic in range(210)))
         base = [str(exe), "-iwad", str(iwad), "-warp", "1", "-net-timeout", "5000",
+                "-dmflags", args.dmflags,
                 "-headless-tics", "210", "-headless-trace", "state.txt", "-headless-input", "input.bin"]
         processes = []
         with (host / "output.txt").open("w") as hlog, (guest / "output.txt").open("w") as glog:
@@ -53,7 +55,7 @@ def main():
                 a, b = [(path / "state.txt").read_text() for path in (host, guest)]
                 assert a == b, (a, b)
                 assert len([line for line in a.splitlines() if not line.startswith("#")]) == 210
-                print("Direct coop: two players / movement+fire+monsters / 210 matching per-tic states OK")
+                print("Direct coop: two players / movement+fire+monsters / 210 matching per-tic states OK, dmflags=" + args.dmflags)
             finally:
                 for process in processes:
                     if process.poll() is None:

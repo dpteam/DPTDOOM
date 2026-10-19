@@ -189,6 +189,13 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(match-rules-test tests/match-rules.c)
+    target_include_directories(match-rules-test PRIVATE doomgeneric)
+    add_test(NAME match-rules COMMAND match-rules-test)
+    if(MSVC AND DPTDOOM_SANITIZER STREQUAL "address")
+        add_custom_command(TARGET match-rules-test POST_BUILD COMMAND ${CMAKE_COMMAND} -E
+            copy_if_different "${asan_runtime}" $<TARGET_FILE_DIR:match-rules-test>)
+    endif()
     if(DPTDOOM_NETWORK)
         add_executable(net-protocol-test tests/net-protocol.c)
         target_include_directories(net-protocol-test PRIVATE doomgeneric)
@@ -282,6 +289,14 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-errors.py"
                 --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
             set_tests_properties(net-errors PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+            add_test(NAME net-rules COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-rules.py"
+                --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+            set_tests_properties(net-rules PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+            add_test(NAME net-loopback-dmflags COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-loopback.py"
+                --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}" --dmflags 3)
+            set_tests_properties(net-loopback-dmflags PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
         endif()
     endif()
     if(DPTDOOM_BACKEND STREQUAL "sdl")

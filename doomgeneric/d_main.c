@@ -29,6 +29,8 @@
 #include "deh_main.h"
 #include "doomdef.h"
 #include "doomstat.h"
+#include "dpt_rules.h"
+#include "dpt_net.h"
 
 #include "dstrings.h"
 #include "doomfeatures.h"
@@ -1363,6 +1365,17 @@ void D_DoomMain (void)
     M_SetConfigFilenames("default.cfg", PROGRAM_PREFIX "doom.cfg");
     D_BindVariables();
     M_LoadDefaults();
+
+    // Rules are CLI-only until a server config and extended save/demo formats
+    // exist. Never leak them silently into single-player/vanilla demos.
+    p = M_CheckParm("-dmflags");
+    if (p)
+    {
+        if (p + 1 >= myargc || !DPT_ParseDMFlags(myargv[p + 1], &dpt_dmflags))
+            I_Error("-dmflags requires a decimal mask with supported bits 1 and 2 (0..3)");
+        if (dpt_dmflags && !DPT_NetRequested())
+            I_Error("Nonzero -dmflags currently requires direct coop (-net-host/-net-join)");
+    }
 
     // Save configuration at exit.
     I_AtExit(M_SaveDefaults, false);

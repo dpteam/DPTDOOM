@@ -32,6 +32,7 @@
 #include "s_sound.h"
 
 #include "doomstat.h"
+#include "dpt_rules.h"
 
 
 void G_PlayerReborn (int player);
@@ -813,6 +814,10 @@ void P_SpawnMapThing (mapthing_t* mthing)
 		 mthing->type,
 		 mthing->x, mthing->y);
 		
+    // Optional coop policy: only multiplayer-marked weapon pickups.
+    if (DPT_SkipCoopWeapon(dpt_dmflags, netgame, deathmatch, mthing))
+        return;
+
     // don't spawn keycards and players in deathmatch
     if (deathmatch && mobjinfo[i].flags & MF_NOTDMATCH)
 	return;

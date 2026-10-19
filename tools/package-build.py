@@ -72,6 +72,9 @@ Direct coop is experimental, exactly 2 players, trusted LAN only (TCP).
 Both peers need the same build, IWAD/PWAD contents/order and skill/map flags.
 Host: dptdoom.exe -iwad DOOM2.WAD -warp 1 -net-host 2342 -net-bind 0.0.0.0
 Join: dptdoom.exe -iwad DOOM2.WAD -warp 1 -net-join HOST_IPV4:2342
+Match rules: add the same -dmflags N on both commands (0=vanilla default,
+1=hide multiplayer-only coop weapons, 2=players pass through, 3=both).
+This build uses direct protocol v2: do not mix different artifacts/builds.
 Without -net-bind the host listens ONLY on localhost. No NAT traversal,
 public server listing, authentication, encryption or Internet hardening.
 
