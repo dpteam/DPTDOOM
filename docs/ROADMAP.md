@@ -376,6 +376,10 @@ partition может породить две отдельные локальны
   для weapon states, bounded -128..128 map units, отказ для mobj states,
   staged/reset. Engine больше не сдвигает отрицательный `int` (умножение вместо
   `<<`), psprite `sx/sy` и framebuffer проверены file/lump и same/different peers.
+- [x] `DPT-deh-infight-v13`: classic `Misc 0 Monsters Infight = 0..1` как 16-е
+  bounded Misc-поле через общий staged/reset путь; engine patch report,
+  same/different peer digest. Реальная перестрелка монстров одного вида
+  автоматическим сценарием пока не покрыта.
 - [x] Проверки v11 на Windows: полный MinGW headless **33/33**, MSVC SDL
   **35/35**, MSVC headless ASan **35/35**. Vanilla state baselines не менялись;
   deh-engine проверяет real visual fields/framebuffer и loaded-resource rejects.

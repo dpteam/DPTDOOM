@@ -30,7 +30,7 @@ int main(void)
         "", "[Misc]\nInitial Health = 42\n", HEADER "Initial Health = 0\n",
         HEADER "Initial Health = 50\nInitial Bullets = 9999999999999999999999999999999\n",
         HEADER "Initial Health = 50\nBlue Armor Class = 3\n", HEADER "BFG Cells/Shot = 0\n",
-        HEADER "Monsters Infight = 202\n", HEADER "Unknown field = 1\n",
+        HEADER "Monsters Infight = 2\n", HEADER "Unknown field = 1\n",
         HEADER "Thing 1\nBits = 1073741824\n", HEADER "[CODEPTR]\n", HEADER "Initial Health = 12junk\n",
         "Patch File for DeHackEd v3.0\nDoom version = 109\nPatch format = 6\nMisc 0\nInitial Health = 12\n",
         "Patch File for DeHackEd v3.0\nDoom version = 19\nMisc 0\nInitial Health = 12\n"};
@@ -44,8 +44,9 @@ int main(void)
     states[S_PISTOL1].sprite=SPR_PISG;states[S_PISTOL1].frame=7;
     states[S_PISTOL1].action.acv=ActionSentinel;
     DPT_DehReset();DPT_DehChecksum(a);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));
-    REQUIRE(Load(HEADER "Initial Health = 77\nInitial Bullets = 23\nBFG Cells/Shot = 20\n"));
+    REQUIRE(Load(HEADER "Initial Health = 77\nInitial Bullets = 23\nBFG Cells/Shot = 20\nMonsters Infight = 1\n"));
     REQUIRE(deh_initial_health==77&&deh_initial_bullets==23&&deh_bfg_cells_per_shot==20);
+    REQUIRE(deh_species_infighting==1);
     DPT_DehChecksum(b);REQUIRE(memcmp(a,b,20));DPT_DehChecksum(c);REQUIRE(!memcmp(b,c,20));
     for(i=0;i<sizeof(bad)/sizeof(bad[0]);++i)
     {REQUIRE(!Load(bad[i]));REQUIRE(deh_initial_health==77&&deh_initial_bullets==23);DPT_DehChecksum(c);REQUIRE(!memcmp(b,c,20));REQUIRE(DPT_DehLoadedCount()==1);}

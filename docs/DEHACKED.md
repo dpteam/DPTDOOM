@@ -1,7 +1,7 @@
 # DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-pspriteoffset-v12` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-infight-v13` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -55,6 +55,7 @@ patches или их поиска на диске; launcher пока не име�
 | Max Armor, Soulsphere Health, IDFA Armor, IDKFA Armor | 0..10000 |
 | Green Armor Class, Blue Armor Class, IDFA Armor Class, IDKFA Armor Class | 1..2 |
 | BFG Cells/Shot | 1..1000 |
+| Monsters Infight | 0..1; 1 разрешает урон между монстрами одного вида |
 
 `Ammo N`: индексы 0=bullets, 1=shells, 2=cells, 3=rockets. `Max ammo` —
 1..10000 (базовая ёмкость; backpack штатно удваивает), `Per ammo` — 0..1000
@@ -188,7 +189,7 @@ Next frame = 15
 и (для weapon states) `state.misc1/misc2`.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v12, чтобы peers не путали разные semantics.
+обновлён до v13, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -258,7 +259,7 @@ Unknown 2 = 64
 graph/resources/action compatibility.
 
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-`Monsters Infight`, Sound/Sprite/Pointer/Cheat, `[STRINGS]`, неподдерживаемые Frame/Thing fields,
+Sound/Sprite/Pointer/Cheat, `[STRINGS]`, неподдерживаемые Frame/Thing fields,
 BEX, include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
@@ -323,5 +324,10 @@ file/lump pixel equivalence и same/different peer patches. Matching peers
 `deh-engine` имеет общий
 deadline 240s из-за дополнительных настоящих игровых прогонов (visual/psprite
 framebuffer и network pairs), а не снятия таймаутов отдельных child operations.
+
+`Monsters Infight` проверяется parser-ом и engine patch report, а также
+same/different peer digest. Автоматического сценария с двумя видами монстров,
+дерущимися между собой, пока нет: значение читается существующей проверкой
+`PIT_CheckThing` в `p_map.c`, отдельный боевой сценарий остаётся ручной проверкой.
 
 Полная compatibility matrix/будущие модули — `DEHACKED-MBF-AUDIT.md`.

@@ -20,7 +20,7 @@
 #include <errno.h>
 #include <limits.h>
 
-enum { MAX_LINE=2047, MAX_SOURCE=262144, MAX_PATCHES=16, FIELD_COUNT=15,
+enum { MAX_LINE=2047, MAX_SOURCE=262144, MAX_PATCHES=16, FIELD_COUNT=16,
        TEXT_MAX=2047, TEXT_COUNT=16 };
 #define MISC_FIELDS(X) \
     X("Initial Health",initial_health,100,1,10000) \
@@ -37,11 +37,11 @@ enum { MAX_LINE=2047, MAX_SOURCE=262144, MAX_PATCHES=16, FIELD_COUNT=15,
     X("IDFA Armor Class",idfa_armor_class,2,1,2) \
     X("IDKFA Armor",idkfa_armor,200,0,10000) \
     X("IDKFA Armor Class",idkfa_armor_class,2,1,2) \
-    X("BFG Cells/Shot",bfg_cells_per_shot,40,1,1000)
+    X("BFG Cells/Shot",bfg_cells_per_shot,40,1,1000) \
+    X("Monsters Infight",species_infighting,0,0,1)
 #define DEFINE(name,field,def,low,high) int deh_##field=def;
 MISC_FIELDS(DEFINE)
 #undef DEFINE
-int deh_species_infighting=DEH_DEFAULT_SPECIES_INFIGHTING;
 typedef struct { const char *name; int *destination, initial, low, high; } misc_field_t;
 #define ENTRY(name,field,def,low,high) {name,&deh_##field,def,low,high},
 static const misc_field_t fields[FIELD_COUNT]={MISC_FIELDS(ENTRY)};
@@ -372,7 +372,6 @@ void DPT_DehReset(void)
         text_replacements[i].present=false;
     }
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=fields[i].initial;
-    deh_species_infighting=DEH_DEFAULT_SPECIES_INFIGHTING;
     loaded=bytes_total=0;last_error[0]=0;
     SHA1_Init(&digest_context);SHA1_UpdateString(&digest_context,DPT_DEH_SUBSET);initialized=true;
 }

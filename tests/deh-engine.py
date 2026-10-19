@@ -74,6 +74,12 @@ def main():
         ammo=root/'ammo.deh';ammo.write_bytes(HEADER+b'Initial Bullets = 50\nAmmo 0\nMax ammo = 450\nPer ammo = 17\nAmmo 1\nMax ammo = 60\nWeapon 1\nAmmo type = 1\n')
         _,text=run('ammo-weapon',['-deh',str(ammo)])
         assert 'Patch report: maxammo=450,60,300,50' in text and 'perammo=17,4,20,1 pistol-ammo=1' in text,text
+        infight=root/'infight.deh';infight_copy=root/'infight-copy.deh'
+        infight.write_bytes(HEADER+b'Monsters Infight = 1\n')
+        infight_copy.write_bytes(infight.read_bytes())
+        _,text=run('infight',['-deh',str(infight)])
+        assert 'Patch misc: infight=1' in text,text
+        _,text=run('infight-off',[]);assert 'Patch misc' not in text,text
         text_patch=root/'text.deh';text_copy=root/'text-copy.deh'
         old=b'Picked up the armor.';replacement=b'DPT armor message!'
         text_patch.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(replacement)).encode()+b'\n'+old+replacement)
@@ -218,8 +224,11 @@ def main():
         pair('ammo-same',[ammo,ammo_same],True,'health=100 ammo=50')
         pair('ammo-different',[ammo,first],False)
         pair('text-same',[text_patch,text_copy],True,'health=100 ammo=50')
-        text_different=root/'text-different.deh';text_different.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(b'Other message!')).encode()+b'\n'+old+b'Other message!')
+        text_different=root/'text-different.deh'
+        text_different.write_bytes(HEADER+b'Text '+str(len(old)).encode()+b' '+str(len(b'Other message!')).encode()+b'\n'+old+b'Other message!')
         pair('text-different',[text_patch,text_different],False)
+        pair('infight-same',[infight,infight_copy],True,'infight=1')
+        pair('infight-different',[infight,first],False)
         pair('thing-same',[things,thing_copy],True,'Patch visual: type=30 sprite=0 frame=32768',('-file',str(patched_map)))
         pair('thing-different',[things,first],False,extra=('-file',str(patched_map)))
         pair('visual-same',[visual,visual_copy],True,'Patch weapon visual: sprite=1 frame=32769')

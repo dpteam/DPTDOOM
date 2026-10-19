@@ -8,12 +8,13 @@ CI без игровых данных и его ограничения опис�
 DeHackEd subset: `deh-misc` — data-free parser/rollback/limits/digest;
 `deh-engine` — headless с локальным IWAD, synthetic patches/lumps, реальные
 health/ammo/capacity, weapon ammo use и two-peer patch mismatch. Это classic
-Misc 0 / Ammo / bounded Text / Weapon frames / Thing numeric/flags/states/sounds / Frame graph+visual+psprite, не full
+Misc 0 / Ammo / bounded Text / Weapon frames / Thing numeric/flags/states/sounds / Frame graph+visual+psprite / Infight, не full
 DeHackEd/BEX; patched saves/recording запрещены до manifest. См. [DEHACKED.md](DEHACKED.md).
 Визуальные Frame fields проверяются также по загруженным sprite resources до
 уровня; deh-engine сравнивает framebuffer file/lump и отвергает missing frames.
 `Unknown 1/2` допустимы только на weapon states и проверяются по точным psprite
-`sx/sy`.
+`sx/sy`. `Monsters Infight` проверяется по patch report/digest, боевой сценарий
+двух видов монстров автоматически пока не воспроизводится.
 Не запускать повторный build/test в одном build tree, пока предыдущий не завершён:
 Windows может удерживать EXE, а тесты — читать разные версии Python fixtures.
 
