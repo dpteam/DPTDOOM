@@ -3,6 +3,8 @@
 #include "deh_classic.h"
 #include "deh_misc.h"
 #include "d_items.h"
+#include "info.h"
+#include "m_fixed.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +12,7 @@
 #define HEADER "Patch File for DeHackEd v3.0\nDoom version = 19\nPatch format = 6\n\nMisc 0\n"
 unsigned int numlumps;
 int maxammo[NUMAMMO]={200,50,300,50},clipammo[NUMAMMO]={10,4,20,1};
+mobjinfo_t mobjinfo[NUMMOBJTYPES]; // synthetic tables; real info.c covered by engine test
 int W_LumpLength(unsigned int i){(void)i;return 0;}
 void W_ReadLump(unsigned int i,void *p){(void)i;(void)p;}
 static int Load(const char *text){return DPT_DehLoadBytes((const unsigned char*)text,strlen(text));}
@@ -21,9 +24,11 @@ int main(void)
         HEADER "Initial Health = 50\nInitial Bullets = 9999999999999999999999999999999\n",
         HEADER "Initial Health = 50\nBlue Armor Class = 3\n", HEADER "BFG Cells/Shot = 0\n",
         HEADER "Monsters Infight = 202\n", HEADER "Unknown field = 1\n",
-        HEADER "Thing 1\nHit points = 20\n", HEADER "[CODEPTR]\n", HEADER "Initial Health = 12junk\n",
+        HEADER "Thing 1\nBits = 20\n", HEADER "[CODEPTR]\n", HEADER "Initial Health = 12junk\n",
         "Patch File for DeHackEd v3.0\nDoom version = 109\nPatch format = 6\nMisc 0\nInitial Health = 12\n",
         "Patch File for DeHackEd v3.0\nDoom version = 19\nMisc 0\nInitial Health = 12\n"};
+    mobjinfo[MT_POSSESSED].spawnhealth=20;mobjinfo[MT_POSSESSED].speed=8;mobjinfo[MT_ROCKET].speed=20*FRACUNIT;
+    mobjinfo[MT_POSSESSED].spawnstate=42;mobjinfo[MT_POSSESSED].flags=123;
     DPT_DehReset();DPT_DehChecksum(a);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));
     REQUIRE(Load(HEADER "Initial Health = 77\nInitial Bullets = 23\nBFG Cells/Shot = 20\n"));
     REQUIRE(deh_initial_health==77&&deh_initial_bullets==23&&deh_bfg_cells_per_shot==20);
@@ -58,6 +63,28 @@ int main(void)
     DPT_DehReset();REQUIRE(maxammo[0]==200&&clipammo[0]==10&&weaponinfo[wp_pistol].ammo==am_clip);
     REQUIRE(Load(HEADER "ammo 0\nPer ammo = 12\nweapon 1\nAmmo type = 2\n"));
     REQUIRE(clipammo[0]==12&&weaponinfo[wp_pistol].ammo==am_cell);DPT_DehReset();
+    REQUIRE(Load(HEADER "Thing 2 (Trooper)\nHit points = 123\nSpeed = 12\nWidth = 1572864\nHeight = 3932160\nMass = 250\nMissile damage = 7\nPain chance = 0\nReaction time = 20\nThing 34\nSpeed = 1966080\n"));
+    REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==123&&mobjinfo[MT_POSSESSED].speed==12);
+    REQUIRE(mobjinfo[MT_POSSESSED].radius==24*FRACUNIT&&mobjinfo[MT_POSSESSED].mass==250);
+    REQUIRE(mobjinfo[MT_ROCKET].speed==30*FRACUNIT);
+    REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==42&&mobjinfo[MT_POSSESSED].flags==123);
+    DPT_DehChecksum(a);
+    {const char *invalid[]={HEADER "Thing 0\nHit points = 1\n",HEADER "Thing 999\nHit points = 1\n",
+      HEADER "Thing 2 (Unclosed\nHit points = 1\n",HEADER "Thing 2 (OK) trailing\nHit points = 1\n",
+      HEADER "Initial Health = 5\nAmmo 0\nPer ammo = 50\nThing 2\nHit points = 3\nMass = 0\n",
+      HEADER "Thing 2\nSpeed = 0\n",HEADER "Thing 2\nSpeed = 129\n",HEADER "Thing 34\nSpeed = 4194305\n",
+      HEADER "Thing 2\nWidth = -1\n",HEADER "Thing 2\nHeight = 2147483647\n",
+      HEADER "Thing 2\nMissile damage = 101\n",HEADER "Thing 2\nPain chance = 256\n",
+      HEADER "Thing 2\nInitial frame = 0\n",HEADER "Thing 2\nHit points = 999999999999999999999999\n"};
+     for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i){REQUIRE(!Load(invalid[i]));REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==123&&mobjinfo[MT_POSSESSED].mass==250);
+      REQUIRE(deh_initial_health==100&&clipammo[0]==10);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
+    REQUIRE(Load(HEADER "thing 2\nHit points = 234\n"));REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==234);
+    {char last[256];snprintf(last,sizeof(last),HEADER "Thing %d (Last original thing)\nMass = 999\n",NUMMOBJTYPES);
+     REQUIRE(Load(last));REQUIRE(mobjinfo[NUMMOBJTYPES-1].mass==999);}
+    REQUIRE(!Load(HEADER "Thing 2 (Trooper) garbage\nMass = 250\n"));
+    REQUIRE(!Load(HEADER "Thing 2 (Outer (Inner))\nMass = 250\n"));
+    DPT_DehReset();REQUIRE(mobjinfo[MT_POSSESSED].spawnhealth==20&&mobjinfo[MT_POSSESSED].speed==8&&mobjinfo[MT_ROCKET].speed==20*FRACUNIT);
+    REQUIRE(mobjinfo[NUMMOBJTYPES-1].mass==0);
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
     puts("DeHackEd Misc: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
 }

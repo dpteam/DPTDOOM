@@ -338,6 +338,13 @@ partition может породить две отдельные локальны
   0..3, staged rollback всех таблиц, cross-field validation, engine firing/
   capacity и matching/mismatch network tests. Weapon frames/noammo-overflow
   tricks и code pointers пока отклоняются; Thing/Frame/Text/BEX остаются планом.
+- [x] Следующий subset `DPT-deh-thing-v3`: 1-based Thing numeric fields,
+  optional inert label, bounded health/reaction/pain/speed/size/mass/damage,
+  transactional rollback и reset всех таблиц. Real barrel mobj file/lump tests,
+  patch order и matching/mismatch two-peer traces; Thing states/flags/sounds
+  и Frame/Text/BEX остаются неподдерживаемыми.
+- [x] Actions run 39304002144/ddd69cc success: macOS master-client-wire fixture
+  исправление подтверждено удалённо. Новому Thing subset нужен следующий run.
 - [x] Подробный pre-implementation аудит DeHackEd/BEX/Boom/MBF/MBF21,
   csDoomNew/Old07 и ACE: `docs/DEHACKED-MBF-AUDIT.md`. Следующий срез —
   bounded classic parser, не включение ACE exploit или всей чужой архитектуры.

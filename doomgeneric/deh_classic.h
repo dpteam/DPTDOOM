@@ -1,10 +1,10 @@
-// Bounded Misc / Ammo / Weapon-ammo classic subset.
+// Bounded Misc / Ammo / Weapon-ammo / Thing-numeric classic subset.
 // GPL-2.0-or-later; see LICENSE.
 #ifndef DPT_DEH_CLASSIC_H
 #define DPT_DEH_CLASSIC_H
 #include "doomtype.h"
 #include "sha1.h"
-#define DPT_DEH_SUBSET "DPT-deh-misc-ammo-v2"
+#define DPT_DEH_SUBSET "DPT-deh-thing-v3"
 void DPT_DehReset(void);
 boolean DPT_DehLoadLump(int lump);
 boolean DPT_DehLoadFile(const char *path);

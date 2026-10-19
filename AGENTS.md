@@ -160,14 +160,17 @@ ctest --preset windows-headless
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
-- DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc 0 + Ammo + Weapon Ammo type** classic
+- DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc 0 + Ammo + Weapon Ammo type + Thing numeric** classic
   v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.
   Raw bytes/order/subset digest в ResourceDigest; patched vanilla save/load/
-  record запрещены до manifest format. Версия DPT-deh-misc-ammo-v2; Ammo max/per,
+  record запрещены до manifest format. Версия DPT-deh-thing-v3; Ammo max/per,
   Weapon Ammo type только 0..3, frames/noammo/overflow tricks отклонять.
   Tests deh-misc/deh-engine, docs/DEHACKED.md.
-  Thing/Frame/Text/BEX/MBF не объявлять готовыми; refs code не переносился.
+  Thing 1-based, optional (label); health/reaction/pain/speed/radius/height/mass/
+  damage bounded; full Thing flags/states/sounds, Frame/Text/BEX/MBF не готовы.
+  Base/staged mobjinfo static, reset restores original. Tests actual barrel spawn;
+  refs code не переносился.
 - Upstream PR и решения по ним фиксируются в `docs/UPSTREAM.md`.
 - Игровые csDoom references теперь доступны: `refs/csDoomNew`, `csDoomOld07`,
   плюс отдельный `csDoomMaster`. Source/license карта — `docs/REFERENCE-SOURCES.md`.

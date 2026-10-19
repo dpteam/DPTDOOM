@@ -1,7 +1,7 @@
-# DeHackEd: ограниченный Misc / Ammo / Weapon-ammo срез
+# DeHackEd: ограниченный Misc / Ammo / Weapon-ammo / Thing срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-misc-ammo-v2` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-thing-v3` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -14,7 +14,7 @@
 не объявляется готовым: их patches могут содержать неподдерживаемые секции.
 
 Пока принимается classic signature v3.0, `Doom version = 19`, `Patch format = 6`
-и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, не выдуманная `[Misc]`
+и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, `Thing 1..NUMMOBJTYPES`, не выдуманная `[Misc]`
 и не BEX `[STRINGS]`.
 
 ```text
@@ -82,8 +82,50 @@ patch. Пистолет в примере использует shells; если 
 Parser делает staged copies всех поддерживаемых таблиц: неверное поле в конце
 источника откатывает также Misc/Ammo/Weapon assignments этого источника.
 
+### Thing — только числовые свойства существующих типов
+
+Нумерация **с единицы**, в отличие от Ammo/Weapon. `Thing 1` — player,
+`Thing 2` — trooper, `Thing 31` — barrel. Это индекс исходной таблицы типов,
+**не DoomEd/map thing number** (у barrel map number 2035). Допускается classic
+описание в скобках, например `Thing 2 (Trooper)`: оно не используется как
+actor/class name, не исполняется и не попадает в digest отдельно от raw source.
+
+| Thing field | Поддерживаемый диапазон / смысл |
+|---|---|
+| Hit points | 1..10000, здоровье mobj при spawn |
+| Reaction time | 0..10000, исходные тики реакции |
+| Pain chance | 0..255 |
+| Width | 1..8388608, **радиус** в 16.16 fixed-point, максимум 128 map units |
+| Height | 1..16777216, 16.16 fixed-point, максимум 256 map units |
+| Speed | 1..128 для типов с исходной whole-unit speed; 1..4194304 для исходной fixed-point speed |
+| Mass | 1..1000000; ноль запрещён, thrust делит на массу |
+| Missile damage | 0..100, info damage для missile/skull столкновений, **не** глобальная замена hitscan/action damage |
+
+Категория Speed определяется исходной таблицей (исходная speed ≥65536 —
+fixed-point). Patches не меняют flags/actions и не могут переключить категорию.
+Ноль отклоняется: некоторые missile/charge paths делят на speed. Это намеренно
+узкий subset, не обещание корректности любых сочетаний свойств любого мода.
+Nightmare/`-fast` штатно переопределяет скорости некоторых снарядов; в этом
+срезе соответствующие compatibility semantics не изменены.
+
+```text
+Thing 31 (Barrel)
+Hit points = 123
+Width = 1572864
+Height = 3932160
+Mass = 250
+```
+
+После такого patch barrel при spawn получает health123/radius24/height60.
+`Thing 1 Hit points` меняет mobjinfo player, но стартовое `player.health` по-прежнему
+задаёт `Misc 0 Initial Health`, как в существующем engine path. Изменения `Bits`,
+map ID, звуков и любых state fields (`Initial frame` и т.п.) пока отклоняются.
+Типы не добавляются, frame/action tables не меняются. Таблица Thing также
+staged: неверное поле в конце patch не меняет ни Things, ни Misc/Ammo/Weapon,
+ни digest/count. Reset восстанавливает все исходные таблицы.
+
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-`Monsters Infight`, Thing/Frame/Sound/Sprite/Pointer/Cheat/Text,
+`Monsters Infight`, Frame/Sound/Sprite/Pointer/Cheat/Text и неподдерживаемые Thing fields,
 BEX, include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
@@ -122,7 +164,11 @@ rollback, digest repeatability и load order, без IWAD/окна/Internet.
 per-ammo/type в patch report, attack commands обычного/переназначенного pistol, внешний
 patch, повторные patches, два DEHACKED lumps и explicit opt-in/order, bad source,
 save/load/record guards и одинаковые/разные patches в настоящих two-peer
-процессах с matching traces (Misc и Ammo/Weapon). Все patch/WAD fixtures создаются во временных
+процессах с matching traces (Misc, Ammo/Weapon, Thing). Для Thing создаётся
+временный MAP01 overlay с двумя starts и одной barrel: сравниваются поля
+**реально созданного mobj**, не только parser table, через file/lump paths.
+Unit tests не линкуют action code: используют synthetic mobjinfo; настоящий
+info.c и игровой spawn проверяет deh-engine. Все patch/WAD fixtures создаются во временных
 каталогах; IWAD/извлечённые ресурсы не коммитятся.
 
 Полная compatibility matrix/будущие модули — `DEHACKED-MBF-AUDIT.md`.

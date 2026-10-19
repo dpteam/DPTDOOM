@@ -245,10 +245,30 @@ void D_DiagnosticsTic(void)
                 (unsigned int)playeringame[0], (unsigned int)playeringame[1], (unsigned int)paused,
                  p->mo ? p->mo->x : 0, p->mo ? p->mo->y : 0, p->health, p->ammo[am_clip]);
             if (DPT_DehLoadedCount())
+            {
                 printf("Patch report: maxammo=%d,%d,%d,%d ammo=%d,%d,%d,%d perammo=%d,%d,%d,%d pistol-ammo=%d\n",
                     p->maxammo[0],p->maxammo[1],p->maxammo[2],p->maxammo[3],
                     p->ammo[0],p->ammo[1],p->ammo[2],p->ammo[3],
                     clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
+                // Report an actual spawned entity, not just the patched table.
+                // Entity fields are copied at spawn, while speed/mass/damage
+                // are consumed through info during gameplay.
+                {
+                    thinker_t *th;
+                    for (th=thinkercap.next;th!=&thinkercap;th=th->next)
+                        if (th->function.acp1==(actionf_p1)P_MobjThinker)
+                        {
+                            mobj_t *mo=(mobj_t*)th;
+                            if(mo->type==MT_BARREL)
+                            {
+                                printf("Patch thing: type=%d health=%d radius=%d height=%d speed=%d mass=%d damage=%d pain=%d reaction=%d\n",
+                                    (int)mo->type,mo->health,mo->radius,mo->height,mo->info->speed,
+                                    mo->info->mass,mo->info->damage,mo->info->painchance,mo->reactiontime);
+                                break;
+                            }
+                        }
+                }
+            }
         }
         // Explicit bounded test run is success, not timedemo's I_Error report.
         timingdemo = false;

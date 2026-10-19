@@ -5,6 +5,9 @@
 #include "deh_misc.h"
 #include "w_wad.h"
 #include "d_items.h"
+#include "info.h"
+#include "m_fixed.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +47,22 @@ static boolean initialized;
 extern int maxammo[NUMAMMO],clipammo[NUMAMMO];
 static int base_maxammo[NUMAMMO],base_clipammo[NUMAMMO];
 static weaponinfo_t base_weapons[NUMWEAPONS];
+static mobjinfo_t base_things[NUMMOBJTYPES];
+// Parser startup is single-threaded. Keep staged tables off the small C stack;
+// unsupported states/flags/sounds never receive an assignment.
+static mobjinfo_t staged_things[NUMMOBJTYPES];
+typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
+#define THING(name,field,low,high) {name,offsetof(mobjinfo_t,field),low,high}
+static const thing_field_t thing_fields[]={
+    THING("Hit points",spawnhealth,1,10000),
+    THING("Reaction time",reactiontime,0,10000),
+    THING("Pain chance",painchance,0,255),
+    THING("Width",radius,1,128*FRACUNIT),
+    THING("Height",height,1,256*FRACUNIT),
+    THING("Mass",mass,1,1000000),
+    THING("Missile damage",damage,0,100)
+};
+#undef THING
 
 static boolean Error(unsigned int line,const char *message)
 {
@@ -73,6 +92,43 @@ static boolean Number(const char *text,int *value)
     if(errno==ERANGE||*end||number<INT_MIN||number>INT_MAX)return false;
     *value=(int)number;return true;
 }
+static boolean ThingIndex(char *text,int *index)
+{
+    char *label=strchr(text,'(');
+    // Classic editor descriptions are inert labels: Thing 2 (Trooper).
+    if(label)
+    {
+        char *end=strchr(label,')'),*p;
+        if(!end||*Trim(end+1)||strchr(label+1,'('))return false;
+        for(p=label+1;p<end;++p)if((unsigned char)*p<32||(unsigned char)*p>126)return false;
+        *label=0;
+    }
+    if(!Number(Trim(text),index)||*index<1||*index>NUMMOBJTYPES)return false;
+    --*index;return true;
+}
+static boolean ApplyThing(int index,const char *field,int value,unsigned int line)
+{
+    unsigned int i;
+    if(Equal(field,"Speed"))
+    {
+        // Vanilla actors use whole units for walking but fixed-point for
+        // projectiles/charging skulls. No flags/states can change that category
+        // in this subset. Reject zero (missile aim divides by speed).
+        int high=base_things[index].speed>=FRACUNIT?64*FRACUNIT:128;
+        if(value<1||value>high)return Error(line,"Thing Speed outside supported category/range");
+        staged_things[index].speed=value;return true;
+    }
+    for(i=0;i<sizeof(thing_fields)/sizeof(thing_fields[0]);++i)
+    {
+        const thing_field_t *f=&thing_fields[i];
+        if(Equal(field,f->name))
+        {
+            if(value<f->low||value>f->high)return Error(line,"Thing field outside supported safe range");
+            *(int*)((unsigned char*)&staged_things[index]+f->offset)=value;return true;
+        }
+    }
+    return Error(line,"unsupported Thing field (states/flags/sounds/IDs are not supported)");
+}
 void DPT_DehReset(void)
 {
     unsigned int i;
@@ -80,9 +136,11 @@ void DPT_DehReset(void)
     {
         memcpy(base_maxammo,maxammo,sizeof(base_maxammo));memcpy(base_clipammo,clipammo,sizeof(base_clipammo));
         memcpy(base_weapons,weaponinfo,sizeof(base_weapons));
+        memcpy(base_things,mobjinfo,sizeof(base_things));
     }
     memcpy(maxammo,base_maxammo,sizeof(base_maxammo));memcpy(clipammo,base_clipammo,sizeof(base_clipammo));
     memcpy(weaponinfo,base_weapons,sizeof(base_weapons));
+    memcpy(mobjinfo,base_things,sizeof(base_things));
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=fields[i].initial;
     deh_species_infighting=DEH_DEFAULT_SPECIES_INFIGHTING;
     loaded=bytes_total=0;last_error[0]=0;
@@ -93,7 +151,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     int staged[FIELD_COUNT];unsigned int i,line_number=0,assignments=0;
     int staged_max[NUMAMMO],staged_clip[NUMAMMO],staged_weapon[NUMWEAPONS];
     size_t offset=0;boolean signature=false,doom=false,format=false;
-    enum { NONE, MISC, AMMO, WEAPON } section=NONE;
+    enum { NONE, MISC, AMMO, WEAPON, THING } section=NONE;
     int index=0;
     char line[MAX_LINE+1];
     if(!initialized)DPT_DehReset();
@@ -104,6 +162,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     for(i=0;i<FIELD_COUNT;++i)staged[i]=*fields[i].destination;
     memcpy(staged_max,maxammo,sizeof(staged_max));memcpy(staged_clip,clipammo,sizeof(staged_clip));
     for(i=0;i<NUMWEAPONS;++i)staged_weapon[i]=weaponinfo[i].ammo;
+    memcpy(staged_things,mobjinfo,sizeof(staged_things));
     while(offset<size)
     {
         size_t start=offset,length;char *text,*equals;int value;
@@ -127,20 +186,25 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
             char *separator=strchr(text,' ');
             if(separator)
             {
-                int ammo,weapon;
-                *separator=0;ammo=Equal(text,"Ammo");weapon=Equal(text,"Weapon");
-                if(ammo||weapon)
+                int ammo,weapon,thing;
+                *separator=0;ammo=Equal(text,"Ammo");weapon=Equal(text,"Weapon");thing=Equal(text,"Thing");
+                if(ammo||weapon||thing)
                 {
                     if(!doom||!format)return Error(line_number,"headers required before indexed section");
+                    if(thing)
+                    {
+                        if(!ThingIndex(separator+1,&index))return Error(line_number,"Thing index/label invalid (indices are 1-based)");
+                        section=THING;continue;
+                    }
                     if(!Number(Trim(separator+1),&index)||index<0||index>=(ammo?NUMAMMO:NUMWEAPONS))
                         return Error(line_number,"Ammo/Weapon section index out of range");
                     section=ammo?AMMO:WEAPON;continue;
                 }
             }
-            return Error(line_number,"unsupported section (Misc 0, Ammo and Weapon subset only)");
+            return Error(line_number,"unsupported section (Misc 0, Ammo, Weapon-ammo, Thing-numeric only)");
         }
         equals=strchr(text,'=');
-        if(!equals)return Error(line_number,"unsupported section (Misc 0, Ammo and Weapon subset only)");
+        if(!equals)return Error(line_number,"unsupported section");
         *equals=0;text=Trim(text);
         if(!Number(Trim(equals+1),&value))return Error(line_number,"invalid decimal integer / overflow");
         if(!section)
@@ -149,6 +213,11 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
             else if(Equal(text,"Patch format")&&!format&&value==6)format=true;
             else return Error(line_number,"expected Doom version = 19 and Patch format = 6 (no duplicates)");
             continue;
+        }
+        if(section==THING)
+        {
+            if(!ApplyThing(index,text,value,line_number))return false;
+            ++assignments;continue;
         }
         if(section==AMMO)
         {
@@ -179,6 +248,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=staged[i];
     memcpy(maxammo,staged_max,sizeof(staged_max));memcpy(clipammo,staged_clip,sizeof(staged_clip));
     for(i=0;i<NUMWEAPONS;++i)weaponinfo[i].ammo=(ammotype_t)staged_weapon[i];
+    memcpy(mobjinfo,staged_things,sizeof(staged_things));
     SHA1_UpdateInt32(&digest_context,(unsigned int)size);
     SHA1_Update(&digest_context,(byte*)data,size);
     ++loaded;bytes_total+=(unsigned int)size;return true;
