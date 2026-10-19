@@ -8,6 +8,7 @@
 #include "info.h"
 #include "m_fixed.h"
 #include "p_mobj.h"
+#include "sounds.h"
 #include "d_englsh.h"
 #include "deh_str.h"
 #include <stddef.h>
@@ -176,7 +177,7 @@ static boolean ThingIndex(char *text,int *index)
 static boolean ApplyThing(int index,const char *field,int value,unsigned int line)
 {
     unsigned int i;
-    int *state_destination=NULL;
+    int *state_destination=NULL,*sound_destination=NULL;
     if(Equal(field,"Speed"))
     {
         // Vanilla actors use whole units for walking but fixed-point for
@@ -208,6 +209,17 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
             return Error(line,"Thing state frame points into the weapon-state pool");
         *state_destination=value;return true;
     }
+    if(Equal(field,"Alert sound"))sound_destination=&staged_things[index].seesound;
+    else if(Equal(field,"Attack sound"))sound_destination=&staged_things[index].attacksound;
+    else if(Equal(field,"Pain sound"))sound_destination=&staged_things[index].painsound;
+    else if(Equal(field,"Death sound"))sound_destination=&staged_things[index].deathsound;
+    else if(Equal(field,"Action sound"))sound_destination=&staged_things[index].activesound;
+    if(sound_destination)
+    {
+        if(value<0||value>=NUMSFX)
+            return Error(line,"Thing sound outside the vanilla sound table");
+        *sound_destination=value;return true;
+    }
     for(i=0;i<sizeof(thing_fields)/sizeof(thing_fields[0]);++i)
     {
         const thing_field_t *f=&thing_fields[i];
@@ -217,7 +229,7 @@ static boolean ApplyThing(int index,const char *field,int value,unsigned int lin
             *(int*)((unsigned char*)&staged_things[index]+f->offset)=value;return true;
         }
     }
-    return Error(line,"unsupported Thing field (sounds/IDs/state fields are not supported)");
+    return Error(line,"unsupported Thing field (IDs/state/sound fields are not supported)");
 }
 static boolean ValidateThingIds(const mobjinfo_t *things,unsigned int line)
 {

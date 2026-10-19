@@ -264,8 +264,8 @@ void D_DiagnosticsTic(void)
                             mobj_t *mo=(mobj_t*)th;
                             if(mo->type==MT_BARREL)
                             {
-                                printf("Patch thing: type=%d id=%d flags=%d state=%d death=%d health=%d radius=%d height=%d speed=%d mass=%d damage=%d pain=%d reaction=%d\n",
-                                    (int)mo->type,mo->info->doomednum,mo->flags,(int)(mo->state-states),mo->info->deathstate,mo->health,mo->radius,mo->height,mo->info->speed,
+                                printf("Patch thing: type=%d id=%d flags=%d state=%d death=%d sounds=%d,%d,%d,%d,%d health=%d radius=%d height=%d speed=%d mass=%d damage=%d pain=%d reaction=%d\n",
+                                    (int)mo->type,mo->info->doomednum,mo->flags,(int)(mo->state-states),mo->info->deathstate,mo->info->seesound,mo->info->attacksound,mo->info->painsound,mo->info->deathsound,mo->info->activesound,mo->health,mo->radius,mo->height,mo->info->speed,
                                     mo->info->mass,mo->info->damage,mo->info->painchance,mo->reactiontime);
                                 break;
                             }

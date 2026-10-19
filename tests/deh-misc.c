@@ -7,6 +7,7 @@
 #include "m_fixed.h"
 #include "d_englsh.h"
 #include "deh_str.h"
+#include "sounds.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -137,6 +138,12 @@ int main(void)
     REQUIRE(mobjinfo[MT_POSSESSED].radius==24*FRACUNIT&&mobjinfo[MT_POSSESSED].mass==250);
     REQUIRE(mobjinfo[MT_ROCKET].speed==30*FRACUNIT);
     REQUIRE(mobjinfo[MT_POSSESSED].spawnstate==S_BLOOD1&&mobjinfo[MT_POSSESSED].flags==38);
+    REQUIRE(Load(HEADER "Thing 31\nAlert sound = 1\nAttack sound = 2\nPain sound = 3\nDeath sound = 16\nAction sound = 8\n"));
+    REQUIRE(mobjinfo[MT_BARREL].seesound==sfx_pistol&&mobjinfo[MT_BARREL].attacksound==sfx_shotgn);
+    REQUIRE(mobjinfo[MT_BARREL].painsound==sfx_sgcock&&mobjinfo[MT_BARREL].deathsound==sfx_firsht);
+    REQUIRE(mobjinfo[MT_BARREL].activesound==sfx_plasma);
+    REQUIRE(!Load(HEADER "Thing 31\nDeath sound = 999999\n"));
+    REQUIRE(mobjinfo[MT_BARREL].deathsound==sfx_firsht);
     DPT_DehChecksum(a);
     {const char *invalid[]={HEADER "Thing 0\nHit points = 1\n",HEADER "Thing 999\nHit points = 1\n",
       HEADER "Thing 2 (Unclosed\nHit points = 1\n",HEADER "Thing 2 (OK) trailing\nHit points = 1\n",

@@ -364,6 +364,9 @@ partition может породить две отдельные локальны
   existing non-weapon mobj states, with `S_NULL`/bounds/domain checks, real
   barrel spawn transition and synthetic rollback tests. Sound/action references
   remain outside this slice.
+- [x] `DPT-deh-thingsounds-v10`: five bounded Thing sound references to existing
+  vanilla `sfx` IDs, bounds/rollback/reset, real barrel diagnostic and matching/
+  mismatch network coverage. New sound lumps and action pointers remain rejected.
 - [x] Предыдущий Thing slice: полные MinGW headless 33/33 и MSVC SDL 35/35,
   целевые MSVC ASan parser/engine/baselines 3/3.
 - [x] Actions run 39304002144/ddd69cc success: macOS master-client-wire fixture
