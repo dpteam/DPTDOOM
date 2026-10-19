@@ -145,6 +145,32 @@
 
 ## Среднесрочно: DeHackEd и MBF-карты/моды (владелец)
 
+- Стратегия совместимости: сначала довести **classic/vanilla DeHackEd** до
+  полного покрытия тех структур и семантик, которые уже существуют в текущем
+  DPT.DOOM, не выдавая bounded subset за совместимость со всеми модами. После
+  этого расширять поддержку отдельными проверяемыми слоями: BEX/Boom, затем
+  MBF, а MBF21 держать отдельным compatibility level. Каждый слой должен иметь
+  собственный manifest/fingerprint, compatibility matrix, regression tests,
+  headless traces и явные ограничения; не смешивать его незаметно с vanilla
+  path и не переносить старые save/demo semantics без нового формата manifest.
+- Будущая поддержка **Hexen map format** как отдельный большой этап рядом с
+  DECORATE: loader/структура map data, ACS/скриптовые зависимости (если будут
+  включены), polyobjects/нативные Hexen specials и изменения world/physics/
+  rendering должны проектироваться и тестироваться отдельно. Само чтение
+  Hexen WAD не считать совместимостью с игрой.
+- Будущая поддержка **DECORATE** для actor definitions как отдельный слой после
+  безопасной resource/PK3-инфраструктуры: parser, inheritance, states/actions,
+  flags, replacements и deterministic network/save semantics. Не включать
+  произвольный код или scripts через DECORATE и не обещать полную ZDoom
+  совместимость одним фактом загрузки actor definition.
+- Постепенно подтягивать оставшийся подходящий функционал из **csDoom** и
+  **DOOM ACE/AXE** по конкретным модулям: сначала сравнить behavior и зависимости,
+  затем выбрать минимальную нативную реализацию DPT.DOOM. Не копировать целые
+  подсистемы вслепую; отдельно проверять license/provenance, notices,
+  third-party audio/network code, DOS/address assumptions и отделять parser/
+  gameplay от injection/exploit/server infrastructure. Каждый перенесённый
+  модуль должен получить собственные tests и не считаться готовым только из-за
+  наличия reference source.
 - Добавить **DeHackEd**: внешние `.deh` и встроенные `DEHACKED` lumps,
   определённый порядок/приоритет patches, проверка индексов/чисел/строк,
   понятные ошибки, regression tests ванильного пути и изменённых states/things.
