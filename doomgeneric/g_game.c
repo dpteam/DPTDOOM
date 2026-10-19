@@ -1651,8 +1651,6 @@ char	savename[256];
 
 void G_LoadGame (char* name) 
 { 
-    if (DPT_DehLoadedCount())
-        I_Error("DeHackEd Misc subset: vanilla save/load disabled (no patch manifest in DSG)");
     if (DPT_NetActive())
         I_Error("Direct coop: disconnect and restart in single-player before loading a save");
     M_StringCopy(savename, name, sizeof(savename));
@@ -1664,8 +1662,6 @@ void G_LoadGame (char* name)
 
 void G_DoLoadGame (void) 
 {
-    if (DPT_DehLoadedCount())
-        I_Error("DeHackEd Misc subset: vanilla save/load disabled (no patch manifest in DSG)");
     int savedleveltime;
 	 
     gameaction = ga_nothing; 
@@ -1726,8 +1722,6 @@ G_SaveGame
 ( int	slot,
   char*	description )
 {
-    if (DPT_DehLoadedCount())
-        I_Error("DeHackEd Misc subset: vanilla save/load disabled (no patch manifest in DSG)");
     if (slot < 0 || slot > 7)
         I_Error("Invalid savegame slot: %d", slot);
     if (DPT_NetActive())
@@ -1742,8 +1736,6 @@ G_SaveGame
 
 void G_DoSaveGame (void) 
 { 
-    if (DPT_DehLoadedCount())
-        I_Error("DeHackEd Misc subset: vanilla save/load disabled (no patch manifest in DSG)");
     char *savegame_file;
     char *temp_savegame_file;
     char *recovery_savegame_file;
@@ -2166,7 +2158,7 @@ void G_WriteDemoTiccmd (ticcmd_t* cmd)
 void G_RecordDemo (char *name)
 {
     if (DPT_DehLoadedCount())
-        I_Error("DeHackEd Misc subset: vanilla recording disabled (no patch manifest in demo)");
+        I_Error("DeHackEd: demo recording disabled (no patch manifest in demo format); saves with a manifest are supported");
     size_t demoname_size;
     int i;
     int maxsize;

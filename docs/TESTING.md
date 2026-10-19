@@ -9,7 +9,8 @@ DeHackEd subset: `deh-misc` — data-free parser/rollback/limits/digest;
 `deh-engine` — headless с локальным IWAD, synthetic patches/lumps, реальные
 health/ammo/capacity, weapon ammo use и two-peer patch mismatch. Это classic
 Misc 0 / Ammo / bounded Text / Weapon frames / Thing numeric/flags/states/sounds / Frame graph+visual+psprite / Infight, не full
-DeHackEd/BEX; patched saves/recording запрещены до manifest. См. [DEHACKED.md](DEHACKED.md).
+DeHackEd/BEX; patched saves используют `DPTDEH1` manifest (тот же набор патчей
+обязателен), demo recording с патчами пока запрещена. См. [DEHACKED.md](DEHACKED.md).
 Визуальные Frame fields проверяются также по загруженным sprite resources до
 уровня; deh-engine сравнивает framebuffer file/lump и отвергает missing frames.
 `Unknown 1/2` допустимы только на weapon states и проверяются по точным psprite

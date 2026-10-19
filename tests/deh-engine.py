@@ -57,13 +57,16 @@ def main():
         wad(overlay,[HEADER+b'Initial Health = 90\n',HEADER+b'Initial Health = 91\n'])
         base=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-session-report']
 
-        def run(name,extra,ok=True,tics=5):
-            work=root/name;work.mkdir()
+        def run_in(work,extra,ok=True,tics=5):
+            work.mkdir(exist_ok=True)
             result=subprocess.run(base+['-headless-tics',str(tics)]+extra,cwd=work,capture_output=True,text=True,timeout=20)
             text=result.stdout+result.stderr
             assert 'AddressSanitizer' not in text and 'runtime error:' not in text,text
             assert (result.returncode==0)==ok,(result.returncode,text)
-            return work,text
+            return text
+
+        def run(name,extra,ok=True,tics=5):
+            return root/name,run_in(root/name,extra,ok,tics)
 
         _,text=run('plain',[]);assert 'health=100 ammo=50' in text,text
         _,text=run('external',['-deh',str(first)]);assert 'health=77 ammo=23' in text,text
@@ -185,10 +188,34 @@ def main():
         assert match and int(match[1])==fire_ammo['slow-fire'],result.stdout
         _,text=run('reject',['-deh',str(bad)],False);assert 'unsupported Frame field' in text,text
         _,text=run('missing',['-deh'],False);assert 'requires at least one' in text,text
-        for name,extra in [('save',['-headless-save-tic','2']),('load',['-loadgame','0']),('record',['-record','test'])]:
-            work,text=run(name,['-deh',str(first)]+extra,False)
-            assert ('vanilla save/load disabled' if name!='record' else 'recording disabled') in text,text
-            assert not list(work.rglob('*.dsg')) and not list(work.glob('*.lmp'))
+        # Patched saves carry a bounded manifest: same patch set loads, any
+        # different set (including no patches) is rejected before simulation.
+        save_dir=root/'patched-save'
+        text=run_in(save_dir,['-deh',str(first),'-headless-save-tic','2'])
+        saves=list(save_dir.rglob('*.dsg'))
+        assert len(saves)==1 and saves[0].stat().st_size>0,text
+        assert saves[0].read_bytes()[24:31]==b'DPTDEH1',saves[0].read_bytes()[:32]
+        text=run_in(save_dir,['-deh',str(first),'-loadgame','0'])
+        assert 'health=77 ammo=23' in text,text
+        text=run_in(save_dir,['-deh',str(second),'-loadgame','0'],False)
+        assert 'different DeHackEd patches' in text,text
+        assert 'Session report:' not in text,text
+        text=run_in(save_dir,['-loadgame','0'],False)
+        assert 'different DeHackEd patches' in text,text
+        # Vanilla save stays byte-compatible and is rejected under active patches.
+        vanilla_dir=root/'vanilla-save'
+        text=run_in(vanilla_dir,['-headless-save-tic','2'])
+        vanilla_save=list(vanilla_dir.rglob('*.dsg'))[0]
+        assert vanilla_save.read_bytes()[24:31]==b'version',vanilla_save.read_bytes()[:32]
+        text=run_in(vanilla_dir,['-loadgame','0'])
+        assert 'health=100 ammo=50' in text,text
+        text=run_in(vanilla_dir,['-deh',str(first),'-loadgame','0'],False)
+        assert 'Vanilla savegame cannot be loaded' in text,text
+        # Demo recording still has no manifest slot and stays blocked.
+        record_dir=root/'record'
+        text=run_in(record_dir,['-deh',str(first),'-record','test'],False)
+        assert 'demo recording disabled' in text,text
+        assert not list(record_dir.glob('*.lmp'))
 
         def pair(name,patches,success,expected='health=77 ammo=23',extra=()):
             with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]

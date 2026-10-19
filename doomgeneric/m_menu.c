@@ -587,8 +587,6 @@ void M_LoadSelect(int choice)
 //
 void M_LoadGame (int choice)
 {
-    if (DPT_DehLoadedCount())
-    { M_StartMessage("PATCHED SAVE MANIFEST NOT READY", NULL, false); return; }
     if (netgame)
     {
 	M_StartMessage(DEH_String(LOADNET),NULL,false);
@@ -654,8 +652,6 @@ void M_SaveSelect(int choice)
 //
 void M_SaveGame (int choice)
 {
-    if (DPT_DehLoadedCount())
-    { M_StartMessage("PATCHED SAVE MANIFEST NOT READY", NULL, false); return; }
     if (DPT_NetActive())
     {
         M_StartMessage("ONLINE SNAPSHOTS ARE NOT READY YET", NULL, false);
@@ -692,8 +688,6 @@ void M_QuickSaveResponse(int key)
 
 void M_QuickSave(void)
 {
-    if (DPT_DehLoadedCount())
-    { M_StartMessage("PATCHED SAVE MANIFEST NOT READY", NULL, false); return; }
     if (DPT_NetActive())
     {
         M_StartMessage("ONLINE SNAPSHOTS ARE NOT READY YET", NULL, false);
@@ -737,8 +731,6 @@ void M_QuickLoadResponse(int key)
 
 void M_QuickLoad(void)
 {
-    if (DPT_DehLoadedCount())
-    { M_StartMessage("PATCHED SAVE MANIFEST NOT READY", NULL, false); return; }
     if (netgame)
     {
 	M_StartMessage(DEH_String(QLOADNET),NULL,false);

@@ -26,6 +26,9 @@
 #include "z_zone.h"
 #include "p_local.h"
 #include "p_saveg.h"
+#ifdef DPT_DEH_CLASSIC
+#include "deh_classic.h"
+#endif
 
 // State.
 #include "doomstat.h"
@@ -35,6 +38,12 @@
 
 #define SAVEGAME_EOF 0x1d
 #define VERSIONSIZE 16 
+
+// Patched saves use their own 16-byte version marker plus a bounded manifest.
+// Vanilla saves keep the exact "version N" header, so old files stay readable
+// and a vanilla engine cannot silently load a patched snapshot.
+#define DPT_SAVE_DEH_MARKER "DPTDEH1"
+#define DPT_SAVE_DEH_MARKER_LEN 7
 
 FILE *save_stream;
 int savegamelength;
@@ -1377,10 +1386,27 @@ void P_WriteSaveGameHeader(char *description)
         saveg_write8(0);
 
     memset(name, 0, sizeof(name));
-    M_snprintf(name, sizeof(name), "version %i", G_VanillaVersionCode());
+#ifdef DPT_DEH_CLASSIC
+    if (DPT_DehLoadedCount())
+    {
+        sha1_digest_t digest;
 
-    for (i=0; i<VERSIONSIZE; ++i)
-        saveg_write8(name[i]);
+        memcpy(name, DPT_SAVE_DEH_MARKER, DPT_SAVE_DEH_MARKER_LEN);
+        DPT_DehChecksum(digest);
+        for (i=0; i<VERSIONSIZE; ++i)
+            saveg_write8(name[i]);
+        for (i=0; i<20; ++i)
+            saveg_write8(digest[i]);
+        saveg_write32((int)DPT_DehLoadedCount());
+    }
+    else
+#endif
+    {
+        M_snprintf(name, sizeof(name), "version %i", G_VanillaVersionCode());
+
+        for (i=0; i<VERSIONSIZE; ++i)
+            saveg_write8(name[i]);
+    }
 	 
     saveg_write8(gameskill);
     saveg_write8(gameepisode);
@@ -1415,8 +1441,32 @@ boolean P_ReadSaveGameHeader(void)
 
     memset(vcheck, 0, sizeof(vcheck));
     M_snprintf(vcheck, sizeof(vcheck), "version %i", G_VanillaVersionCode());
+#ifdef DPT_DEH_CLASSIC
+    if (!memcmp(read_vcheck, DPT_SAVE_DEH_MARKER, DPT_SAVE_DEH_MARKER_LEN))
+    {
+        sha1_digest_t saved, current;
+        int count;
+
+        for (i=0; i<20; ++i)
+            saved[i] = saveg_read8();
+        count = saveg_read32();
+        if (count <= 0)
+            I_Error("Bad DeHackEd savegame manifest");
+
+        DPT_DehChecksum(current);
+        if (memcmp(saved, current, 20) != 0
+            || (unsigned int)count != DPT_DehLoadedCount())
+            I_Error("Savegame was created with different DeHackEd patches; "
+                    "start it with the same -deh/-dehlump set");
+    }
+    else
+#endif
     if (memcmp(read_vcheck, vcheck, VERSIONSIZE) != 0)
 	return false;				// bad version 
+#ifdef DPT_DEH_CLASSIC
+    else if (DPT_DehLoadedCount())
+        I_Error("Vanilla savegame cannot be loaded while DeHackEd patches are active");
+#endif
 
     gameskill = saveg_read8();
     gameepisode = saveg_read8();

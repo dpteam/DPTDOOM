@@ -110,6 +110,8 @@ vanilla messages, Thing ID/Bits/state/sound references, Frame Duration/Next fram
 (existing states, без arbitrary action pointers). Frame Sprite number/subnumber
 имеют bounded parser и проверку загруженных кадров до симуляции; Frame
 `Unknown 1/2` ограничены psprite-offset `-128..128` для weapon states.
-`Misc 0 Monsters Infight` принимается как `0..1`. Action pointers,
+`Misc 0 Monsters Infight` принимается как `0..1`. Патченные сохранения получают
+marker `DPTDEH1` и digest набора патчей; загрузка с другим набором отвергается.
+Demo recording с патчами пока запрещена. Action pointers,
 полный Text/[STRINGS], остальные Frame fields, произвольные
 weapon frames и BEX остаются очередью следующих срезов.

@@ -1,7 +1,7 @@
 # DeHackEd: ограниченный Misc / Ammo / Text / Weapon-frames / Thing / Frame graph срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-infight-v13` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-savemanifest-v14` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -281,13 +281,27 @@ section/field дают ошибку с номером строки до игро
 - Разные внешние patches при одинаковом IWAD отвергаются до симуляции как
   resource content/order mismatch. Совпадающие bytes из разных путей проходят.
   Wire game protocol остаётся v2; source fingerprint требует одной сборки peers.
-- Vanilla DSG и demo не содержат patch manifest. Пока patches активны,
-  **save/load и demo recording запрещены**: меню показывает сообщение, CLI/
-  internal вызовы fail-fast до записи файла. Не выдавать vanilla DSG за snapshot
-  изменённых rules. Для возвращения к обычным saves — запуск без patches.
-- Demo playback пока возможно с явно выбранным patch, но не заявляется
-  совместимость/синхронизация с произвольными patched demos. Непатченный
-  attract-demo save/takeover и state baselines остаются без изменений.
+- Vanilla DSG не содержит patch manifest. Патченные сохранения используют
+  **отдельный 16-байтовый version marker `DPTDEH1`** вместо `version N`:
+  далее идут 20-байтовый SHA-1 digest набора патчей (тот же, что в сетевом
+  ResourceDigest) и 4-байтовое число применённых источников.
+  - Тот же набор патчей (`-deh`/`-dehlump` в том же порядке) — сохранение
+    загружается нормально, включая поля Thing/Frame/Text.
+  - Другой набор или запуск без патчей — fail-fast до симуляции:
+    `Savegame was created with different DeHackEd patches`.
+  - Vanilla-сохранение при активных патчах отвергается
+    (`Vanilla savegame cannot be loaded while DeHackEd patches are active`),
+    чтобы не применить изменённые правила к несовместимому snapshot.
+  - Vanilla-сохранения и vanilla-движок не видят новый marker как валидную
+    версию, поэтому старые DSG остаются байт-совместимыми и не портятся.
+  - Manifest не заменяет данные сохранения: RNG/target/tracer по-прежнему
+    хранятся по ванильной схеме DSG.
+- Demo recording при активных патчах **по-прежнему запрещена**: vanilla `.lmp`
+  не имеет места под manifest, а обещание совместимости с patched demos без
+  отдельного формата было бы ложным. Demo playback с явно выбранным patch
+  остаётся возможным, но не заявляется совместимость/синхронизация с
+  произвольными patched demos. Непатченный attract-demo save/takeover и state
+  baselines остаются без изменений.
 
 ## Проверки
 
@@ -298,7 +312,8 @@ repeatability и load order, без IWAD/окна/Internet.
 `deh-engine` (headless + локальный Doom II): реальные player health/ammo/capacity,
 per-ammo/type в patch report, attack commands обычного/переназначенного pistol, внешний
 patch, повторные patches, два DEHACKED lumps и explicit opt-in/order, bad source,
-save/load/record guards и одинаковые/разные patches в настоящих two-peer
+patched-save manifest (same/different/no patches, vanilla save rejection) и
+одинаковые/разные patches в настоящих two-peer
 процессах с matching traces (Misc, Ammo/Weapon, Thing). Для Thing создаётся
 временный MAP01 overlay с двумя starts и одной barrel: сравниваются поля
 **реально созданного mobj**, не только parser table, через file/lump paths.

@@ -380,6 +380,11 @@ partition может породить две отдельные локальны
   bounded Misc-поле через общий staged/reset путь; engine patch report,
   same/different peer digest. Реальная перестрелка монстров одного вида
   автоматическим сценарием пока не покрыта.
+- [x] `DPT-deh-savemanifest-v14`: patched DSG получает marker `DPTDEH1`,
+  20-байтовый SHA-1 digest набора патчей и число источников; same-set load
+  разрешён, другой набор/без патчей и vanilla save при активных патчах
+  отвергаются до симуляции. Vanilla DSG байт-совместим. Demo recording с
+  патчами остаётся запрещённой: в vanilla `.lmp` нет места под manifest.
 - [x] Проверки v11 на Windows: полный MinGW headless **33/33**, MSVC SDL
   **35/35**, MSVC headless ASan **35/35**. Vanilla state baselines не менялись;
   deh-engine проверяет real visual fields/framebuffer и loaded-resource rejects.
