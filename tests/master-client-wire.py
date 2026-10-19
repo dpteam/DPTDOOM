@@ -75,10 +75,30 @@ case(header(4)+bytes(2), diagnostic='peer-closed-before-complete-reply')
 case(b'', slow=True, diagnostic='stage=receive-header result=FAILED reason=deadline')
 for status, name in ((1,'BAD_REQUEST'),(2,'UNAUTHORIZED'),(3,'CONFLICT'),(4,'CAPACITY')):
     case(header(0,status=status),'reject',diagnostic=name)
-# A reserved-but-not-listening local port produces a real OS refusal code.
+# A bound, non-listening TCP socket is NOT a portable ECONNREFUSED fixture:
+# macOS may leave the SYN pending. Both outcomes are valid, but neither may
+# send a request or be reported as a successful connection.
+def check_connect_failure(result):
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    output = result.stdout
+    assert b'stage=connect result=FAILED' in output and b'sent=0/16 received=0/16' in output, output
+    if b'reason=connect ' in output:
+        assert b'os_error=0 ' not in output, output
+    else:
+        assert b'reason=deadline ' in output and b'os_error=0 ' in output, output
+
+print('master-client-wire case: bound non-listener (OS refusal OR connect deadline)', flush=True)
 with socket.socket() as reservation:
     reservation.bind(('127.0.0.1',0))
     result=subprocess.run([exe,str(reservation.getsockname()[1]),'bad'],capture_output=True,timeout=12)
-    assert result.returncode==0 and b'reason=connect' in result.stdout, result.stdout
-    assert b'os_error=0 ' not in result.stdout, result.stdout
+    check_connect_failure(result)
+# Separately exercise an actually closed port; no bound socket remains to
+# absorb SYNs on BSD. There is a small ephemeral-port reuse window, so retain
+# bounded OS refusal/deadline semantics rather than guessing the OS outcome.
+print('master-client-wire case: closed port connection failure', flush=True)
+with socket.socket() as reservation:
+    reservation.bind(('127.0.0.1',0))
+    closed_port = reservation.getsockname()[1]
+result=subprocess.run([exe,str(closed_port),'bad'],capture_output=True,timeout=12)
+check_connect_failure(result)
 print('Shared C master client: fragmented valid list, hostile headers/lengths, truncated/count mismatch and deadline OK')

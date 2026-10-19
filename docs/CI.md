@@ -42,6 +42,15 @@ Node warning про actions, которые таргетят Node 20 и forced r
 и native diagnostics до assertion. Это test-hardening, не подтверждённый root
 cause/fix macOS до получения traceback/нового remote run.
 
+Получен полный traceback владельца: macOS прошёл все response/timeout/rejection
+cases и упал **только на финальном bound-but-not-listening socket**: native client
+корректно вернул `stage=connect reason=deadline sent=0/16`, а fixture ошибочно
+требовал `reason=connect os_error!=0`. Это не ошибка парсинга master и не Node.
+Тест теперь допускает два корректных ОС-исхода (refusal или deadline), но требует
+FAILED/connect, нулевую отправку/приём; для refusal по-прежнему нужен ненулевой
+OS error. Отдельно проверяется порт после закрытия reservation. Клиентские
+таймауты не увеличены, macOS scenarios не пропускаются. Нужен remote rerun.
+
 ## Матрица
 
 | Job | Runner | Проверки без игровых данных |
