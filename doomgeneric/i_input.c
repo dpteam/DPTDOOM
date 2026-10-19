@@ -281,9 +281,12 @@ void I_GetEvent(void)
     event_t event;
     int pressed;
     unsigned char key;
+    int key_count = 0;
 
     
-	while (DG_GetKey(&pressed, &key))
+    // D_PostEvent has 64 slots. Leave room for other input and defer the
+    // remaining platform events to the next tic instead of overwriting it.
+	while (key_count++ < 32 && DG_GetKey(&pressed, &key))
     {
         UpdateShiftStatus(pressed, key);
 
@@ -319,7 +322,6 @@ void I_GetEvent(void)
             {
                 D_PostEvent(&event);
             }
-            break;
         }
     }
 

@@ -533,7 +533,6 @@ static boolean ExpandSoundData_SDL(sfxinfo_t *sfxinfo,
                                    int samplerate,
                                    int length)
 {
-    SDL_AudioCVT convertor;
     Mix_Chunk *chunk;
     uint32_t expanded_length;
  
@@ -543,6 +542,8 @@ static boolean ExpandSoundData_SDL(sfxinfo_t *sfxinfo,
 
     // Double up twice: 8 -> 16 bit and mono -> stereo
 
+    if (expanded_length == 0 || expanded_length > UINT32_MAX / 4)
+        return false;
     expanded_length *= 4;
 
     // Allocate a chunk in which to expand the sound
@@ -642,6 +643,7 @@ static boolean CacheSFX(sfxinfo_t *sfxinfo)
     {
         // Invalid sound
 
+        W_ReleaseLumpNum(lumpnum);
         return false;
     }
 
@@ -659,8 +661,9 @@ static boolean CacheSFX(sfxinfo_t *sfxinfo)
     // further investigation to better understand the correct
     // behavior.
 
-    if (length > lumplen - 8 || length <= 48)
+    if (samplerate == 0 || length > lumplen - 8 || length <= 48)
     {
+        W_ReleaseLumpNum(lumpnum);
         return false;
     }
 
@@ -674,6 +677,7 @@ static boolean CacheSFX(sfxinfo_t *sfxinfo)
 
     if (!ExpandSoundData(sfxinfo, data + 8, samplerate, length))
     {
+        W_ReleaseLumpNum(lumpnum);
         return false;
     }
 
@@ -853,6 +857,7 @@ static int I_SDL_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
     // Release a sound effect if there is already one playing
     // on this channel
 
+    Mix_HaltChannel(channel);
     ReleaseSoundOnChannel(channel);
 
     // Get the sound data
@@ -866,7 +871,11 @@ static int I_SDL_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
 
     // play sound
 
-    Mix_PlayChannelTimed(channel, &snd->chunk, 0, -1);
+    if (Mix_PlayChannelTimed(channel, &snd->chunk, 0, -1) < 0)
+    {
+        UnlockAllocatedSound(snd);
+        return -1;
+    }
 
     channels_playing[channel] = sfxinfo;
 
@@ -926,12 +935,18 @@ static void I_SDL_UpdateSound(void)
 }
 
 static void I_SDL_ShutdownSound(void)
-{    
+{
+    int i;
     if (!sound_initialized)
     {
         return;
     }
 
+    Mix_HaltChannel(-1);
+    for (i = 0; i < NUM_CHANNELS; ++i)
+        ReleaseSoundOnChannel(i);
+    while (allocated_sounds_head != NULL)
+        FreeAllocatedSound(allocated_sounds_head);
     Mix_CloseAudio();
     SDL_QuitSubSystem(SDL_INIT_AUDIO);
 
@@ -978,7 +993,14 @@ static boolean I_SDL_InitSound(boolean _use_sfx_prefix)
         channels_playing[i] = NULL;
     }
 
-    if (SDL_Init(SDL_INIT_AUDIO) < 0)
+    if (snd_samplerate < 8000 || snd_samplerate > 192000
+        || snd_maxslicetime_ms < 1 || snd_maxslicetime_ms > 1000)
+    {
+        fprintf(stderr, "Invalid audio sample rate or slice time; using 44100 Hz / 28 ms.\n");
+        snd_samplerate = 44100;
+        snd_maxslicetime_ms = 28;
+    }
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
     {
         fprintf(stderr, "Unable to set up sound.\n");
         return false;
@@ -987,6 +1009,7 @@ static boolean I_SDL_InitSound(boolean _use_sfx_prefix)
     if (Mix_OpenAudio(snd_samplerate, AUDIO_S16SYS, 2, GetSliceSize()) < 0)
     {
         fprintf(stderr, "Error initialising SDL_mixer: %s\n", Mix_GetError());
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
         return false;
     }
 

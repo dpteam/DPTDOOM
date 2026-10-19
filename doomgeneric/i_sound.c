@@ -33,6 +33,7 @@
 #include "i_video.h"
 #include "m_argv.h"
 #include "m_config.h"
+#include "i_system.h"
 
 // Sound sample rate to use for digital output (Hz)
 
@@ -57,7 +58,11 @@ char *snd_musiccmd = "";
 static sound_module_t *sound_module = NULL;
 static music_module_t *music_module = NULL;
 
+#ifdef DPTDOOM_SDL
+int snd_musicdevice = SNDDEVICE_GENMIDI;
+#else
 int snd_musicdevice = SNDDEVICE_SB;
+#endif
 int snd_sfxdevice = SNDDEVICE_SB;
 
 // DOS-specific options: These are unused but should be maintained
@@ -131,7 +136,8 @@ static void InitSfxModule(boolean use_sfx_prefix)
 static void InitMusicModule(void)
 {
 #ifdef FEATURE_SOUND
-    music_module = &DG_music_module;
+    if (snd_musicdevice != SNDDEVICE_NONE)
+        music_module = &DG_music_module;
 #endif /* FEATURE_SOUND */
 }
 
@@ -169,6 +175,9 @@ void I_InitSound(boolean use_sfx_prefix)
 
     nomusic = M_CheckParm("-nomusic") > 0;
 
+    // Also unwind a partially initialized audio stack on startup failure.
+    I_AtExit(I_ShutdownSound, true);
+
     // Initialize the sound and music subsystems.
 
     if (!nosound && !screensaver_mode)
@@ -181,7 +190,9 @@ void I_InitSound(boolean use_sfx_prefix)
          && (snd_musicdevice == SNDDEVICE_GENMIDI
           || snd_musicdevice == SNDDEVICE_GUS))
         {
-            //I_InitTimidityConfig();
+#ifndef __DJGPP__
+            I_InitTimidityConfig();
+#endif
         }
 
         if (!nosfx)
@@ -199,14 +210,11 @@ void I_InitSound(boolean use_sfx_prefix)
 
 void I_ShutdownSound(void)
 {
+    I_ShutdownMusic();
     if (sound_module != NULL)
     {
         sound_module->Shutdown();
-    }
-
-    if (music_module != NULL)
-    {
-        music_module->Shutdown();
+        sound_module = NULL;
     }
 }
 
@@ -310,13 +318,18 @@ void I_InitMusic(void)
 {
     if(music_module != NULL)
     {
-        music_module->Init();
+        if (!music_module->Init())
+            music_module = NULL;
     }
 }
 
 void I_ShutdownMusic(void)
 {
-
+    if (music_module != NULL)
+    {
+        music_module->Shutdown();
+        music_module = NULL;
+    }
 }
 
 void I_SetMusicVolume(int volume)
@@ -394,8 +407,10 @@ boolean I_MusicIsPlaying(void)
 
 void I_BindSoundVariables(void)
 {
+#ifdef FEATURE_SOUND
     extern int use_libsamplerate;
     extern float libsamplerate_scale;
+#endif
 
     M_BindVariable("snd_musicdevice",   &snd_musicdevice);
     M_BindVariable("snd_sfxdevice",     &snd_sfxdevice);
@@ -411,6 +426,7 @@ void I_BindSoundVariables(void)
 #ifdef FEATURE_SOUND
     M_BindVariable("use_libsamplerate",   &use_libsamplerate);
     M_BindVariable("libsamplerate_scale", &libsamplerate_scale);
+    M_BindVariable("timidity_cfg_path", &timidity_cfg_path);
 #endif
 
     // Before SDL_mixer version 1.2.11, MIDI music caused the game

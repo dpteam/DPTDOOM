@@ -11,6 +11,18 @@
       "cacheVariables": { "DPTDOOM_BACKEND": "win32" }
     },
     {
+      "name": "windows-sdl",
+      "inherits": "windows",
+      "displayName": "Windows x64 SDL2 + audio (run tools/fetch-sdl.ps1 first)",
+      "binaryDir": "${sourceDir}/build/windows-sdl",
+      "cacheVariables": {
+        "DPTDOOM_BACKEND": "sdl",
+        "DPTDOOM_SOUND": "ON",
+        "SDL2_DIR": "${sourceDir}/build/deps/SDL2-2.32.10/cmake",
+        "SDL2_mixer_DIR": "${sourceDir}/build/deps/SDL2_mixer-2.8.2/cmake"
+      }
+    },
+    {
       "name": "windows-headless",
       "inherits": "windows",
       "binaryDir": "${sourceDir}/build/windows-headless",
@@ -26,11 +38,13 @@
   ],
   "buildPresets": [
     { "name": "windows", "configurePreset": "windows", "configuration": "Release" },
+    { "name": "windows-sdl", "configurePreset": "windows-sdl", "configuration": "Release" },
     { "name": "windows-headless", "configurePreset": "windows-headless", "configuration": "Release" },
     { "name": "headless", "configurePreset": "headless" }
   ],
   "testPresets": [
     { "name": "windows", "configurePreset": "windows", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "windows-sdl", "configurePreset": "windows-sdl", "configuration": "Release", "output": { "outputOnFailure": true } },
     { "name": "windows-headless", "configurePreset": "windows-headless", "configuration": "Release", "output": { "outputOnFailure": true } },
     { "name": "headless", "configurePreset": "headless", "output": { "outputOnFailure": true } }
   ]

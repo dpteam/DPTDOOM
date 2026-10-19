@@ -1,4 +1,4 @@
-"""Exercise a Win32 build with a user-supplied IWAD; no game data is shipped.
+"""Exercise a Win32 or SDL Windows build with a local IWAD; no game data is shipped.
 
 python tests/windows-smoke.py --exe build/msvc/Release/dptdoom.exe --iwad path/to/doom1.wad
 """
