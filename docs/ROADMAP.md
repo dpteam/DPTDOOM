@@ -303,6 +303,9 @@ partition может породить две отдельные локальны
 - [ ] Аудит DOOM ACE `engine/dehacked.*`; альтернативно игровой csDoom, если
   конкретная реализация проще/подходит. Проверить licenses/provenance и зависимости;
   локальный csDoomMaster — не игровой порт и не источник DeHackEd/MBF.
+- [x] Владелец добавил игровые `csDoomNew` / `csDoomOld07` в refs. Найдены
+  DeHackEd/BEX, Boom-элементы и MBF skies; первичный source/license inventory —
+  `docs/REFERENCE-SOURCES.md`. Ничего не перенесено/не собрано из refs.
 - [ ] MBF-совместимые карты/моды (medium по просьбе владельца); оценить BEX/Boom
   как промежуточные этапы, MBF21 отдельно. Сначала compatibility matrix/tests,
   не выдавать загрузку карты за корректную реализацию её mechanics.

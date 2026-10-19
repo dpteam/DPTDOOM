@@ -139,9 +139,11 @@
   LICENSE — LGPL-2.1. Перед переносом проверить файловые notices/provenance,
   лицензионную совместимость, 32-bit address assumptions и отделить parser/
   gameplay от ACE injection/exploit инфраструктуры. Ни parser, ни MBF/MBF21
-  compatibility не считать drop-in. В `refs/csDoomMaster` **только master**:
-  для оценки игровых фич нужны отдельные исходники csDoom; наличие там конкретной
-  совместимости ещё не проверено. Заимствования проверять теми же regression tests.
+  compatibility не считать drop-in. Теперь есть `refs/csDoomNew` и
+  `refs/csDoomOld07`: DeHackEd/BEX handlers и отдельные Boom/MBF mechanics найдены,
+  но полнота совместимости/безопасность не проверены. `refs/csDoomMaster` —
+  по-прежнему только master. Карта источников и смешанные license notices —
+  `docs/REFERENCE-SOURCES.md`; заимствования проверять regression tests.
 - Поддержать **MBF-совместимые карты/моды**. Это не отдельное расширение файла:
   нужны map specials, физика/AI/flags/action pointers и compatibility semantics,
   а не только принятие WAD в loader. Сам факт открытия уровня не доказывает,

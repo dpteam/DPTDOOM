@@ -139,6 +139,10 @@ ctest --preset windows-headless
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
 - Upstream PR и решения по ним фиксируются в `docs/UPSTREAM.md`.
+- Игровые csDoom references теперь доступны: `refs/csDoomNew`, `csDoomOld07`,
+  плюс отдельный `csDoomMaster`. Source/license карта — `docs/REFERENCE-SOURCES.md`.
+  New client/license.txt — MIDAS, server/Licence — NASM, не общая GPL-лицензия.
+  DeHackEd/BEX найден, full MBF/MBF21 не подтверждены; refs binaries не запускать.
 - Идеи/цели: `docs/IDEAS.md`; реестр багов: `docs/BUGS.md`. Владелец сообщил
   T-chat exit (BUG-001): network checksum должен исключать HUD-consumed chatchar,
   а не отключать чат. `net-chat` и `net-windows` проверяют delivery/cancel/edit.
