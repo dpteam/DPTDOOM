@@ -268,6 +268,10 @@ if(BUILD_TESTING)
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-windows.py"
                     --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}" --dmflags 3 --local-end --fast)
                 set_tests_properties(net-windows-local-end PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE LABELS interactive)
+                add_test(NAME net-windows-guest-end COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-windows.py"
+                    --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}" --dmflags 3 --local-end --leaver 1)
+                set_tests_properties(net-windows-guest-end PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE LABELS interactive)
             endif()
         endif()
     endif()
@@ -297,6 +301,10 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-errors.py"
                 --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}" --recover)
             set_tests_properties(net-recovery PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+            add_test(NAME net-survivor COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-survivor.py"
+                --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+            set_tests_properties(net-survivor PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
             add_test(NAME net-rules COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-rules.py"
                 --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")

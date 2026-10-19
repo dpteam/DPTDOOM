@@ -39,6 +39,7 @@ typedef int SOCKET;
 
 static SOCKET connection = INVALID_SOCKET, listener = INVALID_SOCKET;
 static boolean active, sockets_started;
+static boolean alone;
 static int local_player;
 static uint32_t timeout_ms = 10000;
 static void (*pump_events)(void);
@@ -61,6 +62,18 @@ static boolean SessionFailure(const char *format, ...)
 
 void DPT_NetRequestDisconnect(void) { if (active) disconnect_requested = true; }
 const char *DPT_NetDisconnectReason(void) { return disconnect_reason; }
+
+static boolean PeerLost(const char *reason)
+{
+    if (!active || M_ParmExists("-net-fail-fast"))
+        return SessionFailure("%s", reason);
+    // Retain session/rules/local slot. There is no server or second transport
+    // to migrate: continue this local world, with no future remote commands.
+    snprintf(disconnect_reason, sizeof(disconnect_reason), "%s", reason);
+    if (connection != INVALID_SOCKET) { net_close(connection); connection = INVALID_SOCKET; }
+    alone = true;
+    return false; // unwind I/O; Exchange turns this into a missing-player tic
+}
 
 static boolean WouldBlock(void)
 {
@@ -88,7 +101,10 @@ static boolean Wait(uint32_t start, const char *operation)
 {
     uint32_t now = DG_GetTicksMs();
     if ((uint32_t)(now - start) >= timeout_ms)
+    {
+        if (active) return PeerLost("Network timeout: peer no longer responding");
         return SessionFailure("Network timeout during %s", operation);
+    }
     if ((uint32_t)(now - last_pump) >= 20)
     {
         last_pump = now;
@@ -117,12 +133,24 @@ static boolean Transfer(byte *buffer, int size, boolean sending)
         }
         else result = (int)recv(connection, (char *)buffer + done, size - done, 0);
         if (result > 0) done += result;
-        else if (!result) return SessionFailure("Network: peer disconnected");
+        else if (!result)
+        {
+            if (!sending && done) return SessionFailure("Network: truncated tic packet before disconnect");
+            return PeerLost("Network: peer disconnected");
+        }
         else if (WouldBlock())
         {
+            // A partially delivered command is not a clean departure. Never
+            // silently accept it as a valid command, including on timeout.
+            if (active && !sending && done && (uint32_t)(DG_GetTicksMs() - start) >= timeout_ms)
+                return SessionFailure("Network: truncated tic packet timeout");
             if (!Wait(start, sending ? "send" : "receive")) return false;
         }
-        else return SessionFailure("Network: connection failed during %s", sending ? "send" : "receive");
+        else
+        {
+            if (!sending && done) return SessionFailure("Network: truncated tic packet connection failure");
+            return PeerLost("Network: peer connection lost");
+        }
     }
     return true;
 }
@@ -156,10 +184,12 @@ boolean DPT_NetRequested(void)
     return M_ParmExists("-net-host") || M_ParmExists("-net-join");
 }
 boolean DPT_NetActive(void) { return active; }
+boolean DPT_NetPeerPresent(void) { return active && !alone; }
 
 void DPT_NetShutdown(void)
 {
     active = false;
+    alone = false;
     disconnect_requested = false;
     if (connection != INVALID_SOCKET) { net_close(connection); connection = INVALID_SOCKET; }
     if (listener != INVALID_SOCKET) { net_close(listener); listener = INVALID_SOCKET; }
@@ -208,6 +238,7 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     uint32_t start;
     disconnect_reason[0] = 0;
     disconnect_requested = false;
+    alone = false;
     if ((host != NULL) == (join != NULL)) I_Error("Use exactly one of -net-host or -net-join");
     if (M_ParmExists("-playdemo") || M_ParmExists("-timedemo") || M_ParmExists("-record")
         || M_ParmExists("-loadgame") || M_ParmExists("-turbo") || M_ParmExists("-solo-net")
@@ -342,9 +373,20 @@ boolean DPT_NetExchange(ticcmd_t *commands, unsigned int tic)
 {
     byte packet[DPT_NET_TIC_SIZE] = {0}, remote[DPT_NET_TIC_SIZE];
     unsigned int checksum = tic ? DPT_NetStateChecksum() : 0;
+    if (disconnect_requested) return SessionFailure("Disconnected by local player");
+    if (alone)
+    {
+        memset(&commands[1 - local_player], 0, sizeof(*commands));
+        return true;
+    }
     memcpy(packet, "TIC1", 4); DPT_Put32(packet + 4, tic); DPT_Put32(packet + 8, checksum);
     DPT_EncodeCommand(packet + 12, &commands[local_player]);
-    if (!Transfer(packet, sizeof(packet), true) || !Transfer(remote, sizeof(remote), false)) return false;
+    if (!Transfer(packet, sizeof(packet), true) || !Transfer(remote, sizeof(remote), false))
+    {
+        if (!alone) return false;
+        memset(&commands[1 - local_player], 0, sizeof(*commands));
+        return true;
+    }
     if (memcmp(remote, "TIC1", 4) || DPT_Get32(remote + 4) != tic || DPT_Get32(remote + 20))
         return SessionFailure("Network: malformed/out-of-order tic packet");
     if (DPT_Get32(remote + 8) != checksum)

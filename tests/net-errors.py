@@ -43,6 +43,7 @@ def main():
                                    ("resources", "resource content/order mismatch"), ("settings", "game settings mismatch"),
                                    ("dmflags", "dmflags mismatch"),
                                    ("disconnect", "Network:"), ("truncated", "Network:"),
+                                   ("tic-truncated", "truncated tic packet"),
                                    ("silent", "Network timeout"), ("timeout", "Network timeout"), ("order", "out-of-order"),
                                    ("desync", "Network desync"), ("command", "invalid player command")):
             if args.recover and scenario in ("version", "engine", "resources", "settings", "dmflags", "truncated", "silent"):
@@ -81,6 +82,9 @@ def main():
                             if scenario == "timeout":
                                 read_exact(peer, 24)
                                 time.sleep(2)
+                            if scenario == "tic-truncated":
+                                tic = read_exact(peer, 24)
+                                peer.sendall(tic[:7])
                             if scenario in ("order", "desync", "command"):
                                 tic = bytearray(read_exact(peer, 24))
                                 if scenario == "order":
@@ -90,13 +94,16 @@ def main():
                                 else:
                                     tic[12] = 127
                                 peer.sendall(tic)
-                        if scenario not in ("disconnect", "truncated"):
+                        if scenario not in ("disconnect", "truncated", "tic-truncated"):
                             code = process.wait(timeout=10)
                     code = process.wait(timeout=10)
                     output = path.read_text()
                     assert code in ((0,) if args.recover else (255, -1, 0xFFFFFFFF)) and expected in output, (scenario, code, output)
                     if args.recover:
-                        assert "returned to menu" in output, output
+                        if scenario in ("disconnect", "timeout"):
+                            assert "continuing alone" in output and "returned to menu" not in output, output
+                        else:
+                            assert "returned to menu" in output and "continuing alone" not in output, output
                     assert "AddressSanitizer" not in output, output
                     print("Network error:", scenario, "OK")
                 finally:

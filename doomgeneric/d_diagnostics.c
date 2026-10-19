@@ -235,6 +235,14 @@ void D_DiagnosticsTic(void)
         I_Error("Diagnostic checkpoint requires an active level");
     if (tic_limit && ticks >= tic_limit)
     {
+        if (M_ParmExists("-headless-session-report"))
+        {
+            player_t *p = &players[consoleplayer];
+            printf("Session report: state=%d player=%d leveltime=%d flags=%u mask=%u%u paused=%u x=%d y=%d health=%d ammo=%d\n",
+                gamestate, consoleplayer + 1, leveltime, dpt_dmflags,
+                (unsigned int)playeringame[0], (unsigned int)playeringame[1], (unsigned int)paused,
+                p->mo ? p->mo->x : 0, p->mo ? p->mo->y : 0, p->health, p->ammo[am_clip]);
+        }
         // Explicit bounded test run is success, not timedemo's I_Error report.
         timingdemo = false;
         demoplayback = false;

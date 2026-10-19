@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--fast", action="store_true", help="Verify fast monster state does not leak into SP")
     parser.add_argument("--audio", action="store_true", help="Exercise initialized SFX teardown (honors SDL_AUDIODRIVER)")
     parser.add_argument("--nightmare", action="store_true", help="Use nightmare instead of medium skill")
+    parser.add_argument("--leaver", type=int, choices=(0, 1), default=0, help="0=first player leaves, 1=second player leaves")
     args = parser.parse_args()
     exe, iwad = args.exe.resolve(strict=True), args.iwad.resolve(strict=True)
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -109,57 +110,85 @@ def main():
             tap(1, 0x13)  # Pause
             tap(1, ord('T'))
             tap(1, ord('X'))
+            leaver = args.leaver
+            remaining = 1 - leaver
+            if args.local_end and leaver == 1:
+                tap(1, 0x1B)  # chat editing owns function keys; cancel before F7
             if args.local_end:
-                tap(0, 0x76)  # F7 End Game
-                tap(0, ord('N'))
+                tap(leaver, 0x76)  # F7 End Game
+                tap(leaver, ord('N'))
                 time.sleep(0.3)
                 assert all(p.poll() is None for p in processes)
-                assert "returned to menu" not in (dirs[0] / "game.log").read_text()
-                tap(0, 0x76); tap(0, ord('Y'))
-                survivors = (0, 1)
+                assert "returned to menu" not in (dirs[leaver] / "game.log").read_text()
+                tap(leaver, 0x76); tap(leaver, ord('Y'))
+                live_processes = (0, 1)
             else:
-                assert user32.PostMessageW(handles[processes[0].pid], 0x0010, 0, 0)
-                assert processes[0].wait(timeout=10) == 0
-                survivors = (1,)
+                assert user32.PostMessageW(handles[processes[leaver].pid], 0x0010, 0, 0)
+                assert processes[leaver].wait(timeout=10) == 0
+                live_processes = (remaining,)
             deadline = time.monotonic() + 10
-            while not all("returned to menu" in (dirs[i] / "game.log").read_text() for i in survivors):
-                assert all(processes[i].poll() is None for i in survivors), [(path / "game.log").read_text() for path in dirs]
+            while "continuing alone" not in (dirs[remaining] / "game.log").read_text():
+                assert all(processes[i].poll() is None for i in live_processes), [(path / "game.log").read_text() for path in dirs]
+                assert time.monotonic() < deadline
+                time.sleep(0.05)
+            continuation = (dirs[remaining] / "game.log").read_text()
+            assert "returned to menu" not in continuation
+            assert f"continuing alone as player {remaining+1}, map=1" in continuation
+            assert f"dmflags={args.dmflags}" in continuation
+            if args.local_end:
+                assert "returned to menu" in (dirs[leaver] / "game.log").read_text()
+            time.sleep(1)
+            if remaining == 0:
+                # Player 0 had no chat open; player 1's chat is preserved.
+                tap(remaining, 0x26)
+            else:
+                tap(remaining, 0x1B)  # finish editing survivor's pending chat
+                tap(remaining, 0x26)
+            # Still in the same running world. F7 is now a local session end,
+            # not a request to a nonexistent peer. Its cancellation must work.
+            tap(remaining, 0x76); tap(remaining, ord('N'))
+            assert "returned to menu" not in (dirs[remaining] / "game.log").read_text()
+            tap(remaining, 0x76); tap(remaining, ord('Y'))
+            deadline = time.monotonic() + 5
+            while "returned to menu" not in (dirs[remaining] / "game.log").read_text():
+                assert processes[remaining].poll() is None
                 assert time.monotonic() < deadline
                 time.sleep(0.05)
             # Former guest must reset slot 1 -> slot 0 and safely start SP.
-            tap(1, 0x0D)  # dismiss reason -> main menu
-            tap(1, 0x0D)  # New Game
-            tap(1, 0x0D)  # Doom II skill
+            target = remaining
+            tap(target, 0x0D)  # dismiss reason -> main menu
+            tap(target, 0x0D)  # New Game
+            tap(target, 0x0D)  # Doom II skill
             deadline = time.monotonic() + 10
-            while "Single-player game started after disconnect" not in (dirs[1] / "game.log").read_text():
-                assert processes[1].poll() is None, (dirs[1] / "game.log").read_text()
+            while "Single-player game started after disconnect" not in (dirs[target] / "game.log").read_text():
+                assert processes[target].poll() is None, (dirs[target] / "game.log").read_text()
                 assert time.monotonic() < deadline
                 time.sleep(0.05)
             time.sleep(0.5)
-            tap(1, 0x26)
-            tap(1, 0x71)  # F2, save a real SP game after teardown
-            tap(1, 0x0D)
-            for char in "AFTER NET": tap(1, ord(char))
-            tap(1, 0x0D)
-            save = dirs[1] / ".savegame/doomsav0.dsg"
+            tap(target, 0x26)
+            tap(target, 0x71)  # F2, save a real SP game after teardown
+            tap(target, 0x0D)
+            for char in "AFTER NET": tap(target, ord(char))
+            tap(target, 0x0D)
+            save = dirs[target] / ".savegame/doomsav0.dsg"
             deadline = time.monotonic() + 5
             while not save.is_file():
-                assert processes[1].poll() is None
-                assert time.monotonic() < deadline, (dirs[1] / "game.log").read_text()
+                assert processes[target].poll() is None
+                assert time.monotonic() < deadline, (dirs[target] / "game.log").read_text()
                 time.sleep(0.05)
             saved = save.read_bytes()
             assert saved[43:47] == b"\x01\0\0\0", saved[43:47]  # no ghost player 2
             assert int.from_bytes(saved[47:50], "big") > 0  # SP is not stuck paused
-            tap(1, 0x72); tap(1, 0x0D)  # F3 reload after SP reset
+            tap(target, 0x72); tap(target, 0x0D)  # F3 reload after SP reset
             time.sleep(0.5)
-            for i in survivors:
+            for i in live_processes:
                 assert user32.PostMessageW(handles[processes[i].pid], 0x0010, 0, 0)
                 assert processes[i].wait(timeout=10) == 0
             output = [(path / "game.log").read_text() for path in dirs]
             assert all("Network desync" not in log and "consistency failure" not in log for log in output), output
             assert all("ERROR: AddressSanitizer:" not in log for log in output), output
-            assert "Network session ended:" in output[1], output[1]
-            print("Window coop: chat/gameplay, menu recovery, guest SP reset/save/load OK", "F7 cancel+confirm" if args.local_end else "peer close")
+            assert "Network session ended:" in output[remaining], output[remaining]
+            print("Window coop: survivor continues same world, own F7 ends it, SP save/load OK", "leaver", leaver, "F7" if args.local_end else "window close")
         finally:
             for process in processes:
                 if process.poll() is None: process.kill(); process.wait()

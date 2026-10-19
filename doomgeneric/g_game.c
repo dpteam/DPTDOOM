@@ -231,6 +231,42 @@ static int direct_base_tics[S_SARG_PAIN2 - S_SARG_RUN1 + 1];
 static fixed_t direct_base_projectile_speeds[3];
 static void G_StopDemoForLoad(void);
 
+void G_DirectPeerLeft(int player, const char *reason)
+{
+    static char notice[96];
+    mobj_t *body;
+    if (player < 0 || player >= MAXPLAYERS || player == consoleplayer || !playeringame[player]) return;
+    body = players[player].mo;
+    // Keep normal corpse lifetime so monster/missile references remain valid.
+    // Do not free the avatar underneath existing gameplay pointers.
+    if (body && body->health > 0)
+    {
+        extern void P_KillMobj(mobj_t *source, mobj_t *target);
+        // Departure is not combat damage: invulnerability/godmode must not
+        // leave a living ghost, and no fake health damage is dealt to survivor.
+        body->health = players[player].health = 0;
+        P_KillMobj(NULL, body);
+    }
+    if (body) body->flags &= ~(MF_SOLID | MF_SHOOTABLE | MF_PICKUP);
+    playeringame[player] = false;
+    memset(&players[player].cmd, 0, sizeof(players[player].cmd));
+    paused = sendpause = false;
+    S_ResumeSound();
+    if (displayplayer == player) displayplayer = consoleplayer;
+    snprintf(notice, sizeof(notice), "PLAYER %d LEFT - CONTINUING ALONE", player + 1);
+    players[consoleplayer].message = notice;
+    printf("Peer left: %s; continuing alone as player %d, map=%d leveltime=%d dmflags=%u\n",
+        reason, consoleplayer + 1, gamemap, leveltime, dpt_dmflags);
+    if (M_ParmExists("-headless-session-report"))
+    {
+        player_t *local = &players[consoleplayer];
+        printf("Survivor boundary: x=%d y=%d health=%d ammo=%d\n",
+            local->mo ? local->mo->x : 0, local->mo ? local->mo->y : 0,
+            local->health, local->ammo[am_clip]);
+    }
+    fflush(stdout);
+}
+
 void G_ReturnFromDirectGame(void)
 {
     int i;

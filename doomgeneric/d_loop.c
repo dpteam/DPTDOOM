@@ -781,6 +781,12 @@ void TryRunTics (void)
             fflush(stdout);
             return;
         }
+        if (!DPT_NetPeerPresent())
+        {
+            int remote_player = 1 - localplayer;
+            ingame[remote_player] = false;
+            G_DirectPeerLeft(remote_player, DPT_NetDisconnectReason());
+        }
         loop_interface->RunTic(commands, ingame);
         ++gametic;
         return;
