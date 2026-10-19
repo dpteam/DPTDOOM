@@ -1,9 +1,10 @@
-// DPT.DOOM Misc-only classic DeHackEd slice, written for this port.
+// DPT.DOOM bounded classic subset, written for this port.
 // No imported ACE/csDoom code, BEX, pointers or executable offsets.
 // GPL-2.0-or-later; see LICENSE.
 #include "deh_classic.h"
 #include "deh_misc.h"
 #include "w_wad.h"
+#include "d_items.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,6 +41,9 @@ static char last_error[256];
 static unsigned int loaded,bytes_total;
 static sha1_context_t digest_context;
 static boolean initialized;
+extern int maxammo[NUMAMMO],clipammo[NUMAMMO];
+static int base_maxammo[NUMAMMO],base_clipammo[NUMAMMO];
+static weaponinfo_t base_weapons[NUMWEAPONS];
 
 static boolean Error(unsigned int line,const char *message)
 {
@@ -72,15 +76,25 @@ static boolean Number(const char *text,int *value)
 void DPT_DehReset(void)
 {
     unsigned int i;
+    if(!initialized)
+    {
+        memcpy(base_maxammo,maxammo,sizeof(base_maxammo));memcpy(base_clipammo,clipammo,sizeof(base_clipammo));
+        memcpy(base_weapons,weaponinfo,sizeof(base_weapons));
+    }
+    memcpy(maxammo,base_maxammo,sizeof(base_maxammo));memcpy(clipammo,base_clipammo,sizeof(base_clipammo));
+    memcpy(weaponinfo,base_weapons,sizeof(base_weapons));
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=fields[i].initial;
     deh_species_infighting=DEH_DEFAULT_SPECIES_INFIGHTING;
     loaded=bytes_total=0;last_error[0]=0;
-    SHA1_Init(&digest_context);SHA1_UpdateString(&digest_context,"DPT-deh-misc-v1");initialized=true;
+    SHA1_Init(&digest_context);SHA1_UpdateString(&digest_context,DPT_DEH_SUBSET);initialized=true;
 }
 boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
 {
     int staged[FIELD_COUNT];unsigned int i,line_number=0,assignments=0;
-    size_t offset=0;boolean signature=false,doom=false,format=false,section=false;
+    int staged_max[NUMAMMO],staged_clip[NUMAMMO],staged_weapon[NUMWEAPONS];
+    size_t offset=0;boolean signature=false,doom=false,format=false;
+    enum { NONE, MISC, AMMO, WEAPON } section=NONE;
+    int index=0;
     char line[MAX_LINE+1];
     if(!initialized)DPT_DehReset();
     last_error[0]=0;
@@ -88,6 +102,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     if(loaded>=MAX_PATCHES)return Error(0,"maximum 16 patch sources exceeded");
     if(memchr(data,0,size))return Error(0,"embedded NUL is not valid text");
     for(i=0;i<FIELD_COUNT;++i)staged[i]=*fields[i].destination;
+    memcpy(staged_max,maxammo,sizeof(staged_max));memcpy(staged_clip,clipammo,sizeof(staged_clip));
+    for(i=0;i<NUMWEAPONS;++i)staged_weapon[i]=weaponinfo[i].ammo;
     while(offset<size)
     {
         size_t start=offset,length;char *text,*equals;int value;
@@ -104,10 +120,27 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         if(Equal(text,"Misc 0"))
         {
             if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before Misc 0");
-            section=true;continue;
+            section=MISC;continue;
+        }
+        if(!strchr(text,'='))
+        {
+            char *separator=strchr(text,' ');
+            if(separator)
+            {
+                int ammo,weapon;
+                *separator=0;ammo=Equal(text,"Ammo");weapon=Equal(text,"Weapon");
+                if(ammo||weapon)
+                {
+                    if(!doom||!format)return Error(line_number,"headers required before indexed section");
+                    if(!Number(Trim(separator+1),&index)||index<0||index>=(ammo?NUMAMMO:NUMWEAPONS))
+                        return Error(line_number,"Ammo/Weapon section index out of range");
+                    section=ammo?AMMO:WEAPON;continue;
+                }
+            }
+            return Error(line_number,"unsupported section (Misc 0, Ammo and Weapon subset only)");
         }
         equals=strchr(text,'=');
-        if(!equals)return Error(line_number,"unsupported section (only classic Misc 0 is supported)");
+        if(!equals)return Error(line_number,"unsupported section (Misc 0, Ammo and Weapon subset only)");
         *equals=0;text=Trim(text);
         if(!Number(Trim(equals+1),&value))return Error(line_number,"invalid decimal integer / overflow");
         if(!section)
@@ -117,14 +150,35 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
             else return Error(line_number,"expected Doom version = 19 and Patch format = 6 (no duplicates)");
             continue;
         }
+        if(section==AMMO)
+        {
+            if(Equal(text,"Max ammo"))
+            {if(value<1||value>10000)return Error(line_number,"Max ammo must be 1..10000");staged_max[index]=value;}
+            else if(Equal(text,"Per ammo"))
+            {if(value<0||value>1000)return Error(line_number,"Per ammo must be 0..1000");staged_clip[index]=value;}
+            else return Error(line_number,"unsupported Ammo field");
+            ++assignments;continue;
+        }
+        if(section==WEAPON)
+        {
+            if(!Equal(text,"Ammo type"))return Error(line_number,"unsupported Weapon field (only Ammo type)");
+            // Historical overflow/noammo tricks intentionally not supported.
+            // In this engine ammo type 5 on a shooting action targets maxammo;
+            // do not advertise that memory-layout behavior as safe compatibility.
+            if(value<0||value>=NUMAMMO)return Error(line_number,"Weapon Ammo type must be 0..3");
+            staged_weapon[index]=value;++assignments;continue;
+        }
         for(i=0;i<FIELD_COUNT;++i)if(Equal(text,fields[i].name))break;
-        if(i==FIELD_COUNT)return Error(line_number,"unsupported Misc field in DPT-deh-misc-v1");
+        if(i==FIELD_COUNT)return Error(line_number,"unsupported Misc field in " DPT_DEH_SUBSET);
         if(value<fields[i].low||value>fields[i].high)return Error(line_number,"Misc field outside supported safe range");
         staged[i]=value;++assignments;
     }
-    if(!section||!assignments)return Error(line_number,"patch has no supported Misc assignments");
+    if(!section||!assignments)return Error(line_number,"patch has no supported assignments");
+    if(staged[1]>staged_max[am_clip])return Error(line_number,"Initial Bullets exceeds Max ammo for bullets");
     // Commit only after the entire source has passed validation.
     for(i=0;i<FIELD_COUNT;++i)*fields[i].destination=staged[i];
+    memcpy(maxammo,staged_max,sizeof(staged_max));memcpy(clipammo,staged_clip,sizeof(staged_clip));
+    for(i=0;i<NUMWEAPONS;++i)weaponinfo[i].ammo=(ammotype_t)staged_weapon[i];
     SHA1_UpdateInt32(&digest_context,(unsigned int)size);
     SHA1_Update(&digest_context,(byte*)data,size);
     ++loaded;bytes_total+=(unsigned int)size;return true;

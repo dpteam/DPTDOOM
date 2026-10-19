@@ -338,7 +338,7 @@ static void ResourceDigest(byte *digest)
     {
         sha1_digest_t patches;
         DPT_DehChecksum(patches);
-        SHA1_UpdateString(&context, "DPT-deh-misc-v1 applied-patches");
+        SHA1_UpdateString(&context, DPT_DEH_SUBSET " applied-patches");
         SHA1_Update(&context, patches, sizeof(patches));
     }
     // Hash effective content/order, not just lump names and sizes. Cache and

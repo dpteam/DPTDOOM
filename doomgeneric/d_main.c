@@ -1471,7 +1471,7 @@ void D_DoomMain (void)
             {
                 if (!DPT_DehLoadFile(myargv[p]))
                     I_Error("DeHackEd file %s: %s", myargv[p], DPT_DehLastError());
-                printf("DeHackEd: loaded external patch %u (DPT-deh-misc-v1)\n", DPT_DehLoadedCount());
+                printf("DeHackEd: loaded external patch %u (%s)\n", DPT_DehLoadedCount(),DPT_DEH_SUBSET);
                 ++p;
             }
             if (p == first) I_Error("-deh requires at least one patch file");
@@ -1569,12 +1569,12 @@ void D_DoomMain (void)
             {
                 if (!DPT_DehLoadLump((int)i))
                     I_Error("DEHACKED lump %u: %s", i, DPT_DehLastError());
-                printf("DeHackEd: loaded lump patch %u (DPT-deh-misc-v1)\n", DPT_DehLoadedCount());
+                printf("DeHackEd: loaded lump patch %u (%s)\n", DPT_DehLoadedCount(),DPT_DEH_SUBSET);
             }
         }
     }
     if (DPT_DehLoadedCount())
-        puts("DeHackEd: Misc-only subset active; vanilla save/load and recording disabled; no full DeHackEd/BEX/Boom/MBF compatibility");
+        puts("DeHackEd: Misc/Ammo/Weapon-ammo subset active; vanilla save/load and recording disabled; no full DeHackEd/BEX/Boom/MBF compatibility");
 #elif ORIGCODE
     //!
     // @category mod

@@ -5,9 +5,10 @@
 Python 3 нужен для smoke tests, но не для сборки игры.
 CI без игровых данных и его ограничения описаны в [CI.md](CI.md).
 
-DeHackEd first slice: `deh-misc` — data-free parser/rollback/limits/digest;
+DeHackEd subset: `deh-misc` — data-free parser/rollback/limits/digest;
 `deh-engine` — headless с локальным IWAD, synthetic patches/lumps, реальные
-health/ammo и two-peer patch mismatch. Это только classic Misc 0, не full
+health/ammo/capacity, weapon ammo use и two-peer patch mismatch. Это classic
+Misc 0 / Ammo / Weapon Ammo type, не full
 DeHackEd/BEX; patched saves/recording запрещены до manifest. См. [DEHACKED.md](DEHACKED.md).
 
 Native master directory собирается вместе с engine (`DPTDOOM_MASTER=ON`).

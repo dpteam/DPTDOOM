@@ -2,12 +2,14 @@
 // GPL-2.0-or-later; see LICENSE.
 #include "deh_classic.h"
 #include "deh_misc.h"
+#include "d_items.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define REQUIRE(x) do { if(!(x)) { fprintf(stderr,"line %d: %s; %s\n",__LINE__,#x,DPT_DehLastError());exit(1); } } while(0)
 #define HEADER "Patch File for DeHackEd v3.0\nDoom version = 19\nPatch format = 6\n\nMisc 0\n"
 unsigned int numlumps;
+int maxammo[NUMAMMO]={200,50,300,50},clipammo[NUMAMMO]={10,4,20,1};
 int W_LumpLength(unsigned int i){(void)i;return 0;}
 void W_ReadLump(unsigned int i,void *p){(void)i;(void)p;}
 static int Load(const char *text){return DPT_DehLoadBytes((const unsigned char*)text,strlen(text));}
@@ -42,6 +44,20 @@ int main(void)
      REQUIRE(DPT_DehLoadBytes(data,140000));REQUIRE(!DPT_DehLoadBytes(data,140000));
      REQUIRE(deh_initial_health==55&&DPT_DehLoadedCount()==1);}
     free(data);DPT_DehReset();
+    REQUIRE(Load(HEADER "Initial Bullets = 60\nAmmo 0\nMax ammo = 400\nPer ammo = 7\nWeapon 1\nAmmo type = 1\n"));
+    REQUIRE(maxammo[0]==400&&clipammo[0]==7&&weaponinfo[wp_pistol].ammo==am_shell);
+    DPT_DehChecksum(a);
+    REQUIRE(!Load(HEADER "Initial Health = 5\nAmmo 0\nMax ammo = 20\n"));
+    REQUIRE(deh_initial_health==100&&maxammo[0]==400&&weaponinfo[wp_pistol].ammo==am_shell);
+    REQUIRE(!Load(HEADER "Ammo 4\nMax ammo = 500\n"));
+    REQUIRE(!Load(HEADER "Weapon 1\nAmmo type = 5\n"));
+    REQUIRE(!Load(HEADER "Weapon 9\nAmmo type = 1\n"));
+    REQUIRE(!Load(HEADER "Weapon 1\nShooting frame = 1\n"));
+    REQUIRE(!Load(HEADER "Ammo 0\nPer ammo = 1001\n"));
+    DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));
+    DPT_DehReset();REQUIRE(maxammo[0]==200&&clipammo[0]==10&&weaponinfo[wp_pistol].ammo==am_clip);
+    REQUIRE(Load(HEADER "ammo 0\nPer ammo = 12\nweapon 1\nAmmo type = 2\n"));
+    REQUIRE(clipammo[0]==12&&weaponinfo[wp_pistol].ammo==am_cell);DPT_DehReset();
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
     puts("DeHackEd Misc: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
 }

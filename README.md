@@ -76,7 +76,7 @@ SDL2 2.32.10 и SDL2_mixer 2.8.2 скачиваются из официальн�
 - [Нативный master directory-прототип](docs/MASTER.md)
 - [Баги, причины и статус исправлений](docs/BUGS.md)
 - [Разбор upstream PR](docs/UPSTREAM.md)
-- [DeHackEd: первый Misc-only срез и ограничения](docs/DEHACKED.md)
+- [DeHackEd: Misc/Ammo/Weapon-ammo subset и ограничения](docs/DEHACKED.md)
 - [Требования владельца](PROMPT.md)
 
 ## Другие платформы и настройки

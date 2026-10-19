@@ -12,6 +12,8 @@
 #include "p_local.h"
 #include "p_saveg.h"
 #include "r_state.h"
+#include "deh_classic.h"
+#include "d_items.h"
 #include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -241,7 +243,12 @@ void D_DiagnosticsTic(void)
             printf("Session report: state=%d player=%d leveltime=%d flags=%u mask=%u%u paused=%u x=%d y=%d health=%d ammo=%d\n",
                 gamestate, consoleplayer + 1, leveltime, dpt_dmflags,
                 (unsigned int)playeringame[0], (unsigned int)playeringame[1], (unsigned int)paused,
-                p->mo ? p->mo->x : 0, p->mo ? p->mo->y : 0, p->health, p->ammo[am_clip]);
+                 p->mo ? p->mo->x : 0, p->mo ? p->mo->y : 0, p->health, p->ammo[am_clip]);
+            if (DPT_DehLoadedCount())
+                printf("Patch report: maxammo=%d,%d,%d,%d ammo=%d,%d,%d,%d perammo=%d,%d,%d,%d pistol-ammo=%d\n",
+                    p->maxammo[0],p->maxammo[1],p->maxammo[2],p->maxammo[3],
+                    p->ammo[0],p->ammo[1],p->ammo[2],p->ammo[3],
+                    clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
         }
         // Explicit bounded test run is success, not timedemo's I_Error report.
         timingdemo = false;

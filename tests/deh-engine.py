@@ -6,6 +6,7 @@ import struct
 import subprocess
 import tempfile
 import time
+import re
 
 HEADER = b'Patch File for DeHackEd v3.0\nDoom version = 19\nPatch format = 6\n\nMisc 0\n'
 
@@ -46,6 +47,21 @@ def main():
         _,text=run('lumps',['-file',str(overlay),'-dehlump','-deh',str(first)])
         assert 'health=91 ammo=23' in text and 'loaded lump patch 3' in text,text
         _,text=run('lumps-disabled',['-file',str(overlay)]);assert 'health=100 ammo=50' in text,text
+        ammo=root/'ammo.deh';ammo.write_bytes(HEADER+b'Initial Bullets = 50\nAmmo 0\nMax ammo = 450\nPer ammo = 17\nAmmo 1\nMax ammo = 60\nWeapon 1\nAmmo type = 1\n')
+        _,text=run('ammo-weapon',['-deh',str(ammo)])
+        assert 'Patch report: maxammo=450,60,300,50' in text and 'perammo=17,4,20,1 pistol-ammo=1' in text,text
+        # Identical attack commands: standard pistol burns bullets; patched
+        # pistol uses empty shell reserve and must not burn the 50 bullets.
+        inputs=root/'attack.bin';inputs.write_bytes(b''.join(struct.pack('!bbhBBBB',0,0,0,1 if tic%30>=15 else 0,0,0,0) for tic in range(200)))
+        command=[str(exe),'-iwad',str(iwad),'-warp','1','-nomonsters','-headless-tics','140',
+                 '-headless-session-report','-headless-input',str(inputs)]
+        for name,extra in [('standard-fire',[]),('patched-fire',['-deh',str(ammo)])]:
+            work=root/name;work.mkdir()
+            result=subprocess.run(command+extra,cwd=work,capture_output=True,text=True,timeout=20)
+            assert result.returncode==0 and 'AddressSanitizer' not in result.stderr,(result.stdout,result.stderr)
+            match=re.search(r'Session report: .* health=100 ammo=(\d+)',result.stdout)
+            assert match,result.stdout
+            assert (int(match[1])==50 if extra else int(match[1])<50),result.stdout
         _,text=run('reject',['-deh',str(bad)],False);assert 'unsupported section' in text,text
         _,text=run('missing',['-deh'],False);assert 'requires at least one' in text,text
         for name,extra in [('save',['-headless-save-tic','2']),('load',['-loadgame','0']),('record',['-record','test'])]:
@@ -53,7 +69,7 @@ def main():
             assert ('vanilla save/load disabled' if name!='record' else 'recording disabled') in text,text
             assert not list(work.rglob('*.dsg')) and not list(work.glob('*.lmp'))
 
-        def pair(name,patches,success):
+        def pair(name,patches,success,expected='health=77 ammo=23'):
             with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
             dirs=[root/(name+'-host'),root/(name+'-guest')]
             for d in dirs:d.mkdir()
@@ -72,7 +88,7 @@ def main():
                 if success:
                     assert codes==[0,0],texts
                     assert (dirs[0]/'trace.txt').read_bytes()==(dirs[1]/'trace.txt').read_bytes()
-                    assert all('health=77 ammo=23' in t for t in texts),texts
+                    assert all(expected in t for t in texts),texts
                 else:
                     assert all(code!=0 for code in codes),texts
                     assert all('resource content/order mismatch' in t for t in texts),texts
@@ -82,6 +98,9 @@ def main():
                     if p.poll() is None:p.kill();p.wait()
                 for log in logs:log.close()
         pair('same',[first,same],True);pair('different',[first,second],False)
+        ammo_same=root/'ammo-copy.deh';ammo_same.write_bytes(ammo.read_bytes())
+        pair('ammo-same',[ammo,ammo_same],True,'health=100 ammo=50')
+        pair('ammo-different',[ammo,first],False)
         print('DeHackEd engine: actual health/ammo, external/lump opt-in order, strict rejection, save/record guards, matching/mismatched network digest OK')
 
 

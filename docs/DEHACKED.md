@@ -1,7 +1,7 @@
-# DeHackEd: первый Misc-only срез
+# DeHackEd: ограниченный Misc / Ammo / Weapon-ammo срез
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-misc-v1` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-misc-ammo-v2` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -14,7 +14,8 @@
 не объявляется готовым: их patches могут содержать неподдерживаемые секции.
 
 Пока принимается classic signature v3.0, `Doom version = 19`, `Patch format = 6`
-и секция **`Misc 0`**, не выдуманная `[Misc]` и не BEX `[STRINGS]`.
+и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, не выдуманная `[Misc]`
+и не BEX `[STRINGS]`.
 
 ```text
 Patch File for DeHackEd v3.0
@@ -48,14 +49,41 @@ patches или их поиска на диске; launcher пока не име�
 | Поле | Диапазон |
 |---|---:|
 | Initial Health | 1..10000 |
-| Initial Bullets | 0..200 (текущий vanilla bullet capacity) |
+| Initial Bullets | 0..200; не больше итогового Max ammo bullets |
 | Max Health, Max Soulsphere, Megasphere Health, God Mode Health | 1..10000 |
 | Max Armor, Soulsphere Health, IDFA Armor, IDKFA Armor | 0..10000 |
 | Green Armor Class, Blue Armor Class, IDFA Armor Class, IDKFA Armor Class | 1..2 |
 | BFG Cells/Shot | 1..1000 |
 
+`Ammo N`: индексы 0=bullets, 1=shells, 2=cells, 3=rockets. `Max ammo` —
+1..10000 (базовая ёмкость; backpack штатно удваивает), `Per ammo` — 0..1000
+(количество в обычной порции; коэффициенты pickup/skill остаются штатными).
+Понижение bullet capacity ниже Initial Bullets отклоняет весь источник.
+
+`Weapon N`: индексы 0=fist, 1=pistol, 2=shotgun, 3=chaingun, 4=rocket launcher,
+5=plasma, 6=BFG, 7=chainsaw, 8=super shotgun. Пока только поле `Ammo type = 0..3`.
+Тип 5/noammo и исторические overflow в maxammo **не поддерживаются**: некоторые
+штатные shooting actions обращаются по этому типу к массивам. Исходные vanilla
+fist/chainsaw остаются am_noammo; patch не может назначить этот опасный тип другому
+оружию. `Deselect frame`, `Select frame`, `Bobbing frame`, `Shooting frame`,
+`Firing frame` и любые action/code pointers пока отклоняются.
+
+```text
+Ammo 0
+Max ammo = 400
+Per ammo = 15
+
+Weapon 1
+Ammo type = 1
+```
+
+Это продолжение того же classic файла с header, не самостоятельный headerless
+patch. Пистолет в примере использует shells; если их нет, он не сжигает bullets.
+Parser делает staged copies всех поддерживаемых таблиц: неверное поле в конце
+источника откатывает также Misc/Ammo/Weapon assignments этого источника.
+
 Диапазоны — поддерживаемый безопасный subset, **не весь исторический DeHackEd**.
-`Monsters Infight`, Thing/Frame/Ammo/Weapon/Sound/Sprite/Pointer/Cheat/Text,
+`Monsters Infight`, Thing/Frame/Sound/Sprite/Pointer/Cheat/Text,
 BEX, include directives и executable offsets пока **отклоняются**, а не молча
 игнорируются. Значения — только signed decimal, без hex/суффиксов/inline comment.
 Имена поддерживаемых полей/секций нечувствительны к ASCII-регистру. Строки `#`/`;`
@@ -90,10 +118,11 @@ section/field дают ошибку с номером строки до игро
 `deh-misc`: synthetic grammar/ranges/overflow/NUL/line/size/count limits, atomic
 rollback, digest repeatability и load order, без IWAD/окна/Internet.
 
-`deh-engine` (headless + локальный Doom II): реальные player health/ammo, внешний
+`deh-engine` (headless + локальный Doom II): реальные player health/ammo/capacity,
+per-ammo/type в patch report, attack commands обычного/переназначенного pistol, внешний
 patch, повторные patches, два DEHACKED lumps и explicit opt-in/order, bad source,
 save/load/record guards и одинаковые/разные patches в настоящих two-peer
-процессах с matching traces. Все patch/WAD fixtures создаются во временных
+процессах с matching traces (Misc и Ammo/Weapon). Все patch/WAD fixtures создаются во временных
 каталогах; IWAD/извлечённые ресурсы не коммитятся.
 
 Полная compatibility matrix/будущие модули — `DEHACKED-MBF-AUDIT.md`.

@@ -103,6 +103,6 @@ demo сохранять applied patch identity или запрещать нес�
 Следующий кодовый этап после этого аудита — только `deh-classic` parser + tests.
 Boom/MBF/MBF21 не отмечать готовыми от наличия reference source.
 
-Первый реализованный срез теперь описан в `DEHACKED.md`: **Misc 0 only**,
-отдельный DPT_DEH_CLASSIC path, без включения полного FEATURE_DEHACKED.
-Thing/Frame/Ammo/Weapon/Text остаются очередью следующих срезов.
+Реализованный subset описан в `DEHACKED.md`: **Misc 0, Ammo max/per и Weapon
+Ammo type**, отдельный DPT_DEH_CLASSIC path, без включения полного FEATURE_DEHACKED.
+Thing/Frame/Text, weapon frames и BEX остаются очередью следующих срезов.
