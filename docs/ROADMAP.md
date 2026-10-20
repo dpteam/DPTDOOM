@@ -348,9 +348,16 @@ partition может породить две отдельные локальны
   episode-сборок; форма должна совпадать с IWAD, иначе отказ, чтобы значение не
   стало молча неиспользуемым. Episode 4 повторяет vanilla fallthrough в
   `cpars[gamemap]`. Staged/reset, engine report, file/lump и peer tests.
-- [ ] Следующий слой BEX: ограниченный `[CODEPTR]` только с allowlist
-  существующих DPT action functions. Не считать ограниченный subset полной
-  совместимостью; arbitrary code pointers не принимать.
+- [x] `DPT-deh-bexcodeptr-v18`: BEX `[CODEPTR]` с allowlist из 74 существующих
+  действий, необязательным префиксом `A_`, проверкой класса вызова
+  (mobj `acp1` vs psprite `acp2`) и полным откатом источника. Общая
+  X-макрос-таблица в `deh_actions.h`; unit-test использует stub-таблицу, поэтому
+  имена/классы не расходятся. Найден и закрыт реальный hazard: самоссылающееся
+  AI-действие (`A_Chase` на собственном spawn-state) давало stack overflow;
+  `P_SetMobjState` теперь ограничен 64 уровнями и завершается понятной ошибкой.
+  Engine tests: allowlist, класс, prefix, file/lump, bounded recursion, peers.
+- [ ] Следующий этап совместимости: Boom/MBF map semantics. Не считать
+  ограниченный subset полной совместимостью; arbitrary code pointers не принимать.
 - [x] Subset `DPT-deh-misc-ammo-v2`: Ammo Max ammo/Per ammo, Weapon Ammo type
   0..3, staged rollback всех таблиц, cross-field validation, engine firing/
   capacity и matching/mismatch network tests. Arbitrary weapon frames/noammo-overflow

@@ -274,7 +274,7 @@ void D_DiagnosticsTic(void)
                                 printf("Patch thing: type=%d id=%d flags=%d state=%d death=%d sounds=%d,%d,%d,%d,%d health=%d radius=%d height=%d speed=%d mass=%d damage=%d pain=%d reaction=%d\n",
                                     (int)mo->type,mo->info->doomednum,mo->flags,(int)(mo->state-states),mo->info->deathstate,mo->info->seesound,mo->info->attacksound,mo->info->painsound,mo->info->deathsound,mo->info->activesound,mo->health,mo->radius,mo->height,mo->info->speed,
                                     mo->info->mass,mo->info->damage,mo->info->painchance,mo->reactiontime);
-                                printf("Patch visual: type=%d sprite=%d frame=%d\n",(int)mo->type,(int)mo->sprite,mo->frame);
+                                printf("Patch visual: type=%d sprite=%d frame=%d action=%s\n",(int)mo->type,(int)mo->sprite,mo->frame,DPT_DehActionName(&mo->state->action));
                                 break;
                             }
                         }

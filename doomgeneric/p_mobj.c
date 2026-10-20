@@ -45,10 +45,14 @@ void P_SpawnMapThing (mapthing_t*	mthing);
 //
 int test;
 
-boolean
-P_SetMobjState
-( mobj_t*	mobj,
-  statenum_t	state )
+// A state action can call P_SetMobjState again (A_Chase restarts the spawn
+// state when it has no target, for example). A patched state table can make
+// that self-referential, which used to end in a stack overflow. Bound the
+// nesting instead: same deterministic failure on every peer, no crash.
+#define DPT_STATE_RECURSION_LIMIT 64
+static int state_recursion;
+
+static boolean P_SetMobjStateInternal(mobj_t* mobj, statenum_t state)
 {
     state_t*	st;
 
@@ -76,6 +80,24 @@ P_SetMobjState
     } while (!mobj->tics);
 				
     return true;
+}
+
+boolean
+P_SetMobjState
+( mobj_t*	mobj,
+  statenum_t	state )
+{
+    boolean result;
+
+    if (++state_recursion > DPT_STATE_RECURSION_LIMIT)
+    {
+        state_recursion = 0;
+        I_Error("P_SetMobjState: state chain recursion limit exceeded "
+                "(state %d); a patched action restarts its own state", (int)state);
+    }
+    result = P_SetMobjStateInternal(mobj, state);
+    --state_recursion;
+    return result;
 }
 
 

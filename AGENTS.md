@@ -165,12 +165,15 @@ ctest --preset windows-headless
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.
   Raw bytes/order/subset digest в ResourceDigest; patched saves используют
   marker DPTDEH1 + digest, patched demos — версию 120 с тем же manifest;
-  vanilla DSG/.lmp байт-совместимы. Версия DPT-deh-bexpars-v17; Ammo max/per,
+  vanilla DSG/.lmp байт-совместимы. Версия DPT-deh-bexcodeptr-v18; Ammo max/per,
   Weapon Ammo type только 0..3, arbitrary frame/noammo/overflow tricks отклонять.
   Tests deh-misc/deh-engine, docs/DEHACKED.md.
   Classic Sound/Sprite/Pointer осознанно не реализуются: это DOS-EXE offsets и
   version-bound function pointers (см. DEHACKED-MBF-AUDIT.md). Cheat — отдельный
-  сетевой класс. Безопасный classic-набор считается закрытым; следующий слой BEX.
+  сетевой класс. BEX [STRINGS]/[PARS]/[CODEPTR] реализованы bounded;
+  [CODEPTR] — allowlist 74 actions + проверка класса acp1/acp2, общая
+  X-макрос-таблица deh_actions.h (unit test — stub). Самоссылающееся AI-действие
+  ограничено 64 уровнями P_SetMobjState вместо stack overflow.
   Thing 1-based, optional (label); ID #/Bits/state/sound references bounded; health/reaction/pain/speed/
   radius/height/mass/damage bounded; Frame Duration1..32767, S_NULL и SARG fast range запрещены,
   bounded Text whitelist; durations only staged/reset; bounded Next frame and Weapon frame references only,

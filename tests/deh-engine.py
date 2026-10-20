@@ -116,6 +116,44 @@ def main():
         _,text=run('bex-pars-wrong-form',['-deh',str(bex_pars_bad)],False)
         assert 'E?M? form requires a non-commercial IWAD' in text,text
         assert 'par1=45' not in text,text
+        # [CODEPTR]: allowlisted mobj action on a mobj state is visible in the
+        # spawned barrel report; the plain run has no action there.
+        codeptr_map=root/'codeptr-map.wad';thing_map(iwad,codeptr_map)
+        codeptr=root/'codeptr.deh';codeptr_copy=root/'codeptr-copy.deh'
+        codeptr.write_bytes(HEADER+b'[CODEPTR]\nFrame 806 = A_FaceTarget\nFrame 807 = A_FaceTarget\n')
+        codeptr_copy.write_bytes(codeptr.read_bytes())
+        _,plain_cp=run('codeptr-plain',['-file',str(codeptr_map),'-deh',str(first)])
+        assert 'action=none' in plain_cp,plain_cp
+        _,text=run('codeptr-mobj',['-file',str(codeptr_map),'-deh',str(codeptr)])
+        assert 'action=A_FaceTarget' in text,text
+        codeptr_bare=root/'codeptr-bare.deh'
+        codeptr_bare.write_bytes(HEADER+b'[CODEPTR]\nFrame 806 = FaceTarget\nFrame 807 = FaceTarget\n')
+        _,text=run('codeptr-bare',['-file',str(codeptr_map),'-deh',str(codeptr_bare)])
+        assert 'action=A_FaceTarget' in text,text
+        # Weapon states accept psprite actions and reject mobj actions.
+        codeptr_weapon=root/'codeptr-weapon.deh'
+        codeptr_weapon.write_bytes(HEADER+b'[CODEPTR]\nFrame 10 = A_WeaponReady\n')
+        run('codeptr-weapon',['-deh',str(codeptr_weapon)])
+        for name,patch,needle in [
+            ('codeptr-class',b'[CODEPTR]\nFrame 10 = A_Chase\n','action class does not match'),
+            ('codeptr-class2',b'[CODEPTR]\nFrame 806 = A_WeaponReady\n','action class does not match'),
+            ('codeptr-unknown',b'[CODEPTR]\nFrame 806 = NoSuchAction\n','not in the allowlist'),
+            ('codeptr-range',b'[CODEPTR]\nFrame 999999 = A_Chase\n','frame out of range'),
+            ('codeptr-null',b'[CODEPTR]\nFrame 0 = A_Chase\n','frame out of range')]:
+            rejected=root/(name+'.deh');rejected.write_bytes(HEADER+patch)
+            _,text=run(name,['-file',str(codeptr_map),'-deh',str(rejected)],False)
+            assert needle in text,text
+            assert 'Session report:' not in text,text
+        codeptr_lump=root/'codeptr.wad';wad(codeptr_lump,[codeptr.read_bytes()])
+        _,text=run('codeptr-lump',['-file',str(codeptr_map),str(codeptr_lump),'-dehlump'])
+        assert 'action=A_FaceTarget' in text,text
+        # A self-referential AI action is a mod hazard: A_Chase restarts the
+        # spawn state when it has no target, so the engine must fail with a
+        # bounded message instead of overflowing the stack.
+        recursive=root/'codeptr-recursive.deh'
+        recursive.write_bytes(HEADER+b'[CODEPTR]\nFrame 806 = A_Chase\nFrame 807 = A_Chase\n')
+        _,text=run('codeptr-recursive',['-file',str(codeptr_map),'-deh',str(recursive)],False,tics=30)
+        assert 'state chain recursion limit exceeded' in text,text
         things=root/'thing.deh';thing_copy=root/'thing-copy.deh';map_wad=root/'thing-map.wad';patched_map=root/'thing-patched-map.wad'
         thing_map(iwad,map_wad)
         thing_map(iwad,patched_map,4000)
@@ -301,6 +339,8 @@ def main():
         pair('bex-strings-different',[bex,first],False)
         pair('bex-pars-same',[bex_pars,bex_pars_copy],True,'par1=45 par32=20')
         pair('bex-pars-different',[bex_pars,first],False)
+        pair('codeptr-same',[codeptr,codeptr_copy],True,'action=A_FaceTarget',('-file',str(codeptr_map)))
+        pair('codeptr-different',[codeptr,first],False,extra=('-file',str(codeptr_map)))
         pair('infight-same',[infight,infight_copy],True,'infight=1')
         pair('infight-different',[infight,first],False)
         pair('thing-same',[things,thing_copy],True,'Patch visual: type=30 sprite=0 frame=32768',('-file',str(patched_map)))

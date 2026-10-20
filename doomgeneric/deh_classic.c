@@ -12,6 +12,7 @@
 #include "sounds.h"
 #include "d_englsh.h"
 #include "deh_str.h"
+#include "deh_actions.h"
 #include "doomstat.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -92,6 +93,12 @@ static text_replacement_t text_replacements[TEXT_COUNT],staged_text[TEXT_COUNT];
 extern int pars[4][10],cpars[32];
 static int base_pars[4][10],staged_pars[4][10];
 static int base_cpars[32],staged_cpars[32];
+// Action allowlist. P_SetMobjState calls action.acp1(mobj) while P_SetPsprite
+// calls action.acp2(player, psp). Assigning across those classes would pass a
+// pspdef_t where a mobj_t is expected (or vice versa), so each entry records
+// which calling convention it belongs to and the parser enforces it.
+static actionf_t base_action[NUMSTATES],staged_action[NUMSTATES];
+static boolean action_patched[NUMSTATES],staged_action_patched[NUMSTATES];
 typedef struct { const char *name; size_t offset; int low, high; } thing_field_t;
 #define THING(name,field,low,high) {name,offsetof(mobjinfo_t,field),low,high}
 static const thing_field_t thing_fields[]={
@@ -256,14 +263,53 @@ static boolean ApplyPar(char *rest,unsigned int line)
     }
     return Error(line,"[PARS] par requires <map> <time> or <episode> <map> <time>");
 }
-char *DPT_DehString(const char *s)
+// BEX [CODEPTR]: Frame <n> = A_Name, restricted to the allowlist above. The
+// reference parser also accepts the bare name without the "A_" prefix.
+static boolean ApplyCodePtr(char *key,const char *value,unsigned int line)
 {
     unsigned int i;
+    int index;
+    char *rest=key;
+    const char *name=value;
+    if(!IsToken(rest,"Frame"))return Error(line,"[CODEPTR] expected Frame <number> = A_Name");
+    while(*rest&&!isspace((unsigned char)*rest))++rest;
+    if(!Number(Trim(rest),&index))return Error(line,"[CODEPTR] frame number is not a decimal integer");
+    if(index<=S_NULL||index>=NUMSTATES)
+        return Error(line,"[CODEPTR] frame out of range (S_NULL is immutable)");
+    if(name[0]=='A'&&name[1]=='_')name+=2;
+    if(!*name)return Error(line,"[CODEPTR] missing action name");
+    for(i=0;i<dpt_action_count;++i)
+    {
+        const char *entry=dpt_action_entries[i].name;
+        // The table stores the canonical "A_Name" form; [CODEPTR] accepts both.
+        if(entry[0]=='A'&&entry[1]=='_')entry+=2;
+        if(Equal(name,entry))break;
+    }
+    if(i==dpt_action_count)
+        return Error(line,"[CODEPTR] unknown action function (not in the allowlist)");
+    if(base_weapon_state[index]!=dpt_action_entries[i].psprite)
+        return Error(line,"[CODEPTR] action class does not match this frame (weapon vs mobj)");
+    staged_action[index]=dpt_action_entries[i].action;
+    staged_action_patched[index]=true;
+    return true;
+}
+char *DPT_DehString(const char *s)
+{    unsigned int i;
     if(!s)return (char *)s;
     for(i=0;i<TEXT_COUNT;++i)
         if(text_replacements[i].present&&!strcmp(s,text_replacements[i].original))
             return text_replacements[i].replacement;
     return (char *)s;
+}
+// Report a state action by allowlist name so tests and diagnostics can prove
+// which function was installed instead of only that one exists.
+const char *DPT_DehActionName(const actionf_t *action)
+{
+    unsigned int i;
+    if(!action)return "none";
+    for(i=0;i<dpt_action_count;++i)
+        if(action->acp1==dpt_action_entries[i].action.acp1)return dpt_action_entries[i].name;
+    return action->acp1?"custom":"none";
 }
 static boolean ThingIndex(char *text,int *index)
 {
@@ -435,6 +481,7 @@ void DPT_DehReset(void)
             base_nextstate[i]=states[i].nextstate;
             base_sprite[i]=states[i].sprite;base_frame[i]=states[i].frame;
             base_misc1[i]=states[i].misc1;base_misc2[i]=states[i].misc2;
+            base_action[i]=states[i].action;
         }
         memcpy(base_pars,pars,sizeof(base_pars));
         memcpy(base_cpars,cpars,sizeof(base_cpars));
@@ -449,7 +496,9 @@ void DPT_DehReset(void)
         states[i].nextstate=base_nextstate[i];
         states[i].sprite=base_sprite[i];states[i].frame=base_frame[i];
         states[i].misc1=base_misc1[i];states[i].misc2=base_misc2[i];
+        states[i].action=base_action[i];
         visual_patched[i]=false;
+        action_patched[i]=false;
     }
     memcpy(pars,base_pars,sizeof(base_pars));
     memcpy(cpars,base_cpars,sizeof(base_cpars));
@@ -470,7 +519,7 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     boolean text_changed[TEXT_COUNT];
     int staged_max[NUMAMMO],staged_clip[NUMAMMO];
     size_t offset=0;boolean signature=false,doom=false,format=false;
-    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME, TEXT, STRINGS, PARS } section=NONE;
+    enum { NONE, MISC, AMMO, WEAPON, THING, FRAME, TEXT, STRINGS, PARS, CODEPTR } section=NONE;
     int index=0;
     char line[MAX_LINE+1];
     if(!initialized)DPT_DehReset();
@@ -492,6 +541,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         staged_nextstate[i]=states[i].nextstate;
         staged_sprite[i]=states[i].sprite;staged_frame[i]=states[i].frame;
         staged_misc1[i]=states[i].misc1;staged_misc2[i]=states[i].misc2;
+        staged_action[i]=states[i].action;
+        staged_action_patched[i]=action_patched[i];
         staged_visual_patched[i]=visual_patched[i];
         next_changed[i]=false;
     }
@@ -524,6 +575,11 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         {
             if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before [PARS]");
             section=PARS;continue;
+        }
+        if(Equal(text,"[CODEPTR]"))
+        {
+            if(!doom||!format)return Error(line_number,"Doom version / Patch format headers required before [CODEPTR]");
+            section=CODEPTR;continue;
         }
         if(section==PARS&&IsToken(text,"par"))
         {
@@ -587,6 +643,11 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
         if(section==STRINGS)
         {
             if(!ApplyBexString(text,Trim(equals+1),staged_text,line_number))return false;
+            ++assignments;continue;
+        }
+        if(section==CODEPTR)
+        {
+            if(!ApplyCodePtr(text,Trim(equals+1),line_number))return false;
             ++assignments;continue;
         }
         if(!Number(Trim(equals+1),&value))return Error(line_number,"invalid decimal integer / overflow");
@@ -689,6 +750,8 @@ boolean DPT_DehLoadBytes(const unsigned char *data,size_t size)
     {
         states[i].sprite=staged_sprite[i];states[i].frame=staged_frame[i];
         states[i].misc1=staged_misc1[i];states[i].misc2=staged_misc2[i];
+        states[i].action=staged_action[i];
+        action_patched[i]=staged_action_patched[i];
         visual_patched[i]=staged_visual_patched[i];
     }
     memcpy(text_replacements,staged_text,sizeof(staged_text));

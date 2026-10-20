@@ -304,6 +304,43 @@ int main(void)
         DPT_DehReset();
         REQUIRE(cpars[0]==30&&cpars[31]==30&&pars[1][1]==30&&cpars[1]==90);
     }
+    {
+        // [CODEPTR]: only allowlisted existing actions, class-checked.
+        char patch[256];
+        snprintf(patch,sizeof(patch),HEADER "[CODEPTR]\nFrame %d = A_Chase\nFrame %d = A_WeaponReady\n",
+            S_POSS_STND,S_PISTOL);
+        REQUIRE(Load(patch));
+        REQUIRE(!strcmp(DPT_DehActionName(&states[S_POSS_STND].action),"A_Chase"));
+        REQUIRE(!strcmp(DPT_DehActionName(&states[S_PISTOL].action),"A_WeaponReady"));
+        // The "A_" prefix is optional, like the reference parser.
+        snprintf(patch,sizeof(patch),HEADER "[CODEPTR]\nFrame %d = Chase\n",S_POSS_RUN1);
+        REQUIRE(Load(patch));
+        REQUIRE(!strcmp(DPT_DehActionName(&states[S_POSS_RUN1].action),"A_Chase"));
+        DPT_DehChecksum(a);
+        {const char *invalid[]={HEADER "[CODEPTR]\nFrame 13 = NoSuchAction\n",
+          HEADER "[CODEPTR]\nFrame 0 = A_Chase\n",
+          HEADER "[CODEPTR]\nFrame 999999 = A_Chase\n",
+          HEADER "[CODEPTR]\nFrame -1 = A_Chase\n",
+          HEADER "[CODEPTR]\nFrame 13\n",
+          HEADER "[CODEPTR]\nNotAFrame 13 = A_Chase\n",
+          HEADER "Initial Health = 5\n[CODEPTR]\nFrame 13 = A_Chase\nFrame 14 = NoSuchAction\n"};
+         for(i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i)
+         {REQUIRE(!Load(invalid[i]));
+          REQUIRE(!strcmp(DPT_DehActionName(&states[S_POSS_STND].action),"A_Chase"));
+          REQUIRE(deh_initial_health==100);DPT_DehChecksum(b);REQUIRE(!memcmp(a,b,20));}}
+        // Class safety: a weapon state must not receive a mobj action and a
+        // mobj state must not receive a psprite action.
+        snprintf(patch,sizeof(patch),HEADER "[CODEPTR]\nFrame %d = A_Chase\n",S_PISTOL);
+        REQUIRE(!Load(patch));REQUIRE(strstr(DPT_DehLastError(),"action class"));
+        REQUIRE(!strcmp(DPT_DehActionName(&states[S_PISTOL].action),"A_WeaponReady"));
+        snprintf(patch,sizeof(patch),HEADER "[CODEPTR]\nFrame %d = A_WeaponReady\n",S_POSS_STND);
+        REQUIRE(!Load(patch));REQUIRE(strstr(DPT_DehLastError(),"action class"));
+        REQUIRE(!strcmp(DPT_DehActionName(&states[S_POSS_STND].action),"A_Chase"));
+        DPT_DehReset();
+        // Synthetic states start with no action, so reset must restore that.
+        REQUIRE(!strcmp(DPT_DehActionName(&states[S_POSS_STND].action),"none"));
+        REQUIRE(!strcmp(DPT_DehActionName(&states[S_PISTOL].action),"none"));
+    }
     REQUIRE(!DPT_DehLoadLump(-1));REQUIRE(!DPT_DehLoadFile("missing.deh"));
     puts("DeHackEd Misc/Ammo/Weapon-frame/Thing/Frame: classic grammar, strict ranges, atomic rollback, limits, repeated digest and ordering OK");return 0;
 }

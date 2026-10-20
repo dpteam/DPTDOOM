@@ -1,7 +1,7 @@
-# DeHackEd: classic-срез + BEX `[STRINGS]`/`[PARS]`
+# DeHackEd: classic-срез + BEX `[STRINGS]`/`[PARS]`/`[CODEPTR]`
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-bexpars-v17` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-bexcodeptr-v18` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -16,8 +16,8 @@
 Пока принимается classic signature v3.0, `Doom version = 19`, `Patch format = 6`
 и секции **`Misc 0`**, `Ammo 0..3`, `Weapon 0..8`, `Thing 1..NUMMOBJTYPES`,
 `Frame 1..NUMSTATES-1` (с ограничениями ниже), `Text`, а также BEX
-**`[STRINGS]`** (bounded whitelist) и **`[PARS]`** (bounded par times).
-Не выдуманная `[Misc]`, не `[CODEPTR]`.
+**`[STRINGS]`** (bounded whitelist), **`[PARS]`** (bounded par times) и
+**`[CODEPTR]`** (allowlist существующих действий). Не выдуманная `[Misc]`.
 
 ```text
 Patch File for DeHackEd v3.0
@@ -135,6 +135,45 @@ par 32 20
   отображаемое/статистическое значение. Оно всё равно входит в patch digest,
   поэтому peers обязаны иметь одинаковый набор патчей.
 
+### BEX `[CODEPTR]`
+
+`[CODEPTR]` меняет action существующего состояния, но только на функцию из
+**allowlist** — 74 действия, уже присутствующие в движке. Произвольные адреса,
+offsets и указатели от patch не принимаются.
+
+```text
+[CODEPTR]
+Frame 806 = A_FaceTarget
+Frame 10 = A_WeaponReady
+```
+
+- `Frame <n>` — существующее состояние, `0` (`S_NULL`) неизменяем.
+- Имя действия сверяется с allowlist; форма с префиксом `A_` и без него
+  принимается одинаково (`A_FaceTarget` = `FaceTarget`), как в reference parser.
+- Неизвестное имя — ошибка с номером строки. Reference-парсер в этом случае
+  молча ставит `NULL`; DPT.DOOM так не делает, чтобы patch не «тихо» отключал
+  поведение.
+- **Проверяется класс вызова.** `P_SetMobjState` вызывает
+  `action.acp1(mobj)`, а `P_SetPsprite` — `action.acp2(player, psp)`.
+  Mobj-состоянию нельзя назначить psprite-действие и наоборот: иначе
+  `pspdef_t` был бы прочитан как `mobj_t`. Класс состояния берётся из
+  vanilla weapon-state pool; такие назначения отклоняются с
+  `action class does not match this frame`.
+- Список и классы заданы одним X-макросом в `doomgeneric/deh_actions.h`.
+  Реальная таблица (`deh_actions.c`) ссылается на функции движка, а
+  `tests/deh_actions_stub.c` разворачивает тот же список в локальные заглушки,
+  поэтому имена и классы не могут разойтись между движком и тестом.
+- `[CODEPTR]` меняет **поведение**, а не только данные: действие может
+  использовать поля, которых у данного актора нет. Например `A_Chase` без цели
+  перезапускает spawn-state; если этот же state содержит `A_Chase`, получается
+  самоссылка. Движок ограничивает вложенность `P_SetMobjState` (64 уровня) и
+  завершает игру сообщением `state chain recursion limit exceeded` вместо
+  переполнения стека. Это защита от падения, а не обещание, что любое действие
+  осмысленно для любого актора.
+- Таблица staged и восстанавливается `DPT_DehReset`; ошибка в источнике
+  откатывает и action-присваивания.
+- Действия входят в patch digest, поэтому peers с разными наборами не соединятся.
+
 `Weapon N`: индексы 0=fist, 1=pistol, 2=shotgun, 3=chaingun, 4=rocket launcher,
 5=plasma, 6=BFG, 7=chainsaw, 8=super shotgun. Поддержаны `Ammo type = 0..3`
 и пять ссылок на существующие weapon states:
@@ -246,7 +285,7 @@ Next frame = 15
 и (для weapon states) `state.misc1/misc2`.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v17, чтобы peers не путали разные semantics.
+обновлён до v18, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -303,7 +342,7 @@ Sprite subnumber = 32769
   `sx/sy`, поэтому offset на них не виден; для постоянного смещения используют
   firing/raising состояния без bob-перезаписи. Это тоже vanilla-поведение, не
   ошибка parser-а.
-- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v17.
+- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v18.
 
 ```text
 Frame 12
@@ -382,7 +421,8 @@ section/field дают ошибку с номером строки до игро
 old/new exact bytes and unsafe payload rejection, BEX `[STRINGS]` whitelist,
 case-insensitive names, value bounds, rejected continuation and shared
 classic/BEX table, BEX `[PARS]` MAP/E?M? forms, gamemode mismatch, episode 4
-fallthrough and bounds, atomic rollback, digest repeatability и load order, без
+fallthrough and bounds, BEX `[CODEPTR]` allowlist/prefix/class checks,
+atomic rollback, digest repeatability и load order, без
 IWAD/окна/Internet.
 
 `deh-engine` (headless + локальный Doom II): реальные player health/ammo/capacity,
@@ -396,14 +436,19 @@ rejection) и
 временный MAP01 overlay с двумя starts и одной barrel: сравниваются поля
 **реально созданного mobj**, не только parser table, через file/lump paths.
 Unit tests не линкуют action code: используют synthetic mobjinfo; настоящий
-info.c и игровой spawn проверяет deh-engine. Все patch/WAD fixtures создаются во временных
-каталогах; IWAD/извлечённые ресурсы не коммитятся.
+info.c и игровой spawn проверяет deh-engine. `[CODEPTR]` использует ту же
+X-макрос-таблицу через `tests/deh_actions_stub.c`, поэтому имена и классы
+действий совпадают с движком без линковки gameplay-кода. Все patch/WAD fixtures
+создаются во временных каталогах; IWAD/извлечённые ресурсы не коммитятся.
 
 Duration/Frame/Weapon-frame tests проверяют реальный firing cadence (по расходу ammo с
 одинаковыми attack commands), file/lump equivalence, rollback нескольких
 секций/digest, index/range/overflow/fast exclusion, неизменные action pointers и
-reset. Text, BEX `[STRINGS]` и `[PARS]` проверяются через engine report,
-file/lump equivalence и same/different patch peers. Отдельно проверяются
+reset. Text, BEX `[STRINGS]`, `[PARS]` и `[CODEPTR]` проверяются через engine
+report, file/lump equivalence и same/different patch peers. Для `[CODEPTR]`
+отдельно проверяются allowlist, необязательный префикс `A_`, отказ по классу
+вызова в обе стороны и bounded-ошибка вместо stack overflow при
+самоссылающемся AI-действии. Отдельно проверяются
 Next frame, пропуск pistol action, границы state
 table, zero-tic cycle, weapon action skip, same/different patch peers и matching
 traces с `-fast`.

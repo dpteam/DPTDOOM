@@ -71,9 +71,10 @@ classic-секции в современных портах **не реализ�
 произвольных function pointers, у нас закрыт** — это `Misc`, `Ammo`, `Weapon`,
 `Thing`, `Frame`, `Text`. Остальные classic-секции либо устарели, либо требуют
 исполнения/адресации чужого бинарника. Современные эквиваленты
-(`[STRINGS]`, `[PARS]`, `[CODEPTR]`) относятся к BEX-слою. `[STRINGS]` и
-`[PARS]` уже реализованы поверх bounded-таблиц; `[CODEPTR]` реализуется
-отдельно, с allowlist действий и собственным compatibility level.
+(`[STRINGS]`, `[PARS]`, `[CODEPTR]`) относятся к BEX-слою. Все три
+реализованы в bounded-виде: `[CODEPTR]` — allowlist из 74 существующих действий
+с проверкой класса вызова (`acp1` mobj против `acp2` psprite), без адресов и
+произвольных указателей.
 
 `Cheat` — отдельный класс: не parser-проблема, а сетевые/привилегированные
 изменения, поэтому он не входит в bounded classic subset.
@@ -85,7 +86,7 @@ classic-секции в современных портах **не реализ�
 | `vanilla` | Текущие IWAD/PWAD без patches | Работает, baseline закреплены |
 | `deh-classic` | bounded `.deh`, `DEHACKED` lump; Misc/Ammo/Weapon/Thing/Frame/Text | Реализовано; `Sound`/`Sprite`/`Pointer` classic небезопасны (см. выше) |
 | `bex-basic` | `[STRINGS]` + `[PARS]` | Оба реализованы в bounded-виде |
-| `bex-codeptr` | `[CODEPTR]` только allowlist существующих DPT action functions | Не исполнять произвольные pointers |
+| `bex-codeptr` | `[CODEPTR]` только allowlist существующих DPT action functions | Реализовано: 74 действия, проверка класса вызова, bounded recursion guard |
 | `boom` | generalized linedefs/sectors, Boom flags/specials, blockmap/physics cases | Отдельный map/runtime этап |
 | `mbf` | MBF things/flags/skies/AI semantics и demos | После Boom matrix |
 | `mbf21` | отдельный declared compatibility level/manifest | Не найден в refs как готовая полная реализация |
@@ -141,6 +142,8 @@ marker `DPTDEH1` и digest набора патчей; загрузка с дру
 байт-совместим. BEX `[STRINGS]` реализован поверх той же bounded-таблицы замен
 (имена из whitelist, значения до 2047 bytes, без continuation). BEX `[PARS]`
 меняет `pars[][]`/`cpars[]` с проверкой формы под загруженный IWAD и vanilla
-fallthrough для Episode 4. Action pointers,
-`[CODEPTR]`, остальные Frame fields, произвольные
+fallthrough для Episode 4. BEX `[CODEPTR]` меняет action состояния только на
+функцию из allowlist (74 действия) с проверкой класса вызова; самоссылающееся
+AI-действие теперь упирается в bounded recursion guard вместо stack overflow.
+Остальные Frame fields, произвольные
 weapon frames и остальной BEX/MBF остаются очередью следующих срезов.
