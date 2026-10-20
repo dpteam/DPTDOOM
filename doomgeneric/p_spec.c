@@ -34,6 +34,7 @@
 #include "dpt_genstairs.h"
 #include "dpt_genlift.h"
 #include "dpt_genlocked.h"
+#include "dpt_secspecial.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -1194,7 +1195,7 @@ P_ShootSpecialLine
 void P_PlayerInSpecialSector (player_t* player)
 {
     sector_t*	sector;
-	
+
     sector = player->mo->subsector->sector;
 
     // Falling, not all the way down yet?
@@ -1202,6 +1203,48 @@ void P_PlayerInSpecialSector (player_t* player)
 	return;	
 
     // Has hitten ground.
+    //
+    // BOOM splits here. Specials below 32 keep the vanilla table, whose damage
+    // does not come from the bit fields (special 5 is 10 damage with a zero
+    // damage field). Specials 32 and above use the generalized damage tier and
+    // secret flag instead. Mixing the two would give vanilla sectors the wrong
+    // damage or let a generalized sector fall into the vanilla default below.
+    if (sector->special >= 32)
+    {
+	dpt_secspecial_t sec;
+	int amount;
+	boolean apply;
+
+	// Undefined bits were already reported at load; nothing to apply here.
+	if (!DPT_SecSpecialDecode(sector->special, &sec))
+	    return;
+
+	amount = DPT_SecSpecialDamage(sec.damage);
+	if (amount)
+	{
+	    // The heaviest tier still leaks through a suit with a 5/256 chance per
+	    // damage tick. The random draw happens only while the suit is active,
+	    // matching BOOM's short-circuit order; drawing it unconditionally
+	    // would shift the shared random stream and desynchronise demos.
+	    if (DPT_SecSpecialSuitBlocks(sec.damage))
+		apply = !player->powers[pw_ironfeet];
+	    else
+		apply = !player->powers[pw_ironfeet] || P_Random() < 5;
+
+	    if (apply && !(leveltime&0x1f))
+		P_DamageMobj (player->mo, NULL, NULL, amount);
+	}
+
+	if (sec.secret)
+	{
+	    player->secretcount++;
+	    sector->special &= ~DPT_SEC_SECRET_MASK;
+	    if (sector->special < 32)
+		sector->special = 0;
+	}
+	return;
+    }
+
     switch (sector->special)
     {
       case 5:
@@ -1564,13 +1607,23 @@ void P_SpawnSpecials (void)
     }
 
     //	Init special SECTORs.
+    //
+    // BOOM reuses the same field for a generalized type: bits 0-4 are the base
+    // vanilla type, 5-6 the damage tier, 7 the secret flag, 8-9 friction/push.
+    // Switching on the base type therefore leaves vanilla maps untouched
+    // (special < 32 has base == special) and makes generalized light types work.
     sector = sectors;
     for (i=0 ; i<numsectors ; i++, sector++)
     {
 	if (!sector->special)
 	    continue;
-	
-	switch (sector->special)
+
+	// Generalized secret sectors are counted before the base-type switch, so
+	// a sector can be a secret without also being a vanilla type-9 sector.
+	if (sector->special & DPT_SEC_SECRET_MASK)
+	    totalsecret++;
+
+	switch (sector->special & DPT_SEC_BASE_MASK)
 	{
 	  case 1:
 	    // FLICKERING LIGHTS
@@ -1590,7 +1643,8 @@ void P_SpawnSpecials (void)
 	  case 4:
 	    // STROBE FAST/DEATH SLIME
 	    P_SpawnStrobeFlash(sector,FASTDARK,0);
-	    sector->special = 4;
+	    // Vanilla assigned 4 here, which was a no-op. It must not be kept:
+	    // for a generalized special (>= 32) it would wipe the damage bits.
 	    break;
 	    
 	  case 8:
@@ -1599,7 +1653,10 @@ void P_SpawnSpecials (void)
 	    break;
 	  case 9:
 	    // SECRET SECTOR
-	    totalsecret++;
+	    // Only the plain vanilla type counts here; a generalized sector is
+	    // counted through SECRET_MASK above.
+	    if (sector->special < 32)
+		totalsecret++;
 	    break;
 	    
 	  case 10:
@@ -1724,6 +1781,42 @@ void P_SpawnSpecials (void)
 	if (unsupported_occurrences)
 	{
 	    printf("Map compatibility: %i linedef special(s) in the Boom/MBF "
+		   "extended range are not implemented (this level is not fully "
+		   "supported):", unsupported_occurrences);
+	    for (i = 0; i < unique; ++i)
+		printf(" %i", unsupported_ids[i]);
+	    if (unique == 16)
+		printf(" ...");
+	    printf("\n");
+	    fflush(stdout);
+	}
+    }
+
+    // Sector specials carry the same risk: BOOM reuses the field for a
+    // generalized type, and the friction/push bits need thinkers this engine
+    // does not have. Report those instead of letting the map look complete.
+    {
+	int unsupported_ids[16];
+	int unsupported_occurrences = 0;
+	int unique = 0;
+
+	for (i = 0; i < numsectors; ++i)
+	{
+	    int special = sectors[i].special;
+	    int k;
+
+	    if (!special || DPT_SecSpecialSupported(special))
+		continue;
+	    ++unsupported_occurrences;
+	    for (k = 0; k < unique; ++k)
+		if (unsupported_ids[k] == special)
+		    break;
+	    if (k == unique && unique < 16)
+		unsupported_ids[unique++] = special;
+	}
+	if (unsupported_occurrences)
+	{
+	    printf("Map compatibility: %i sector special(s) in the Boom/MBF "
 		   "extended range are not implemented (this level is not fully "
 		   "supported):", unsupported_occurrences);
 	    for (i = 0; i < unique; ++i)

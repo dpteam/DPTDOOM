@@ -40,10 +40,11 @@ def write_wad(path, entries):
     path.write_bytes(body)
 
 
-def overlay(iwad, path, special=0, tag=0):
+def overlay(iwad, path, special=0, tag=0, sector_special=0):
     """Return (sector_count, overlay_path).
 
     special=0 builds the sky-ceiling baseline without any transfer.
+    sector_special sets the BOOM/generalized sector special on every sector.
     """
     entries = read_entries(iwad.read_bytes())
     index = next(i for i, (name, _) in enumerate(entries) if name == b"MAP01")
@@ -57,6 +58,8 @@ def overlay(iwad, path, special=0, tag=0):
     # Force sky ceilings so the transferred texture is on screen immediately.
     for off in range(0, len(sectors), 26):
         sectors[off + 12:off + 20] = b"F_SKY1\0\0"
+        if sector_special:
+            struct.pack_into("<h", sectors, off + 22, sector_special)
 
     if special:
         # Reuse an existing wall texture name, guaranteed to be present.
@@ -189,10 +192,70 @@ def main():
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" not in text, text
 
+        # Boom generalized sector specials: base type, damage tier and secret
+        # flag are implemented, so they must not be reported.
+        for name, value in (("sec-base-light", 0x01), ("sec-dmg", 0x61),
+                            ("sec-secret", 0x80 | 5), ("sec-all", 0xE1),
+                            ("sec-door", 0x0a), ("sec-vanilla-secret", 9)):
+            overlay(iwad, root / (name + ".wad"), sector_special=value)
+            _, text = run(name, ["-file", str(root / (name + ".wad"))])
+            assert "Map compatibility:" not in text, text
+        # Friction (bit 8) and push (bit 9) need thinkers this engine does not
+        # have, and bits above 0x03ff are undefined by BOOM. All must be
+        # reported instead of silently doing nothing.
+        for name, value in (("sec-friction", 0x100), ("sec-push", 0x200),
+                            ("sec-both", 0x300), ("sec-undefined", 0x400)):
+            overlay(iwad, root / (name + ".wad"), sector_special=value)
+            _, text = run(name, ["-file", str(root / (name + ".wad"))])
+            assert "Map compatibility:" in text and " sector special(s)" in text, text
+            assert (" %d" % value) in text, text
+
         # The baseline overlay has no Boom specials and must stay quiet, even
         # though stock Doom II MAP01 does use vanilla types 102 and 103.
         assert "Map compatibility:" not in run("base-quiet", ["-file", str(root / "sky-base.wad")])[1]
         assert "Map compatibility:" not in run("vanilla-quiet", [])[1]
+
+        # Damage must actually be applied, and the vanilla table must keep its
+        # own numbers. The vanilla sector special 5 deals 10 damage while its
+        # damage bit field is 0, so a single shared table would be wrong either
+        # way round. The damage tick fires at leveltime 0, 32, 64, ...; 40 tics
+        # covers two of them, which is enough to tell the tiers apart while
+        # keeping the ASan run inside its timeout.
+        def health(name, value, tics=40):
+            path = root / (name + ".wad")
+            overlay(iwad, path, sector_special=value)
+            work = root / name
+            work.mkdir()
+            result = subprocess.run(
+                [str(exe), "-iwad", str(iwad), "-warp", "1", "-nomonsters",
+                 "-headless-tics", str(tics), "-headless-session-report",
+                 "-file", str(path)],
+                cwd=work, capture_output=True, text=True, timeout=30)
+            text = result.stdout + result.stderr
+            assert result.returncode == 0, text
+            assert "AddressSanitizer" not in text and "runtime error:" not in text, text
+            report = [l for l in result.stdout.splitlines()
+                      if l.startswith("Session report")]
+            assert report, text
+            return int(report[0].split("health=")[1].split()[0])
+
+        assert health("hp-none", 0) == 100
+        # Vanilla tiers: 5 -> 10, 7 -> 5, 16 -> 20 damage per damage tick.
+        assert health("hp-vanilla-5", 5) == 100 - 2 * 10
+        assert health("hp-vanilla-7", 7) == 100 - 2 * 5
+        assert health("hp-vanilla-16", 16) == 100 - 2 * 20
+        assert health("hp-vanilla-secret", 9) == 100
+        # Generalized tiers must reproduce the same numbers through the bit
+        # fields, which is the point of the shared model.
+        assert health("hp-gen-dmg1", 0x01 | (1 << 5)) == 100 - 2 * 5
+        assert health("hp-gen-dmg2", 0x01 | (2 << 5)) == 100 - 2 * 10
+        assert health("hp-gen-dmg3", 0x01 | (3 << 5)) == 100 - 2 * 20
+        # A generalized secret sector must not hurt by itself.
+        assert health("hp-gen-secret", 0x80 | 5) == 100
+        # A generalized light type must not lose its damage bits when the light
+        # thinker is spawned: the vanilla spawners clear sector->special, and
+        # clearing the whole field would drop the damage tier.
+        assert health("hp-light-and-damage", 0x01 | (3 << 5)) == 100 - 2 * 20
 
         # Note: a transfer line whose sidedef has neither upper nor lower
         # texture is ignored defensively. Vanilla MAP01 has no such two-sided

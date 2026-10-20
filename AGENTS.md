@@ -168,12 +168,14 @@ ctest --preset windows-headless
   и stairs `0x3000..0x33ff`, подмножество lifts `0x3400..0x37ff`, плюс
   подмножества generalized floors `0x6000..0x7fff` и ceilings
   `0x4000..0x5fff`; push-триггеры P1/PR работают для всех семейств и действуют
-  на сектор за линией. Декодеры в `dpt_gendoor.c`/`dpt_genfloor.c`/
+  на сектор за линией; generalized sector specials (base/damage/secret, без
+  friction/push). Декодеры в `dpt_gendoor.c`/`dpt_genfloor.c`/
   `dpt_genceiling.c`/`dpt_gencrusher.c`/`dpt_genstairs.c`/`dpt_genlift.c`/
-  `dpt_genlocked.c`,
+  `dpt_genlocked.c`/`dpt_secspecial.c`,
   data-free тесты `gendoor`/`genfloor`/`genceiling`/`gencrusher`/`genstairs`/
-  `genlift`/`genlocked`). Остальные Boom/MBF specials (часть lift-целей,
-  часть floor/ceiling-целей) не реализованы и попадают в отчёт
+  `genlift`/`genlocked`/`secspecial`). Остальные Boom/MBF specials (часть
+  lift-целей, часть floor/ceiling-целей, friction/push) не реализованы и
+  попадают в отчёт
   `Map compatibility:`; не выдавать загрузку карты за совместимость.
   Детали/тесты — `docs/MAPS.md`, `map-sky` и data-free тесты.
 - DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Text + Weapon frames + Thing numeric/flags/states/sounds + Frame graph/visual/psprite** classic

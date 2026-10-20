@@ -79,7 +79,7 @@ set(engine_sources
 )
 list(TRANSFORM engine_sources PREPEND "doomgeneric/")
 add_executable(dptdoom ${engine_sources})
-target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c)
+target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c doomgeneric/dpt_secspecial.c)
 target_compile_definitions(dptdoom PRIVATE DPT_DEH_CLASSIC)
 target_include_directories(dptdoom PRIVATE doomgeneric)
 if(DPTDOOM_NETWORK)
@@ -285,6 +285,9 @@ if(BUILD_TESTING)
     add_executable(genlocked-test tests/genlocked.c doomgeneric/dpt_genlocked.c)
     target_include_directories(genlocked-test PRIVATE doomgeneric)
     add_test(NAME genlocked COMMAND genlocked-test)
+    add_executable(secspecial-test tests/secspecial.c doomgeneric/dpt_secspecial.c)
+    target_include_directories(secspecial-test PRIVATE doomgeneric)
+    add_test(NAME secspecial COMMAND secspecial-test)
     if(MSVC AND DPTDOOM_SANITIZER STREQUAL "address")
         add_custom_command(TARGET deh-misc-test POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "${asan_runtime}" $<TARGET_FILE_DIR:deh-misc-test>)
     endif()
@@ -498,7 +501,7 @@ if(BUILD_TESTING)
         add_test(NAME map-sky COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/map-sky.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
-        set_tests_properties(map-sky PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+        set_tests_properties(map-sky PROPERTIES TIMEOUT 420 RUN_SERIAL TRUE)
         if(DPTDOOM_NETWORK)
             add_test(NAME net-loopback COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-loopback.py"

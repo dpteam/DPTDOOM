@@ -276,6 +276,58 @@ Push-лестница начинает цепочку от сектора за �
   или выстреле. Для этого нужен игрок и геометрия карты; это ручная проверка.
   Классификацию и декодирование не выдавать за проверенную анимацию.
 
+## Boom generalized sector specials
+
+| Поле | Бит | Маска | Значения |
+|---|---|---|---|
+| base | 0-4 | `0x001f` | ванильный тип света/двери/секрета, 0..31 |
+| damage | 5-6 | `0x0060` | 0=нет, 1=5, 2=10, 3=20 урона за 32 тика |
+| secret | 7 | `0x0080` | сектор считается секретом |
+| friction | 8 | `0x0100` | нужен friction-thinker (linedef 223) |
+| push | 9 | `0x0200` | нужен pusher-thinker (linedef 224) |
+
+**Критично: поле damage — это не урон.** Ванильный special `5` наносит 10
+урона, хотя его damage-поле равно 0. Поэтому движок разделён по границе 32:
+
+- `< 32` — ванильная таблица (`P_PlayerInSpecialSector`), как в Doom;
+- `>= 32` — generalized-модель: урон берётся из битов, секрет — из `0x0080`.
+
+Смешать их нельзя ни в одну сторону: иначе ванильные секторы получат неверный
+урон, а generalized-секторы провалятся в ванильный `default`.
+
+**Второй капкан:** vanilla-функции `P_SpawnFireFlicker`/`P_SpawnStrobeFlash`/
+`P_SpawnLightFlash`/`P_SpawnGlowingLight` обнуляли `sector->special` целиком.
+В BOOM так нельзя — в том же поле живут damage/secret-биты, и
+`P_PlayerInSpecialSector` читает их каждый тик. Теперь они делают
+`sector->special &= ~31`, как в PrBoom (`p_lights.c`, комментарий
+`jff 3/14/98 clear non-generalized sector type`). Иначе generalized-свет с
+уроном молча терял урон.
+
+Спавн секторных specials переключён на `sector->special & 0x1f`, а подсчёт
+секретов идёт через `0x0080` до switch — так generalized-секрет считается один
+раз, а ванильный `9` остаётся ванильным.
+
+Урон тира 3 (20) проходит сквозь radiation suit с шансом 5/256 на тик урона;
+тиры 1 и 2 блокируются полностью. Случайное число берётся **только** когда
+костюм активен — безусловный вызов сдвинул бы общий поток `P_Random` и
+рассинхронизировал демо.
+
+**Не поддержано и попадает в отчёт:** friction (бит 8) и push (бит 9) — в этом
+движке нет соответствующих thinker-ов; биты выше `0x03ff` BOOM не определяет,
+поэтому они тоже отвергаются, а не отбрасываются молча. Отчёт печатается
+отдельной строкой `Map compatibility: N sector special(s) ...`.
+
+### Проверки
+
+- `secspecial` (data-free): границы 32, **все 1024 комбинации** полей,
+  отвержение неопределённых битов, таблица урона и правила костюма.
+- `map-sky`: generalized-секторы не попадают в отчёт, friction/push/undefined —
+  попадают. Урон проверяется **функционально** по health из session report:
+  ванильные `5`/`7`/`16` дают 10/5/20, generalized-тиры 1/2/3 дают те же
+  5/10/20, а `0x01 | (3<<5)` (свет + урон) обязан сохранить урон после спавна
+  light-thinker-а. Регрессия с `sector->special = 0` в `p_lights.c` ловится этим
+  тестом.
+
 ## Push-триггеры (P1/PR) во всех семействах
 
 BOOM не даёт push-триггеру тега, поэтому `P1`/`PR` применяют special к
@@ -407,10 +459,10 @@ implemented (this level is not fully supported): 142 200 271
 
 ## Ограничения
 
-- Поддержан sky transfer и перечисленные выше семейства generalized linedefs
-  (двери, locked doors, floors, ceilings, crushers, stairs, подмножество lifts).
-  Scrolling floors, friction, deep water, colormaps, Boom sector specials,
-  MBF thing flags и MBF21 semantics **не реализованы**.
+- Поддержан sky transfer, перечисленные выше семейства generalized linedefs
+  (двери, locked doors, floors, ceilings, crushers, stairs, подмножество lifts)
+  и generalized sector specials без friction/push. Scrolling floors, friction,
+  deep water, colormaps, MBF thing flags и MBF21 semantics **не реализованы**.
 - Неизвестные Boom/MBF specials по-прежнему молча игнорируются движком. Это
   означает, что карта загрузится, но её механики могут не работать; не выдавать
   такую загрузку за совместимость.
