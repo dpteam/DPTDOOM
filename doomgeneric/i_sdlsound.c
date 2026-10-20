@@ -869,6 +869,16 @@ static int I_SDL_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
 
     snd = sfxinfo->driver_data;
 
+    // Set the separation *before* queuing the chunk. Mix_PlayChannelTimed
+    // releases the audio lock, so a callback can mix the first slice while we
+    // are still here; if panning were registered afterwards that slice would
+    // play unpanned (audible as a centred blip at the start of every sound).
+    // Mix_HaltChannel above already cleared this channel's effects, and
+    // Mix_PlayChannelTimed only drops effects for a channel that is playing,
+    // so the registration survives the call below.
+
+    I_SDL_UpdateSoundParams(channel, vol, sep);
+
     // play sound
 
     if (Mix_PlayChannelTimed(channel, &snd->chunk, 0, -1) < 0)
@@ -878,10 +888,6 @@ static int I_SDL_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
     }
 
     channels_playing[channel] = sfxinfo;
-
-    // set separation, etc.
- 
-    I_SDL_UpdateSoundParams(channel, vol, sep);
 
     return channel;
 }

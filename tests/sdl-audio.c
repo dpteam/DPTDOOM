@@ -53,7 +53,22 @@ int W_LumpLength(unsigned int lump) { (void)lump; return sizeof(sound_data); }
 void *W_CacheLumpNum(int lump, int tag) { (void)lump; (void)tag; return sound_data; }
 void W_ReleaseLumpNum(int lump) { (void)lump; ++releases; }
 
-#define CHECK(condition) do { if (!(condition)) I_Error("Line %d: %s (%s)\n", __LINE__, #condition, Mix_GetError()); } while (0)
+// Mix_GetError() keeps the last error text, which may come from an earlier
+// probe (for example a missing MIDI backend) and not from the failing call.
+// Print it as context, never as the claimed cause.
+static void FailCheck(int line, const char *condition)
+{
+    const char *mixer_error = Mix_GetError();
+
+    if (mixer_error != NULL && *mixer_error != '\0')
+    {
+        I_Error("Line %d: %s (last SDL_mixer error, not necessarily the "
+                "cause: %s)\n", line, condition, mixer_error);
+    }
+    I_Error("Line %d: %s\n", line, condition);
+}
+
+#define CHECK(condition) do { if (!(condition)) FailCheck(__LINE__, #condition); } while (0)
 
 static void SDLCALL Capture(void *user, Uint8 *stream, int len)
 {
@@ -75,15 +90,23 @@ static void BeginCapture(void)
     SDL_UnlockAudio();
 }
 
-static void CheckCapture(int left_only)
+// `pan` is the expected channel balance: -1 = hard left, +1 = hard right,
+// 0 = both channels. Checking both extremes catches a swapped or ignored
+// separation, which a one-sided check cannot.
+static void CheckCapture(int pan)
 {
     uint64_t left, right, count;
     SDL_Delay(120);
     SDL_LockAudio();
     left = left_energy; right = right_energy; count = samples;
     SDL_UnlockAudio();
-    CHECK(count > 0 && left > 0);
-    CHECK(left_only ? right == 0 : right > 0);
+    CHECK(count > 0 && left + right > 0);
+    if (pan < 0)
+        CHECK(left > 0 && right == 0);
+    else if (pan > 0)
+        CHECK(right > 0 && left == 0);
+    else
+        CHECK(left > 0 && right > 0);
 }
 
 static void WriteTone(void)
@@ -166,9 +189,16 @@ int main(int argc, char **argv)
             CHECK(I_StartSound(&sfx, 0, 127, 0) == -1);
             CHECK(releases == 1 && !sfx.driver_data);
             sound_data[2] = 0x11; sound_data[3] = 0x2b;
+            // Hard left first, then hard right. Both must be panned from the
+            // very first mixed slice: if the separation were registered after
+            // the chunk was queued, the opening slice would leak into the
+            // opposite channel and these checks would fail.
             BeginCapture();
             CHECK(I_StartSound(&sfx, 0, 127, 0) == 0);
             CHECK(I_SoundIsPlaying(0));
+            CheckCapture(-1);
+            BeginCapture();
+            CHECK(I_StartSound(&sfx, 0, 127, 254) == 0);
             CheckCapture(1);
             I_StopSound(0);
             CHECK(!I_SoundIsPlaying(0));
