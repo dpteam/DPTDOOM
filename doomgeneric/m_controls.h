@@ -132,6 +132,11 @@ extern int mousebforward;
 extern int grabmouse;
 extern int novert;
 
+// Settings borrowed from Duke Nukem 3D's user-defs.
+extern int crosshair;
+extern int auto_run;
+extern int mouseflip;
+
 extern int mousebjump;
 
 extern int mousebstrafeleft;

@@ -596,3 +596,53 @@ if(WIN32 AND DPTDOOM_BACKEND STREQUAL "sdl")
     endif()
 endif()
 install(FILES LICENSE docs/SDL-LICENSES.txt DESTINATION share/dptdoom)
+
+# ---------------------------------------------------------------------------
+# Test tiers
+#
+# The full suite is dominated by two tests: deh-engine (~135 s) and map-sky
+# (~95 s), which together are about 60% of the wall clock. Everything below
+# them is a data-free unit or model test that finishes in well under two
+# seconds. Running the heavy engine/network tests after every small edit costs
+# minutes and encourages skipping tests, which is worse than a smaller suite.
+#
+# Tiers:
+#   ctest --preset <p> -L fast   fast, no IWAD, no spawned game process (~7 s)
+#   ctest --preset <p>           everything (default, unchanged)
+#
+# `fast` is a label on the quick tests, not an exclusion from the default run:
+# a plain `ctest` still runs the whole suite, so nothing silently stops being
+# covered. Interactive tests are deliberately not in the fast set.
+#
+# Membership rule (not just a stopwatch): the test must run in-process, need no
+# IWAD and no game process. Master model/log/relay tests qualify because they
+# exercise their own binaries, not the game. Tests that need an IWAD or spawn
+# the engine stay in the full tier even when they are quick, because their
+# cost depends on machine speed and IWAD size.
+# ---------------------------------------------------------------------------
+set(DPTDOOM_FAST_TESTS
+    # Data-free decoders and parsers
+    deh-misc
+    gendoor genfloor genceiling gencrusher genstairs genlift genlocked
+    secspecial
+    config-keys
+    match-rules
+    net-protocol
+    timer timer-wrap zone-memory version startup-smoke
+    # Master and launcher model/format tests
+    master-model master-address-map-model master-public-address-model
+    master-client master-log master-address-map master-relay
+    packaging
+    launcher-model
+    release-console
+    # SDL input mapping (in-process, dummy video)
+    sdl-input
+)
+
+foreach(fast_test IN LISTS DPTDOOM_FAST_TESTS)
+    # Tests are conditional on backend/options, so only label the ones that
+    # actually exist in this configuration.
+    if(TEST "${fast_test}")
+        set_tests_properties("${fast_test}" PROPERTIES LABELS fast)
+    endif()
+endforeach()

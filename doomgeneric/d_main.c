@@ -169,6 +169,36 @@ extern  boolean setsizeneeded;
 extern  int             showMessages;
 void R_ExecuteSetViewSize (void);
 
+//
+// DPT_DrawCrosshair
+//
+// Draws a simple crosshair at the centre of the view window. Borrowed from
+// Duke Nukem 3D's user-selectable crosshair: it is drawn after the world so it
+// is never occluded, and it lives outside the simulation, so it cannot affect
+// demos or network checksums.
+//
+// Drawn with plain palette-index lines instead of a patch: the IWAD has no
+// crosshair lump, and generating one would mean inventing a graphic.
+//
+static void DPT_DrawCrosshair (void)
+{
+    int cx, cy;
+    int arm = 4;
+
+    if (!crosshair)
+	return;
+
+    // Centre of the view window, not of the screen: with a reduced view size
+    // the world is drawn in a smaller rectangle.
+    cx = viewwindowx + scaledviewwidth / 2;
+    cy = viewwindowy + viewheight / 2;
+
+    // Palette index 4 is a bright grey in Doom's PLAYPAL and stays visible
+    // against most textures.
+    V_DrawHorizLine (cx - arm, cy, arm * 2 + 1, 4);
+    V_DrawVertLine (cx, cy - arm, arm * 2 + 1, 4);
+}
+
 void D_Display (void)
 {
     static  boolean		viewactivestate = false;
@@ -249,7 +279,10 @@ void D_Display (void)
     
     // draw the view directly
     if (gamestate == GS_LEVEL && !automapactive && gametic)
+    {
     	R_RenderPlayerView (&players[displayplayer]);
+	DPT_DrawCrosshair ();
+    }
 
     if (gamestate == GS_LEVEL && gametic)
     	HU_Drawer ();

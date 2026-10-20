@@ -442,7 +442,10 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
     speed = key_speed >= NUMKEYS
          || joybspeed >= MAX_JOY_BUTTONS
          || gamekeydown[key_speed] 
-         || joybuttons[joybspeed];
+         || joybuttons[joybspeed]
+         // auto-run: always move at the fast speed, like Duke Nukem 3D's
+         // auto_run setting. Walk is then only reachable by not moving.
+         || auto_run;
  
     forward = side = 0;
     
@@ -635,8 +638,10 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
 
     // Without freelook there is no pitch to drive, so vertical motion would
     // walk the player forward/back. novert (default on) drops it.
+    // mouseflip inverts the remaining meaning, matching Duke Nukem 3D's
+    // MouseAimingFlipped: with it on, pushing the mouse forward aims down.
     if (!novert)
-        forward += mousey; 
+        forward += mouseflip ? -mousey : mousey; 
 
     if (strafe) 
 	side += mousex*2; 

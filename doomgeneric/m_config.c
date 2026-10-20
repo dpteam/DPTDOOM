@@ -789,6 +789,27 @@ static default_t extra_defaults_list[] =
     CONFIG_VARIABLE_INT(dpt_input_version),
 
     //!
+    // Show a crosshair at the centre of the view. Borrowed from Duke Nukem 3D's
+    // Crosshairs user setting.
+    //
+
+    CONFIG_VARIABLE_INT(crosshair),
+
+    //!
+    // Always move at run speed, without holding the run key. Borrowed from
+    // Duke Nukem 3D's auto_run setting.
+    //
+
+    CONFIG_VARIABLE_INT(auto_run),
+
+    //!
+    // Invert vertical mouse aim, matching Duke Nukem 3D's MouseAimingFlipped.
+    // Only has an effect when novert is 0.
+    //
+
+    CONFIG_VARIABLE_INT(mouseflip),
+
+    //!
     // Sound output sample rate, in Hz.  Typical values to use are
     // 11025, 22050, 44100 and 48000.
     //

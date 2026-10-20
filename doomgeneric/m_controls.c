@@ -36,6 +36,12 @@ int key_up = 'w';
 int key_down = 's';
 int key_strafeleft = 'a';
 int key_straferight = 'd';
+
+// Settings borrowed from Duke Nukem 3D's user-defs: a configurable crosshair
+// (ud.crosshair), always-run (ud.auto_run) and inverted aim (ud.mouseflip).
+int crosshair = 0;
+int auto_run = 0;
+int mouseflip = 0;
 int key_fire = KEY_FIRE;
 int key_use = KEY_USE;
 int key_strafe = KEY_RALT;
@@ -253,6 +259,9 @@ void M_BindBaseControls(void)
     M_BindVariable("key_strafe",         &key_strafe);
     M_BindVariable("key_speed",          &key_speed);
     M_BindVariable("dpt_input_version",  &dpt_input_version);
+    M_BindVariable("crosshair",          &crosshair);
+    M_BindVariable("auto_run",           &auto_run);
+    M_BindVariable("mouseflip",          &mouseflip);
 
     M_BindVariable("mouseb_fire",        &mousebfire);
     M_BindVariable("mouseb_strafe",      &mousebstrafe);

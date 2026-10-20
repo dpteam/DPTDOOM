@@ -191,6 +191,11 @@ void M_ChangeSensitivity(int choice);
 void M_ChangeMouseAccel(int choice);
 void M_ChangeMouseVert(int choice);
 void M_ChangeMouseGrab(int choice);
+void M_ChangeMouseFlip(int choice);
+void M_ChangeCrosshair(int choice);
+void M_ChangeAutoRun(int choice);
+void M_Controls(int choice);
+void M_DrawControls(void);
 void M_SfxVol(int choice);
 void M_MusicVol(int choice);
 void M_ChangeDetail(int choice);
@@ -341,13 +346,24 @@ enum
     detail,
     scrnsize,
     option_empty1,
-    mousesens,
-    mouseaccel,
-    mousevert,
-    mousegrab,
+    opt_controls,
     soundvol,
     opt_end
 } options_e;
+
+// Controls submenu. Everything input-related lives here so the Options screen
+// stays short: thirteen entries on one screen would run into the status bar.
+enum
+{
+    ctl_sens,
+    ctl_accel,
+    ctl_vert,
+    ctl_flip,
+    ctl_grab,
+    ctl_crosshair,
+    ctl_autorun,
+    ctl_end
+} controls_e;
 
 // The options menu is drawn entirely in the small HUD font (the one the chat
 // and messages use) instead of the big IWAD menu patches, and adjustable values
@@ -374,11 +390,19 @@ menuitem_t OptionsMenu[]=
     {1,"",	M_ChangeDetail,'g'},
     {2,"",	M_SizeDisplay,'s'},
     {-1,"",0,'\0'},
+    {1,"",	M_Controls,'c'},
+    {1,"",	M_Sound,'s'}
+};
+
+menuitem_t ControlsMenu[]=
+{
     {2,"",	M_ChangeSensitivity,'m'},
     {1,"",	M_ChangeMouseAccel,'a'},
     {1,"",	M_ChangeMouseVert,'v'},
+    {1,"",	M_ChangeMouseFlip,'f'},
     {1,"",	M_ChangeMouseGrab,'r'},
-    {1,"",	M_Sound,'s'}
+    {1,"",	M_ChangeCrosshair,'h'},
+    {1,"",	M_ChangeAutoRun,'u'}
 };
 
 // The menu code indexes menuitems[] up to numitems (opt_end). If the enum and
@@ -386,12 +410,16 @@ menuitem_t OptionsMenu[]=
 // compile error instead of a crash at runtime.
 typedef char dpt_options_menu_size_check[
     (sizeof(OptionsMenu) / sizeof(OptionsMenu[0]) == opt_end) ? 1 : -1];
+typedef char dpt_controls_menu_size_check[
+    (sizeof(ControlsMenu) / sizeof(ControlsMenu[0]) == ctl_end) ? 1 : -1];
 
 // The status bar starts at y=168. Every entry must sit fully above it, otherwise
 // the menu overlaps the HUD (this happened with the old 16px patch layout, whose
 // tenth entry landed at y=181).
 typedef char dpt_options_menu_fits_screen[
     (OPTIONS_TOP + OPTIONS_LINEHEIGHT * (opt_end - 1) + 13 <= 168) ? 1 : -1];
+typedef char dpt_controls_menu_fits_screen[
+    (OPTIONS_TOP + OPTIONS_LINEHEIGHT * (ctl_end - 1) + 13 <= 168) ? 1 : -1];
 
 menu_t  OptionsDef =
 {
@@ -399,6 +427,16 @@ menu_t  OptionsDef =
     &MainDef,
     OptionsMenu,
     M_DrawOptions,
+    60,OPTIONS_TOP,
+    0
+};
+
+menu_t  ControlsDef =
+{
+    ctl_end,
+    &OptionsDef,
+    ControlsMenu,
+    M_DrawControls,
     60,OPTIONS_TOP,
     0
 };
@@ -1051,11 +1089,18 @@ static const char *optionsLabels[opt_end] = {
     "DETAIL",
     "SCREEN",
     "",             // separator
+    "CONTROLS",
+    "VOLUME"
+};
+
+static const char *controlsLabels[ctl_end] = {
     "SENSITIVITY",
     "ACCEL",
     "VERT MOUSE",
+    "FLIP AIM",
     "GRAB MOUSE",
-    "VOLUME"
+    "CROSSHAIR",
+    "AUTO RUN"
 };
 
 // Compact text bar, e.g. [#####.....] for 5 of 10. Small and unambiguous
@@ -1118,23 +1163,67 @@ void M_DrawOptions(void)
             DrawSmallBar(OptionsDef.x + OPTIONS_VALUE_X, liney, screenSize, 8);
             break;
 
-          case mousesens:
-            DrawSmallBar(OptionsDef.x + OPTIONS_VALUE_X, liney, mouseSensitivity, 9);
+          default:
+            break;
+        }
+    }
+}
+
+//
+// M_DrawControls
+//
+// Input settings, in the same small HUD font as Options. Kept as a submenu so
+// the Options screen does not grow into the status bar.
+//
+void M_DrawControls(void)
+{
+    int i;
+    int y = ControlsDef.y;
+
+    menu_items_drawn = true;
+
+    M_WriteText(ControlsDef.x, 6, "CONTROLS");
+
+    for (i = 0; i < ctl_end; ++i)
+    {
+        int liney = y + i * OPTIONS_LINEHEIGHT;
+        int vx = ControlsDef.x + OPTIONS_VALUE_X;
+
+        if (i == itemOn)
+            M_WriteText(ControlsDef.x - 10, liney, ">");
+
+        M_WriteText(ControlsDef.x, liney, (char *) controlsLabels[i]);
+
+        switch (i)
+        {
+          case ctl_sens:
+            DrawSmallBar(vx, liney, mouseSensitivity, 9);
             break;
 
-          case mouseaccel:
-            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney,
-                        mouse_acceleration > 1.0f ? "ON" : "OFF");
+          case ctl_accel:
+            M_WriteText(vx, liney, mouse_acceleration > 1.0f ? "ON" : "OFF");
             break;
 
-          case mousevert:
-            // novert means "ignore vertical motion", so the menu shows the
-            // player-facing meaning, not the internal flag.
-            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney, novert ? "OFF" : "ON");
+          case ctl_vert:
+            // novert means "ignore vertical motion", so show the player-facing
+            // meaning rather than the internal flag.
+            M_WriteText(vx, liney, novert ? "OFF" : "ON");
             break;
 
-          case mousegrab:
-            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney, grabmouse ? "ON" : "OFF");
+          case ctl_flip:
+            M_WriteText(vx, liney, mouseflip ? "ON" : "OFF");
+            break;
+
+          case ctl_grab:
+            M_WriteText(vx, liney, grabmouse ? "ON" : "OFF");
+            break;
+
+          case ctl_crosshair:
+            M_WriteText(vx, liney, crosshair ? "ON" : "OFF");
+            break;
+
+          case ctl_autorun:
+            M_WriteText(vx, liney, auto_run ? "ON" : "OFF");
             break;
 
           default:
@@ -1384,6 +1473,32 @@ void M_ChangeMouseGrab(int choice)
     // Apply immediately instead of waiting for the next tic so the pointer is
     // released while the user is still in the menu.
     I_ApplyMouseCapture();
+}
+
+void M_ChangeMouseFlip(int choice)
+{
+    (void) choice;
+    mouseflip = !mouseflip;
+}
+
+void M_ChangeCrosshair(int choice)
+{
+    (void) choice;
+    crosshair = !crosshair;
+}
+
+void M_ChangeAutoRun(int choice)
+{
+    (void) choice;
+    auto_run = !auto_run;
+}
+
+// Enter the Controls submenu. Borrowed from Duke3D's split between the top-level
+// options screen and the detailed controls screen.
+void M_Controls(int choice)
+{
+    (void) choice;
+    M_SetupNextMenu(&ControlsDef);
 }
 
 
