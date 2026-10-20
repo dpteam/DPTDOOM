@@ -28,6 +28,7 @@
 #include "doomstat.h"
 
 #include "deh_main.h"
+#include "dpt_genfloor.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -543,7 +544,23 @@ P_CrossSpecialLine
 	}
 	if (!ok && !(DPT_GenDoorSupported(line->special)
 		     && (line->special & 0x0080)))
-	    return;
+	{
+	    dpt_genfloor_t gen;
+	    if (!(DPT_GenFloorSupported(line->special)
+		  && DPT_GenFloorDecode(line->special, &gen) && gen.monsters))
+		return;
+	}
+    }
+
+    // Boom generalized floors with walk triggers (W1/WR).
+    if (DPT_GenFloorSupported(line->special) && (line->special & 0x0007) <= 1)
+    {
+	boolean once = !(line->special & 0x0001);
+
+	EV_DoGenFloor(line);
+	if (once)
+	    line->special = 0;
+	return;
     }
 
     // Boom generalized doors with walk triggers (W1/WR).
@@ -1001,7 +1018,27 @@ P_ShootSpecialLine
 		&& (line->special & 0x0080))
 	    ok = 1;
 	if (!ok)
+	{
+	    dpt_genfloor_t gen;
+	    if (!(DPT_GenFloorSupported(line->special)
+		  && DPT_GenFloorDecode(line->special, &gen) && gen.monsters))
+		return;
+	}
+    }
+
+    // Boom generalized floors with gun triggers (G1/GR).
+    if (DPT_GenFloorSupported(line->special))
+    {
+	int trigger = line->special & 0x0007;
+
+	if (trigger == 4 || trigger == 5)
+	{
+	    boolean once = (trigger == 4);
+
+	    if (EV_DoGenFloor(line) && once)
+		line->special = 0;
 	    return;
+	}
     }
 
     // Boom generalized doors with gun triggers (G1/GR).
@@ -1564,6 +1601,8 @@ void P_SpawnSpecials (void)
 	    if (special == 271 || special == 272)
 		continue;
 	    if (DPT_GenDoorSupported(special))
+		continue;
+	    if (DPT_GenFloorSupported(special))
 		continue;
 	    ++unsupported_occurrences;
 	    for (k = 0; k < unique; ++k)

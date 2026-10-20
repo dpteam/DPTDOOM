@@ -159,12 +159,20 @@ def main():
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" not in text, text
         # The rest of the generalized ranges and locked doors stay unsupported.
-        for name, special in (("genfloor", 0x6000), ("genceil", 0x4000),
+        # 0x6200 is a generalized floor with the ceiling target, which is not in
+        # the supported subset (0x6000 itself is: W1, down, highest neighbour).
+        for name, special in (("genfloor-target", 0x6200), ("genceil", 0x4000),
                               ("genlift", 0x3400), ("genstairs", 0x3000),
                               ("gencrusher", 0x2f80), ("genlocked", 0x3800)):
             overlay(iwad, root / (name + ".wad"), special)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and (" %d" % special) in text, text
+        # Supported generalized floors must not be reported.
+        for name, special in (("genfloor-w1", 0x6000), ("genfloor-s1", 0x6002),
+                              ("genfloor-g1", 0x6004)):
+            overlay(iwad, root / (name + ".wad"), special)
+            _, text = run(name, ["-file", str(root / (name + ".wad"))])
+            assert "Map compatibility:" not in text, text
 
         # The baseline overlay has no Boom specials and must stay quiet, even
         # though stock Doom II MAP01 does use vanilla types 102 and 103.

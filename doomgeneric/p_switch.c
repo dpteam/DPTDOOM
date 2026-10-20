@@ -22,6 +22,7 @@
 #include "i_system.h"
 #include "deh_main.h"
 #include "doomdef.h"
+#include "dpt_genfloor.h"
 #include "p_local.h"
 
 #include "g_game.h"
@@ -318,6 +319,24 @@ P_UseSpecialLine
 	    return false;
 	    break;
 	}
+	}
+    }
+
+    // Boom generalized floors with switch triggers (S1/SR).
+    if (DPT_GenFloorSupported(line->special))
+    {
+	int trigger = line->special & 0x0007;
+
+	if (trigger >= 2 && trigger <= 3)
+	{
+	    boolean once = !(line->special & 0x0001);
+
+	    if (EV_DoGenFloor(line) && once)
+	    {
+		line->special = 0;
+		P_ChangeSwitchTexture(line,0);
+	    }
+	    return true;
 	}
     }
 

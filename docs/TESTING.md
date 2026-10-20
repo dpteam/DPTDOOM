@@ -21,6 +21,8 @@ DeHackEd/BEX; patched saves используют `DPTDEH1` manifest (тот же
 разные/повторяемые framebuffer-пиксели и подсчёт затронутых секторов.
 `gendoor` — data-free проверка битового layout Boom generalized doors: границы
 диапазона, все 512 комбинаций trigger×speed×kind×delay, бит монстра.
+`genfloor` — то же для Boom generalized floors: 2048 комбинаций полей,
+абсолютные высоты, двойная роль бита model/monster и правила supported-подмножества.
 См. [MAPS.md](MAPS.md).
 Не запускать повторный build/test в одном build tree, пока предыдущий не завершён:
 Windows может удерживать EXE, а тесты — читать разные версии Python fixtures.

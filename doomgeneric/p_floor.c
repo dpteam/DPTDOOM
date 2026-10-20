@@ -20,6 +20,7 @@
 
 #include "z_zone.h"
 #include "doomdef.h"
+#include "dpt_genfloor.h"
 #include "p_local.h"
 
 #include "s_sound.h"
@@ -430,6 +431,84 @@ EV_DoFloor
 	    }
 	  default:
 	    break;
+	}
+    }
+    return rtn;
+}
+
+
+//
+// Boom generalized floor.
+//
+// Only the subset that maps exactly onto an existing floor behaviour is
+// accepted (see DPT_GenFloorSupported). Speed comes from the generalized bits
+// instead of the fixed FLOORSPEED used by the vanilla types, so the thinker is
+// built here rather than reusing EV_DoFloor.
+//
+int
+EV_DoGenFloor
+( line_t*	line )
+{
+    int			secnum;
+    int			rtn;
+    sector_t*		sec;
+    floormove_t*	floor;
+    dpt_genfloor_t	gen;
+
+    if (!DPT_GenFloorDecode(line->special, &gen)
+        || !DPT_GenFloorSupported(line->special))
+        return 0;
+
+    secnum = -1;
+    rtn = 0;
+    while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
+    {
+	sec = &sectors[secnum];
+
+	// ALREADY MOVING?  IF SO, KEEP GOING...
+	if (sec->specialdata)
+	    continue;
+
+	rtn = 1;
+	floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
+	memset(floor, 0, sizeof(*floor));
+	P_AddThinker (&floor->thinker);
+	sec->specialdata = floor;
+	floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
+	floor->sector = sec;
+	floor->speed = FLOORSPEED << gen.speed_shift;
+	floor->crush = false;
+
+	if (!gen.up)
+	{
+	    floor->direction = -1;
+	    if (gen.target == DPT_FLOOR_TARGET_LNF)
+	    {
+		floor->type = lowerFloorToLowest;
+		floor->floordestheight = P_FindLowestFloorSurrounding(sec);
+	    }
+	    else
+	    {
+		floor->type = lowerFloor;
+		floor->floordestheight = P_FindHighestFloorSurrounding(sec);
+	    }
+	}
+	else if (gen.target == DPT_FLOOR_TARGET_NNF)
+	{
+	    floor->direction = 1;
+	    floor->type = raiseFloorToNearest;
+	    floor->floordestheight = P_FindNextHighestFloor(sec,sec->floorheight);
+	}
+	else
+	{
+	    // LNC: rise to the lowest surrounding ceiling, optionally crushing.
+	    floor->direction = 1;
+	    floor->type = gen.crush ? raiseFloorCrush : raiseFloor;
+	    floor->crush = gen.crush;
+	    floor->floordestheight = P_FindLowestCeilingSurrounding(sec);
+	    if (floor->floordestheight > sec->ceilingheight)
+		floor->floordestheight = sec->ceilingheight;
+	    floor->floordestheight -= (8*FRACUNIT) * (gen.crush != 0);
 	}
     }
     return rtn;
