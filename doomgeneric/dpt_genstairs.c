@@ -44,7 +44,8 @@ boolean DPT_GenStairsSupported(int special)
     if (!DPT_GenStairsDecode(special, &stairs))
         return false;
 
-    // Push triggers would have to act on the sector behind the line; that path
-    // is not wired for stairs, so reject instead of leaving the line inert.
-    return stairs.trigger < 6;
+    // Every trigger, including push, is dispatched; push acts on the sector
+    // behind the line and starts the stair chain there.
+    (void) stairs;
+    return true;
 }

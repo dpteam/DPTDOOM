@@ -47,7 +47,8 @@ boolean DPT_GenLiftSupported(int special)
     if (lift.target != DPT_LIFT_TARGET_LNF)
         return false;
 
-    // Push triggers would have to act on the sector behind the line; that path
-    // is not wired for platforms.
-    return lift.trigger < 6;
+    // Every trigger, including push, is dispatched; push acts on the sector
+    // behind the line.
+    (void) lift;
+    return true;
 }

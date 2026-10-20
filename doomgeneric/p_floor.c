@@ -439,6 +439,64 @@ EV_DoFloor
 
 
 //
+// Start one generalized floor on a single sector. Returns 1 when a thinker was
+// created. Shared by the tag loop and the push-trigger path.
+//
+static int
+GenFloorOnSector
+( sector_t*		sec,
+  const dpt_genfloor_t*	gen )
+{
+    floormove_t*	floor;
+
+    // ALREADY MOVING?  IF SO, KEEP GOING...
+    if (sec->specialdata)
+	return 0;
+
+    floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
+    memset(floor, 0, sizeof(*floor));
+    P_AddThinker (&floor->thinker);
+    sec->specialdata = floor;
+    floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
+    floor->sector = sec;
+    floor->speed = FLOORSPEED << gen->speed_shift;
+    floor->crush = false;
+
+    if (!gen->up)
+    {
+	floor->direction = -1;
+	if (gen->target == DPT_FLOOR_TARGET_LNF)
+	{
+	    floor->type = lowerFloorToLowest;
+	    floor->floordestheight = P_FindLowestFloorSurrounding(sec);
+	}
+	else
+	{
+	    floor->type = lowerFloor;
+	    floor->floordestheight = P_FindHighestFloorSurrounding(sec);
+	}
+    }
+    else if (gen->target == DPT_FLOOR_TARGET_NNF)
+    {
+	floor->direction = 1;
+	floor->type = raiseFloorToNearest;
+	floor->floordestheight = P_FindNextHighestFloor(sec,sec->floorheight);
+    }
+    else
+    {
+	// LNC: rise to the lowest surrounding ceiling, optionally crushing.
+	floor->direction = 1;
+	floor->type = gen->crush ? raiseFloorCrush : raiseFloor;
+	floor->crush = gen->crush;
+	floor->floordestheight = P_FindLowestCeilingSurrounding(sec);
+	if (floor->floordestheight > sec->ceilingheight)
+	    floor->floordestheight = sec->ceilingheight;
+	floor->floordestheight -= (8*FRACUNIT) * (gen->crush != 0);
+    }
+    return 1;
+}
+
+//
 // Boom generalized floor.
 //
 // Only the subset that maps exactly onto an existing floor behaviour is
@@ -452,8 +510,6 @@ EV_DoGenFloor
 {
     int			secnum;
     int			rtn;
-    sector_t*		sec;
-    floormove_t*	floor;
     dpt_genfloor_t	gen;
 
     if (!DPT_GenFloorDecode(line->special, &gen)
@@ -463,56 +519,27 @@ EV_DoGenFloor
     secnum = -1;
     rtn = 0;
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
-    {
-	sec = &sectors[secnum];
-
-	// ALREADY MOVING?  IF SO, KEEP GOING...
-	if (sec->specialdata)
-	    continue;
-
-	rtn = 1;
-	floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
-	memset(floor, 0, sizeof(*floor));
-	P_AddThinker (&floor->thinker);
-	sec->specialdata = floor;
-	floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
-	floor->sector = sec;
-	floor->speed = FLOORSPEED << gen.speed_shift;
-	floor->crush = false;
-
-	if (!gen.up)
-	{
-	    floor->direction = -1;
-	    if (gen.target == DPT_FLOOR_TARGET_LNF)
-	    {
-		floor->type = lowerFloorToLowest;
-		floor->floordestheight = P_FindLowestFloorSurrounding(sec);
-	    }
-	    else
-	    {
-		floor->type = lowerFloor;
-		floor->floordestheight = P_FindHighestFloorSurrounding(sec);
-	    }
-	}
-	else if (gen.target == DPT_FLOOR_TARGET_NNF)
-	{
-	    floor->direction = 1;
-	    floor->type = raiseFloorToNearest;
-	    floor->floordestheight = P_FindNextHighestFloor(sec,sec->floorheight);
-	}
-	else
-	{
-	    // LNC: rise to the lowest surrounding ceiling, optionally crushing.
-	    floor->direction = 1;
-	    floor->type = gen.crush ? raiseFloorCrush : raiseFloor;
-	    floor->crush = gen.crush;
-	    floor->floordestheight = P_FindLowestCeilingSurrounding(sec);
-	    if (floor->floordestheight > sec->ceilingheight)
-		floor->floordestheight = sec->ceilingheight;
-	    floor->floordestheight -= (8*FRACUNIT) * (gen.crush != 0);
-	}
-    }
+	if (GenFloorOnSector(&sectors[secnum], &gen))
+	    rtn = 1;
     return rtn;
+}
+
+//
+// Push-trigger entry point: BOOM treats push as a switch with a zero tag, so the
+// generalized floor applies to the sector behind the line instead of by tag.
+//
+int
+EV_DoGenFloorSector
+( sector_t*	sec,
+  int		special )
+{
+    dpt_genfloor_t	gen;
+
+    if (!sec
+        || !DPT_GenFloorDecode(special, &gen)
+        || !DPT_GenFloorSupported(special))
+        return 0;
+    return GenFloorOnSector(sec, &gen);
 }
 
 
@@ -526,19 +553,16 @@ EV_DoGenFloor
 // texture rule taken from the generalized bits. The vanilla builder only goes up
 // with a fixed 8/16 step, so it cannot be reused directly.
 //
-int
-EV_DoGenStairs
-( line_t*	line )
+static int
+GenStairsFromSector
+( sector_t*		sec,
+  const dpt_genstairs_t*	gen )
 {
     int			secnum;
     int			i;
     int			newsecnum;
     int			texture;
     int			ok;
-    int			rtn;
-    dpt_genstairs_t	gen;
-
-    sector_t*		sec;
     sector_t*		tsec;
     floormove_t*	floor;
 
@@ -546,85 +570,112 @@ EV_DoGenStairs
     fixed_t		speed;
     fixed_t		height;
 
+    // ALREADY MOVING?  IF SO, KEEP GOING...
+    if (sec->specialdata)
+	return 0;
+
+    stairsize = gen->step * FRACUNIT;
+    speed = (FRACUNIT / 8) * gen->speed_eighths;
+    secnum = sec - sectors;
+
+    floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
+    memset(floor, 0, sizeof(*floor));
+    P_AddThinker (&floor->thinker);
+    sec->specialdata = floor;
+    floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
+    floor->direction = gen->up ? 1 : -1;
+    floor->sector = sec;
+    floor->speed = speed;
+    height = gen->up ? sec->floorheight + stairsize
+		     : sec->floorheight - stairsize;
+    floor->floordestheight = height;
+
+    texture = sec->floorpic;
+
+    // Find next sector to raise (or lower):
+    // 1.	Find 2-sided line with same sector side[0]
+    // 2.	Other side is the next sector to move
+    do
+    {
+	ok = 0;
+	for (i = 0;i < sec->linecount;i++)
+	{
+	    if ( !((sec->lines[i])->flags & ML_TWOSIDED) )
+		continue;
+
+	    tsec = (sec->lines[i])->frontsector;
+	    newsecnum = tsec-sectors;
+
+	    if (secnum != newsecnum)
+		continue;
+
+	    tsec = (sec->lines[i])->backsector;
+	    newsecnum = tsec - sectors;
+
+	    if (!gen->ignore_texture && tsec->floorpic != texture)
+		continue;
+
+	    height += gen->up ? stairsize : -stairsize;
+
+	    if (tsec->specialdata)
+		continue;
+
+	    sec = tsec;
+	    secnum = newsecnum;
+	    floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
+	    memset(floor, 0, sizeof(*floor));
+
+	    P_AddThinker (&floor->thinker);
+
+	    sec->specialdata = floor;
+	    floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
+	    floor->direction = gen->up ? 1 : -1;
+	    floor->sector = sec;
+	    floor->speed = speed;
+	    floor->floordestheight = height;
+	    ok = 1;
+	    break;
+	}
+    } while(ok);
+    return 1;
+}
+
+int
+EV_DoGenStairs
+( line_t*	line )
+{
+    int			secnum;
+    int			rtn;
+    dpt_genstairs_t	gen;
+
     if (!DPT_GenStairsDecode(line->special, &gen)
         || !DPT_GenStairsSupported(line->special))
         return 0;
 
-    stairsize = gen.step * FRACUNIT;
-    speed = (FRACUNIT / 8) * gen.speed_eighths;
-
     secnum = -1;
     rtn = 0;
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
-    {
-	sec = &sectors[secnum];
-
-	// ALREADY MOVING?  IF SO, KEEP GOING...
-	if (sec->specialdata)
-	    continue;
-
-	rtn = 1;
-	floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
-	memset(floor, 0, sizeof(*floor));
-	P_AddThinker (&floor->thinker);
-	sec->specialdata = floor;
-	floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
-	floor->direction = gen.up ? 1 : -1;
-	floor->sector = sec;
-	floor->speed = speed;
-	height = gen.up ? sec->floorheight + stairsize
-			: sec->floorheight - stairsize;
-	floor->floordestheight = height;
-
-	texture = sec->floorpic;
-
-	// Find next sector to raise (or lower):
-	// 1.	Find 2-sided line with same sector side[0]
-	// 2.	Other side is the next sector to move
-	do
-	{
-	    ok = 0;
-	    for (i = 0;i < sec->linecount;i++)
-	    {
-		if ( !((sec->lines[i])->flags & ML_TWOSIDED) )
-		    continue;
-
-		tsec = (sec->lines[i])->frontsector;
-		newsecnum = tsec-sectors;
-
-		if (secnum != newsecnum)
-		    continue;
-
-		tsec = (sec->lines[i])->backsector;
-		newsecnum = tsec - sectors;
-
-		if (!gen.ignore_texture && tsec->floorpic != texture)
-		    continue;
-
-		height += gen.up ? stairsize : -stairsize;
-
-		if (tsec->specialdata)
-		    continue;
-
-		sec = tsec;
-		secnum = newsecnum;
-		floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
-		memset(floor, 0, sizeof(*floor));
-
-		P_AddThinker (&floor->thinker);
-
-		sec->specialdata = floor;
-		floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
-		floor->direction = gen.up ? 1 : -1;
-		floor->sector = sec;
-		floor->speed = speed;
-		floor->floordestheight = height;
-		ok = 1;
-		break;
-	    }
-	} while(ok);
-    }
+	if (GenStairsFromSector(&sectors[secnum], &gen))
+	    rtn = 1;
     return rtn;
+}
+
+//
+// Push-trigger entry point: the stair chain starts at the sector behind the
+// line. BOOM has no tag for push, so the chain simply begins there.
+//
+int
+EV_DoGenStairsSector
+( sector_t*	sec,
+  int		special )
+{
+    dpt_genstairs_t	gen;
+
+    if (!sec
+        || !DPT_GenStairsDecode(special, &gen)
+        || !DPT_GenStairsSupported(special))
+        return 0;
+    return GenStairsFromSector(sec, &gen);
 }
 
 

@@ -54,15 +54,16 @@ int main(void)
     REQUIRE(DPT_GenCrusherDecode(0x2fd8, &crusher));       // turbo + silent
     REQUIRE(crusher.speed_shift == 3 && crusher.silent);
 
-    // Every trigger class except push is supported.
+    // Every trigger class, including push, is supported. Push acts on the
+    // sector behind the line rather than by tag.
     REQUIRE(DPT_GenCrusherSupported(0x2f80));       // W1
     REQUIRE(DPT_GenCrusherSupported(0x2f81));       // WR
     REQUIRE(DPT_GenCrusherSupported(0x2f82));       // S1
     REQUIRE(DPT_GenCrusherSupported(0x2f83));       // SR
     REQUIRE(DPT_GenCrusherSupported(0x2f84));       // G1
     REQUIRE(DPT_GenCrusherSupported(0x2f85));       // GR
-    REQUIRE(!DPT_GenCrusherSupported(0x2f86));      // P1: no back-sector path
-    REQUIRE(!DPT_GenCrusherSupported(0x2f87));      // PR
+    REQUIRE(DPT_GenCrusherSupported(0x2f86));       // P1
+    REQUIRE(DPT_GenCrusherSupported(0x2f87));       // PR
     REQUIRE(!DPT_GenCrusherSupported(0x3000));      // not a crusher
 
     puts("Boom generalized crushers: range bounds, 128 field combinations and "

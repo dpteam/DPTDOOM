@@ -73,10 +73,6 @@ boolean DPT_GenFloorSupported(int special)
         return false;
     if (floor.crush && !floor.up)
         return false;
-    // Push triggers would have to act on the sector behind the line; that path
-    // is not wired for floors, so reject rather than leave the line inert.
-    if (floor.trigger >= 6)
-        return false;
 
     if (!floor.up)
         return floor.target == DPT_FLOOR_TARGET_HNF

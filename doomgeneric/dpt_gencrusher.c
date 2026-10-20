@@ -33,7 +33,8 @@ boolean DPT_GenCrusherSupported(int special)
     if (!DPT_GenCrusherDecode(special, &crusher))
         return false;
 
-    // Push triggers would have to act on the sector behind the line; that path
-    // is not wired for ceilings, so reject instead of leaving the line inert.
-    return crusher.trigger < 6;
+    // Every trigger, including push, is dispatched; push acts on the sector
+    // behind the line.
+    (void) crusher;
+    return true;
 }

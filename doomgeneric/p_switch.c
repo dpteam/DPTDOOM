@@ -371,8 +371,18 @@ P_UseSpecialLine
 		done = EV_DoGenLockedDoorSector(back, line->special);
 	    else if (DPT_GenDoorSupported(line->special))
 		done = EV_DoGenDoorSector(back, line->special);
+	    else if (DPT_GenFloorSupported(line->special))
+		done = EV_DoGenFloorSector(back, line->special);
+	    else if (DPT_GenCeilingSupported(line->special))
+		done = EV_DoGenCeilingSector(back, line->special);
+	    else if (DPT_GenCrusherSupported(line->special))
+		done = EV_DoGenCrusherSector(back, line->special);
+	    else if (DPT_GenStairsSupported(line->special))
+		done = EV_DoGenStairsSector(back, line->special);
+	    else if (DPT_GenLiftSupported(line->special))
+		done = EV_DoGenLiftSector(back, line->special, line->tag);
 	    else
-		done = 0;   // other families have no back-sector path
+		done = 0;
 	    if (done && once)
 		line->special = 0;
 	    return true;

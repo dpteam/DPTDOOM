@@ -240,6 +240,52 @@ EV_DoCeiling
 
 
 //
+// Start one generalized ceiling on a single sector. Returns 1 when a thinker was
+// created. Shared by the tag loop and the push-trigger path.
+//
+static int
+GenCeilingOnSector
+( sector_t*		sec,
+  const dpt_genceiling_t*	gen )
+{
+    ceiling_t*		ceiling;
+
+    if (sec->specialdata)
+	return 0;
+
+    ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVSPEC, 0);
+    memset(ceiling, 0, sizeof(*ceiling));
+    P_AddThinker (&ceiling->thinker);
+    sec->specialdata = ceiling;
+    ceiling->thinker.function.acp1 = (actionf_p1)T_MoveCeiling;
+    ceiling->sector = sec;
+    ceiling->crush = false;
+    ceiling->speed = CEILSPEED << gen->speed_shift;
+
+    if (gen->up)
+    {
+	// Raise to the highest surrounding ceiling. Vanilla has no separate
+	// "next neighbour" ceiling type, which is why only HnC is supported.
+	ceiling->type = raiseToHighest;
+	ceiling->topheight = P_FindHighestCeilingSurrounding(sec);
+	ceiling->direction = 1;
+    }
+    else
+    {
+	ceiling->type = gen->crush ? lowerAndCrush : lowerToFloor;
+	ceiling->crush = gen->crush;
+	ceiling->bottomheight = sec->floorheight;
+	if (gen->crush)
+	    ceiling->bottomheight += 8*FRACUNIT;
+	ceiling->direction = -1;
+    }
+
+    ceiling->tag = sec->tag;
+    P_AddActiveCeiling(ceiling);
+    return 1;
+}
+
+//
 // Boom generalized ceiling.
 //
 // Only the supported subset is accepted (see DPT_GenCeilingSupported): raise to
@@ -252,8 +298,6 @@ EV_DoGenCeiling
 {
     int			secnum;
     int			rtn;
-    sector_t*		sec;
-    ceiling_t*		ceiling;
     dpt_genceiling_t	gen;
 
     if (!DPT_GenCeilingDecode(line->special, &gen)
@@ -263,45 +307,60 @@ EV_DoGenCeiling
     secnum = -1;
     rtn = 0;
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
-    {
-	sec = &sectors[secnum];
-	if (sec->specialdata)
-	    continue;
-
-	rtn = 1;
-	ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVSPEC, 0);
-	memset(ceiling, 0, sizeof(*ceiling));
-	P_AddThinker (&ceiling->thinker);
-	sec->specialdata = ceiling;
-	ceiling->thinker.function.acp1 = (actionf_p1)T_MoveCeiling;
-	ceiling->sector = sec;
-	ceiling->crush = false;
-	ceiling->speed = CEILSPEED << gen.speed_shift;
-
-	if (gen.up)
-	{
-	    // Raise to the highest surrounding ceiling. Vanilla has no separate
-	    // "next neighbour" ceiling type, which is why only HnC is supported.
-	    ceiling->type = raiseToHighest;
-	    ceiling->topheight = P_FindHighestCeilingSurrounding(sec);
-	    ceiling->direction = 1;
-	}
-	else
-	{
-	    ceiling->type = gen.crush ? lowerAndCrush : lowerToFloor;
-	    ceiling->crush = gen.crush;
-	    ceiling->bottomheight = sec->floorheight;
-	    if (gen.crush)
-		ceiling->bottomheight += 8*FRACUNIT;
-	    ceiling->direction = -1;
-	}
-
-	ceiling->tag = sec->tag;
-	P_AddActiveCeiling(ceiling);
-    }
+	if (GenCeilingOnSector(&sectors[secnum], &gen))
+	    rtn = 1;
     return rtn;
 }
 
+//
+// Push-trigger entry point: the generalized ceiling applies to the sector behind
+// the line, because BOOM treats push as a switch with a zero tag.
+//
+int
+EV_DoGenCeilingSector
+( sector_t*	sec,
+  int		special )
+{
+    dpt_genceiling_t	gen;
+
+    if (!sec
+        || !DPT_GenCeilingDecode(special, &gen)
+        || !DPT_GenCeilingSupported(special))
+        return 0;
+    return GenCeilingOnSector(sec, &gen);
+}
+
+
+//
+// Start one generalized crusher on a single sector.
+//
+static int
+GenCrusherOnSector
+( sector_t*		sec,
+  const dpt_gencrusher_t*	gen )
+{
+    ceiling_t*		ceiling;
+
+    if (sec->specialdata)
+	return 0;
+
+    ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVSPEC, 0);
+    memset(ceiling, 0, sizeof(*ceiling));
+    P_AddThinker (&ceiling->thinker);
+    sec->specialdata = ceiling;
+    ceiling->thinker.function.acp1 = (actionf_p1)T_MoveCeiling;
+    ceiling->sector = sec;
+    ceiling->crush = true;
+    ceiling->type = gen->silent ? silentCrushAndRaise : crushAndRaise;
+    ceiling->topheight = sec->ceilingheight;
+    ceiling->bottomheight = sec->floorheight + (8*FRACUNIT);
+    ceiling->direction = -1;
+    ceiling->speed = CEILSPEED << gen->speed_shift;
+    ceiling->basespeed = ceiling->speed;
+    ceiling->tag = sec->tag;
+    P_AddActiveCeiling(ceiling);
+    return 1;
+}
 
 //
 // Boom generalized crusher.
@@ -316,8 +375,6 @@ EV_DoGenCrusher
 {
     int			secnum;
     int			rtn;
-    sector_t*		sec;
-    ceiling_t*		ceiling;
     dpt_gencrusher_t	gen;
 
     if (!DPT_GenCrusherDecode(line->special, &gen)
@@ -327,29 +384,26 @@ EV_DoGenCrusher
     secnum = -1;
     rtn = 0;
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
-    {
-	sec = &sectors[secnum];
-	if (sec->specialdata)
-	    continue;
-
-	rtn = 1;
-	ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVSPEC, 0);
-	memset(ceiling, 0, sizeof(*ceiling));
-	P_AddThinker (&ceiling->thinker);
-	sec->specialdata = ceiling;
-	ceiling->thinker.function.acp1 = (actionf_p1)T_MoveCeiling;
-	ceiling->sector = sec;
-	ceiling->crush = true;
-	ceiling->type = gen.silent ? silentCrushAndRaise : crushAndRaise;
-	ceiling->topheight = sec->ceilingheight;
-	ceiling->bottomheight = sec->floorheight + (8*FRACUNIT);
-	ceiling->direction = -1;
-	ceiling->speed = CEILSPEED << gen.speed_shift;
-	ceiling->basespeed = ceiling->speed;
-	ceiling->tag = sec->tag;
-	P_AddActiveCeiling(ceiling);
-    }
+	if (GenCrusherOnSector(&sectors[secnum], &gen))
+	    rtn = 1;
     return rtn;
+}
+
+//
+// Push-trigger entry point for generalized crushers.
+//
+int
+EV_DoGenCrusherSector
+( sector_t*	sec,
+  int		special )
+{
+    dpt_gencrusher_t	gen;
+
+    if (!sec
+        || !DPT_GenCrusherDecode(special, &gen)
+        || !DPT_GenCrusherSupported(special))
+        return 0;
+    return GenCrusherOnSector(sec, &gen);
 }
 
 

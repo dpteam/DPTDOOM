@@ -53,7 +53,8 @@ int main(void)
     REQUIRE(lift.trigger == 3 && lift.speed_eighths == 64);
     REQUIRE(lift.delay_tics == 80 && lift.target == DPT_LIFT_TARGET_PERPETUAL);
 
-    // Supported: only target 1 (lowest neighbour floor) and no push trigger.
+    // Supported: only target 1 (lowest neighbour floor), but every trigger class
+    // including push.
     REQUIRE(DPT_GenLiftSupported(0x3400));                    // W1 LNF
     REQUIRE(DPT_GenLiftSupported(0x3401));                    // WR
     REQUIRE(DPT_GenLiftSupported(0x3402));                    // S1
@@ -66,8 +67,8 @@ int main(void)
     REQUIRE(!DPT_GenLiftSupported(0x3400 | (1 << 8)));        // next lowest floor
     REQUIRE(!DPT_GenLiftSupported(0x3400 | (2 << 8)));        // lowest ceiling
     REQUIRE(!DPT_GenLiftSupported(0x3400 | (3 << 8)));        // perpetual
-    REQUIRE(!DPT_GenLiftSupported(0x3406));                   // P1
-    REQUIRE(!DPT_GenLiftSupported(0x3407));                   // PR
+    REQUIRE(DPT_GenLiftSupported(0x3406));                    // P1
+    REQUIRE(DPT_GenLiftSupported(0x3407));                    // PR
     REQUIRE(!DPT_GenLiftSupported(0x3000));                   // not a lift
 
     puts("Boom generalized lifts: range bounds, 1024 field combinations, "

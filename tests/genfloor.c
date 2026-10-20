@@ -90,7 +90,8 @@ int main(void)
     REQUIRE(floor.absolute_height == 32 && floor.target == 0);
 
     // Supported subset: exact neighbour mappings only, no texture change, no
-    // absolute height, crush only while rising, no push triggers.
+    // absolute height, crush only while rising. Push triggers are supported too:
+    // they act on the sector behind the line.
     REQUIRE(DPT_GenFloorSupported(0x6000));                  // W1 down HnF
     REQUIRE(DPT_GenFloorSupported(0x6000 | (1 << 7)));       // W1 down LnF
     REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0040 | (2 << 7))); // up NnF
@@ -104,7 +105,8 @@ int main(void)
     REQUIRE(!DPT_GenFloorSupported(0x6000 | 0x1000));        // crush while down
     REQUIRE(!DPT_GenFloorSupported(0x6000 | (3 << 7)));      // LnC but down
     REQUIRE(!DPT_GenFloorSupported(0x6000 | 0x0040 | (1 << 7))); // LnF but up
-    REQUIRE(!DPT_GenFloorSupported(0x6000 | 0x0006));        // push trigger
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0006));         // push trigger
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0007));         // push retrigger
     REQUIRE(!DPT_GenFloorSupported(0x5fff));                 // not a floor
 
     puts("Boom generalized floors: range bounds, 2048 field combinations, "

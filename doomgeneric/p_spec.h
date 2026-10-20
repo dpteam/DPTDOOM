@@ -378,6 +378,14 @@ int EV_DoGenCrusher (line_t* line);
 int EV_DoGenStairs (line_t* line);
 int EV_DoGenLift (line_t* line);
 
+// Push-trigger (P1/PR) entry points: BOOM applies these to the sector behind the
+// line instead of by tag.
+int EV_DoGenFloorSector (sector_t* sec, int special);
+int EV_DoGenCeilingSector (sector_t* sec, int special);
+int EV_DoGenCrusherSector (sector_t* sec, int special);
+int EV_DoGenStairsSector (sector_t* sec, int special);
+int EV_DoGenLiftSector (sector_t* sec, int special, int tag);
+
 // Boom generalized locked doors (0x3800..0x3bff).
 boolean DPT_GenLockedDoorKeyOK (int special, mobj_t* thing);
 int EV_DoGenLockedDoor (line_t* line);

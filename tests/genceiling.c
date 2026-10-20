@@ -80,7 +80,8 @@ int main(void)
     REQUIRE(ceiling.absolute_height == 24 && ceiling.target == 0);
 
     // Supported subset: raise to highest neighbour ceiling, or lower to floor
-    // with optional crush. Nothing else, and no push triggers.
+    // with optional crush. Push triggers are supported and act on the sector
+    // behind the line.
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040));            // up HnC
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7)));          // down F
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x1000)); // down F crush
@@ -95,7 +96,8 @@ int main(void)
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0400));           // texture change
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0040 | 0x1000));  // crush while up
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0040 | (4 << 7))); // up F
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0006));           // push trigger
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0006)); // push trigger
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0007)); // push retrigger
     REQUIRE(!DPT_GenCeilingSupported(0x6000));                    // not a ceiling
 
     puts("Boom generalized ceilings: range bounds, 2048 field combinations, "

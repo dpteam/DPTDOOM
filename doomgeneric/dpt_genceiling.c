@@ -59,8 +59,6 @@ boolean DPT_GenCeilingSupported(int special)
     // any texture/model change are reported instead of approximated.
     if (ceiling.change != 0 || ceiling.absolute_height != 0)
         return false;
-    if (ceiling.trigger >= 6)
-        return false;
 
     if (ceiling.up)
         return ceiling.target == DPT_CEILING_TARGET_HNC && !ceiling.crush;

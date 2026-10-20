@@ -64,15 +64,16 @@ int main(void)
     REQUIRE(DPT_GenStairsDecode(0x3000 | 3 | (3 << 3) | (2 << 6) | (1 << 8), &stairs));
     REQUIRE(stairs.trigger == 3 && stairs.speed_eighths == 32 && stairs.step == 16);
 
-    // Trigger support: every class except push.
+    // Trigger support: every class, including push. A push stair starts its
+    // chain at the sector behind the line.
     REQUIRE(DPT_GenStairsSupported(0x3000));       // W1
     REQUIRE(DPT_GenStairsSupported(0x3001));       // WR
     REQUIRE(DPT_GenStairsSupported(0x3002));       // S1
     REQUIRE(DPT_GenStairsSupported(0x3003));       // SR
     REQUIRE(DPT_GenStairsSupported(0x3004));       // G1
     REQUIRE(DPT_GenStairsSupported(0x3005));       // GR
-    REQUIRE(!DPT_GenStairsSupported(0x3006));      // P1: no back-sector path
-    REQUIRE(!DPT_GenStairsSupported(0x3007));      // PR
+    REQUIRE(DPT_GenStairsSupported(0x3006));       // P1
+    REQUIRE(DPT_GenStairsSupported(0x3007));       // PR
     REQUIRE(!DPT_GenStairsSupported(0x3400));      // not stairs
 
     puts("Boom generalized stairs: range bounds, 512 field combinations, "
