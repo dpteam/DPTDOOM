@@ -16,6 +16,10 @@ DeHackEd/BEX; patched saves используют `DPTDEH1` manifest (тот же
 `Unknown 1/2` допустимы только на weapon states и проверяются по точным psprite
 `sx/sy`. `Monsters Infight` проверяется по patch report/digest, боевой сценарий
 двух видов монстров автоматически пока не воспроизводится.
+
+`map-sky` — Boom/MBF sky transfer (linedef 271/272): временные MAP01 overlays,
+разные/повторяемые framebuffer-пиксели и подсчёт затронутых секторов.
+См. [MAPS.md](MAPS.md).
 Не запускать повторный build/test в одном build tree, пока предыдущий не завершён:
 Windows может удерживать EXE, а тесты — читать разные версии Python fixtures.
 

@@ -160,6 +160,10 @@ ctest --preset windows-headless
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
   Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
+- Boom/MBF maps: реализован только sky transfer (linedef 271/272, per-sector
+  `sector->sky` вне savegame, visplane учитывает текстуру). Остальные Boom/MBF
+  specials не реализованы и молча игнорируются; не выдавать загрузку карты за
+  совместимость. Детали/тест — `docs/MAPS.md`, `map-sky`.
 - DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Text + Weapon frames + Thing numeric/flags/states/sounds + Frame graph/visual/psprite** classic
   v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.

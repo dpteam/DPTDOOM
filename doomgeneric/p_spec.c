@@ -1460,6 +1460,38 @@ void P_SpawnSpecials (void)
     {
 	switch(lines[i].special)
 	{
+	  case 271:	// MBF: transfer sky texture to all sectors
+	  case 272:	// MBF: transfer sky texture to sectors with matching tag
+	  {
+	    line_t *line = &lines[i];
+	    int texture = 0;
+	    int secnum;
+
+	    if (line->sidenum[0] >= 0)
+	    {
+		side_t *side = &sides[line->sidenum[0]];
+		texture = side->toptexture ? side->toptexture
+					  : side->bottomtexture;
+	    }
+	    // MBF ignores a transfer without a usable texture. Sidedef texture
+	    // indices were already resolved and validated by P_LoadSideDefs, so a
+	    // positive index here is always a real texture.
+	    if (texture <= 0)
+		break;
+
+	    if (line->special == 271)
+	    {
+		for (secnum = 0; secnum < numsectors; ++secnum)
+		    sectors[secnum].sky = texture;
+	    }
+	    else
+	    {
+		for (secnum = 0; secnum < numsectors; ++secnum)
+		    if (sectors[secnum].tag == line->tag)
+			sectors[secnum].sky = texture;
+	    }
+	    break;
+	  }
 	  case 48:
             if (numlinespecials >= MAXLINEANIMS)
             {

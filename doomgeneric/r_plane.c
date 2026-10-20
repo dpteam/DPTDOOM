@@ -211,7 +211,8 @@ visplane_t*
 R_FindPlane
 ( fixed_t	height,
   int		picnum,
-  int		lightlevel )
+  int		lightlevel,
+  int		sky )
 {
     visplane_t*	check;
 	
@@ -225,7 +226,8 @@ R_FindPlane
     {
 	if (height == check->height
 	    && picnum == check->picnum
-	    && lightlevel == check->lightlevel)
+	    && lightlevel == check->lightlevel
+	    && (picnum != skyflatnum || sky == check->sky))
 	{
 	    break;
 	}
@@ -243,6 +245,7 @@ R_FindPlane
     check->height = height;
     check->picnum = picnum;
     check->lightlevel = lightlevel;
+    check->sky = sky;
     check->minx = SCREENWIDTH;
     check->maxx = -1;
     
@@ -389,6 +392,7 @@ void R_DrawPlanes (void)
 	// sky flat
 	if (pl->picnum == skyflatnum)
 	{
+	    int skytex = pl->sky ? pl->sky : skytexture;
 	    dc_iscale = pspriteiscale>>detailshift;
 	    
 	    // Sky is allways drawn full bright,
@@ -406,7 +410,7 @@ void R_DrawPlanes (void)
 		{
 		    angle = (viewangle + xtoviewangle[x])>>ANGLETOSKYSHIFT;
 		    dc_x = x;
-		    dc_source = R_GetColumn(skytexture, angle);
+		    dc_source = R_GetColumn(skytex, angle);
 		    colfunc ();
 		}
 	    }

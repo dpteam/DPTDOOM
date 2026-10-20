@@ -104,6 +104,11 @@ typedef	struct
     short	special;
     short	tag;
 
+    // Boom/MBF sky transfer target. 0 = use the level-wide skytexture.
+    // Recomputed from map linedefs on every level load, so it is deliberately
+    // not part of the savegame archive.
+    int		sky;
+
     // 0 = untraversed, 1,2 = sndlines -1
     int		soundtraversed;
 
@@ -425,6 +430,9 @@ typedef struct
   fixed_t		height;
   int			picnum;
   int			lightlevel;
+  // Per-sector sky texture from Boom/MBF sky transfer; 0 means "use the
+  // level-wide skytexture". Skies with different textures must not merge.
+  int			sky;
   int			minx;
   int			maxx;
   

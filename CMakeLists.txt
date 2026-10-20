@@ -474,6 +474,10 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/state-smoke.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
         set_tests_properties(state-smoke PROPERTIES TIMEOUT 180)
+        add_test(NAME map-sky COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/map-sky.py"
+            --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+        set_tests_properties(map-sky PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
         if(DPTDOOM_NETWORK)
             add_test(NAME net-loopback COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/net-loopback.py"

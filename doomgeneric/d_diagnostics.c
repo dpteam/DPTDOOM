@@ -248,6 +248,15 @@ void D_DiagnosticsTic(void)
                 gamestate, consoleplayer + 1, leveltime, dpt_dmflags,
                 (unsigned int)playeringame[0], (unsigned int)playeringame[1], (unsigned int)paused,
                  p->mo ? p->mo->x : 0, p->mo ? p->mo->y : 0, p->health, p->ammo[am_clip]);
+            {
+                // Boom/MBF sky transfer state, derived from map linedefs.
+                int si,count=0,first=-1;
+                for (si=0;si<numsectors;++si)
+                    if (sectors[si].sky)
+                    {++count;if(first<0)first=si;}
+                printf("Map sky: count=%d first=%d:%d\n",
+                    count,first,first>=0?sectors[first].sky:0);
+            }
             if (DPT_DehLoadedCount())
             {
                 printf("Patch report: maxammo=%d,%d,%d,%d ammo=%d,%d,%d,%d perammo=%d,%d,%d,%d pistol-ammo=%d\n",
@@ -255,8 +264,7 @@ void D_DiagnosticsTic(void)
                     p->ammo[0],p->ammo[1],p->ammo[2],p->ammo[3],
                     clipammo[0],clipammo[1],clipammo[2],clipammo[3],(int)weaponinfo[wp_pistol].ammo);
                 printf("Patch text: armor=%s saved=%s msgon=%s\n",DPT_DehString(GOTARMOR),DPT_DehString(GGSAVED),DPT_DehString(MSGON));
-                printf("Patch misc: infight=%d par1=%d par32=%d\n",deh_species_infighting,cpars[0],cpars[31]);
-                if(p->psprites[ps_weapon].state)
+                printf("Patch misc: infight=%d par1=%d par32=%d\n",deh_species_infighting,cpars[0],cpars[31]);                if(p->psprites[ps_weapon].state)
                     printf("Patch weapon visual: sprite=%d frame=%d sx=%d sy=%d\n",
                         (int)p->psprites[ps_weapon].state->sprite,p->psprites[ps_weapon].state->frame,
                         p->psprites[ps_weapon].sx,p->psprites[ps_weapon].sy);
