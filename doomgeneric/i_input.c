@@ -33,6 +33,7 @@
 #include "i_scale.h"
 #include "m_argv.h"
 #include "m_config.h"
+#include "m_controls.h"
 #include "m_misc.h"
 #include "tables.h"
 #include "v_video.h"
@@ -46,6 +47,41 @@ int vanilla_keyboard_mapping = 1;
 // Is the shift key currently down?
 
 static int shiftdown = 0;
+
+// Mouse settings. grabmouse and novert were documented in m_config.c but
+// nothing was ever bound to them, so the settings silently did nothing. They
+// live here rather than in m_controls.c so the SDL input test can link this
+// module without pulling in the whole config system.
+// mouse_acceleration and mouse_threshold are also owned here (declared extern
+// in i_video.h) because the mouse-driven menu cursor in v_video.c reads them.
+int grabmouse = 1;
+// Without freelook there is no pitch to drive, so vertical motion would walk the
+// player forward/back. Off by default; set novert 0 for the classic behaviour.
+int novert = 1;
+float mouse_acceleration = 2.0f;
+int mouse_threshold = 10;
+
+// Chocolate Doom-style mouse acceleration: small movements stay 1:1 so aiming
+// is precise, anything above mouse_threshold is multiplied by
+// mouse_acceleration. Both come from the config file.
+static int AccelerateMouse(int val)
+{
+    if (val < 0)
+        return -AccelerateMouse(-val);
+    // A single SDL motion event can report a large delta (fast flick, or a
+    // pointer warp). Cap the input so the result stays inside ticcmd's range.
+    if (val > 1024)
+        val = 1024;
+    if (val > mouse_threshold && mouse_acceleration > 0.0f)
+    {
+        double accelerated = mouse_threshold
+                           + (val - mouse_threshold) * (double) mouse_acceleration;
+        if (accelerated > 256.0)
+            accelerated = 256.0;
+        return (int) accelerated;
+    }
+    return val;
+}
 
 // Lookup table for mapping AT keycodes to their doom keycode
 static const char at_to_doom[] =
@@ -330,15 +366,23 @@ void I_GetEvent(void)
     }
 
 
-                /*
-            case SDL_MOUSEMOTION:
-                event.type = ev_mouse;
-                event.data1 = mouse_button_state;
-                event.data2 = AccelerateMouse(sdlevent.motion.xrel);
-                event.data3 = -AccelerateMouse(sdlevent.motion.yrel);
-                D_PostEvent(&event);
-                break;
-                */
+    // Mouse motion and buttons. The engine consumes mousex/mousey once per tic
+    // in G_BuildTiccmd and then zeroes them, so posting one event per change is
+    // correct. DG_GetMouse reports only motion or a button change, never the
+    // steady state of a held button, so this loop always terminates.
+    {
+        int mdx, mdy;
+        unsigned int mbuttons;
+
+        while (DG_GetMouse(&mdx, &mdy, &mbuttons))
+        {
+            event.type = ev_mouse;
+            event.data1 = (int) mbuttons;
+            event.data2 = AccelerateMouse(mdx);
+            event.data3 = -AccelerateMouse(mdy);
+            D_PostEvent(&event);
+        }
+    }
 }
 
 void I_InitInput(void)

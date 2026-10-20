@@ -126,6 +126,11 @@ extern int mousebfire;
 extern int mousebstrafe;
 extern int mousebforward;
 
+// Mouse behaviour settings added for the mouse path (config keys grabmouse and
+// novert). mouse_acceleration/mouse_threshold are declared in i_video.h.
+extern int grabmouse;
+extern int novert;
+
 extern int mousebjump;
 
 extern int mousebstrafeleft;

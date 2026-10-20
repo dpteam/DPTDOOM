@@ -113,9 +113,10 @@ boolean screenvisible;
 // The mouse input values are input directly to the game, but when
 // the values exceed the value of mouse_threshold, they are multiplied
 // by mouse_acceleration to increase the speed.
-
-float mouse_acceleration = 2.0;
-int mouse_threshold = 10;
+//
+// These two are defined in i_input.c, which owns the mouse path; they are
+// declared extern in i_video.h because the mouse-driven menu cursor in
+// v_video.c reads them too.
 
 // Gamma correction level to use
 
@@ -307,6 +308,7 @@ void I_StartFrame (void)
 
 void I_StartTic (void)
 {
+	I_ApplyMouseCapture();
 	I_GetEvent();
 }
 
@@ -476,8 +478,27 @@ void I_GraphicsCheckCommandLine (void)
 {
 }
 
+// Mouse capture is decided by the engine (D_GrabMouseCallback) and applied by
+// the platform layer. It is re-evaluated every frame, so entering a menu,
+// pausing, starting a demo or losing focus releases the pointer immediately.
+static grabmouse_callback_t grab_mouse_callback;
+static int mouse_capture_active;
+
+void I_ApplyMouseCapture (void)
+{
+    int want = grab_mouse_callback ? grab_mouse_callback() != 0 : 0;
+
+    if (want == mouse_capture_active)
+        return;
+    mouse_capture_active = want;
+    DG_SetMouseCapture(want);
+}
+
 void I_SetGrabMouseCallback (grabmouse_callback_t func)
 {
+    grab_mouse_callback = func;
+    mouse_capture_active = 0;
+    DG_SetMouseCapture(0);
 }
 
 void I_EnableLoadingDisk(void)

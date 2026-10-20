@@ -366,6 +366,13 @@ void D_BindVariables(void)
 #endif
 
     M_BindVariable("mouse_sensitivity",      &mouseSensitivity);
+
+    // These four keys were documented in m_config.c but never bound, so the
+    // settings did nothing. Bind them now that the mouse path exists.
+    M_BindVariable("grabmouse",              &grabmouse);
+    M_BindVariable("novert",                 &novert);
+    M_BindVariable("mouse_acceleration",     &mouse_acceleration);
+    M_BindVariable("mouse_threshold",        &mouse_threshold);
     M_BindVariable("sfx_volume",             &sfxVolume);
     M_BindVariable("music_volume",           &musicVolume);
     M_BindVariable("show_messages",          &showMessages);
@@ -398,6 +405,12 @@ boolean D_GrabMouseCallback(void)
     // Drone players don't need mouse focus
 
     if (drone)
+        return false;
+
+    // grabmouse 0 means the user wants a visible, free pointer (for example to
+    // use window controls); never capture in that case.
+
+    if (!grabmouse)
         return false;
 
     // when menu is active or game is paused, release the mouse 

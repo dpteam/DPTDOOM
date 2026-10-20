@@ -240,3 +240,18 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
+// This backend does not deliver mouse input yet. The stubs keep the engine's
+// mouse path well defined (no motion, no buttons) instead of a missing symbol.
+int DG_GetMouse(int *dx, int *dy, unsigned int *buttons)
+{
+    (void)dx;
+    (void)dy;
+    (void)buttons;
+    return 0;
+}
+
+void DG_SetMouseCapture(int capture)
+{
+    (void)capture;
+}

@@ -160,6 +160,21 @@ void DG_SetWindowTitle(const char *title)
     (void)title;
 }
 
+// Headless has no pointer device; mouse input stays inert so the engine sees a
+// well-defined "nothing happened" instead of a missing symbol.
+int DG_GetMouse(int *dx, int *dy, unsigned int *buttons)
+{
+    (void)dx;
+    (void)dy;
+    (void)buttons;
+    return 0;
+}
+
+void DG_SetMouseCapture(int capture)
+{
+    (void)capture;
+}
+
 int main(int argc, char **argv)
 {
     // Suppress GUI error popups even if the caller forgets -nogui.

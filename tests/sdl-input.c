@@ -100,6 +100,95 @@ static void TestEngineQueue(void)
     Empty();
 }
 
+static void PushMouseMotion(int xrel, int yrel)
+{
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = SDL_MOUSEMOTION;
+    event.motion.xrel = xrel;
+    event.motion.yrel = yrel;
+    CHECK(SDL_PushEvent(&event) == 1);
+}
+
+static void PushMouseButton(Uint32 type, Uint8 button)
+{
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = type;
+    event.button.button = button;
+    CHECK(SDL_PushEvent(&event) == 1);
+}
+
+// Drain DG_GetKey so mouse events get a chance to be collected by its poll loop.
+static void PumpKeys(void)
+{
+    int pressed, i;
+    unsigned char key;
+    for (i = 0; i < 4; ++i) DG_GetKey(&pressed, &key);
+}
+
+static void TestMouse(void)
+{
+    int dx, dy, got, i;
+    unsigned int buttons;
+
+    // Uncaptured motion must not turn the player.
+    DG_SetMouseCapture(0);
+    PushMouseMotion(30, 20);
+    PumpKeys();
+    CHECK(!DG_GetMouse(&dx, &dy, &buttons));
+
+    // Captured motion is accumulated and reported once.
+    DG_SetMouseCapture(1);
+    PushMouseMotion(30, 20);
+    PushMouseMotion(-5, 7);
+    PumpKeys();
+    got = DG_GetMouse(&dx, &dy, &buttons);
+    CHECK(got);
+    CHECK(dx == 25 && dy == 27);
+    CHECK(!DG_GetMouse(&dx, &dy, &buttons));
+
+    // A held button must be reported exactly once, not on every call: an
+    // always-dirty flag would spin the engine's drain loop forever.
+    PushMouseButton(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT);
+    PumpKeys();
+    CHECK(DG_GetMouse(&dx, &dy, &buttons));
+    CHECK((buttons & 1u) != 0);
+    for (i = 0; i < 4; ++i) CHECK(!DG_GetMouse(&dx, &dy, &buttons));
+
+    // Release is also a change and must be reported.
+    PushMouseButton(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT);
+    PumpKeys();
+    CHECK(DG_GetMouse(&dx, &dy, &buttons));
+    CHECK((buttons & 1u) == 0);
+
+    // Losing focus drops a held button so it cannot stay latched.
+    PushMouseButton(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT);
+    PumpKeys();
+    CHECK(DG_GetMouse(&dx, &dy, &buttons));
+    CHECK((buttons & (1u << (SDL_BUTTON_RIGHT - 1))) != 0);
+    {
+        SDL_Event event;
+        SDL_zero(event);
+        event.type = SDL_WINDOWEVENT;
+        event.window.event = SDL_WINDOWEVENT_FOCUS_LOST;
+        CHECK(SDL_PushEvent(&event) == 1);
+    }
+    PumpKeys();
+    CHECK(DG_GetMouse(&dx, &dy, &buttons));
+    CHECK(buttons == 0);
+
+    // Toggling capture resynchronises buttons, so a stale press cannot leak
+    // into the next gameplay session.
+    PushMouseButton(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT);
+    PumpKeys();
+    CHECK(DG_GetMouse(&dx, &dy, &buttons));
+    CHECK((buttons & 1u) != 0);
+    DG_SetMouseCapture(0);
+    CHECK(DG_GetMouse(&dx, &dy, &buttons));
+    CHECK(buttons == 0);
+}
+
 int main(int argc, char **argv)
 {
     SDL_Event event;
@@ -150,7 +239,8 @@ int main(int argc, char **argv)
     Expect(0, KEY_UPARROW);
     PushKey(SDL_KEYUP, SDL_SCANCODE_UP, SDLK_UP, 0);
     Empty();
-    puts("SDL input: mapping, engine queue burst, repeat, dual modifiers and focus loss OK");
+    TestMouse();
+    puts("SDL input: mapping, engine queue burst, repeat, dual modifiers, focus loss and mouse OK");
     event.type = SDL_QUIT;
     CHECK(SDL_PushEvent(&event) == 1);
     for (i = 0; i < 4; ++i)

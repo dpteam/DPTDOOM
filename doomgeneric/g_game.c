@@ -633,7 +633,10 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
         } 
     }
 
-    forward += mousey; 
+    // Without freelook there is no pitch to drive, so vertical motion would
+    // walk the player forward/back. novert (default on) drops it.
+    if (!novert)
+        forward += mousey; 
 
     if (strafe) 
 	side += mousex*2; 

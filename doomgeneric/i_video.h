@@ -116,6 +116,10 @@ void I_SetWindowTitle(char *title);
 void I_CheckIsScreensaver(void);
 void I_SetGrabMouseCallback(grabmouse_callback_t func);
 
+// Re-evaluates the grab callback and tells the platform layer whether to
+// capture the pointer. Called once per tic from I_StartTic.
+void I_ApplyMouseCapture(void);
+
 void I_DisplayFPSDots(boolean dots_on);
 void I_BindVideoVariables(void);
 

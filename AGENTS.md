@@ -158,7 +158,11 @@ ctest --preset windows-headless
 - P2P — план: PWAD, PK3 после загрузчика, без commercial IWAD; точный hash
   allowlist только Freedoom 1/2 + shareware DOOM1.WAD (не full Doom I).
 - Звук/музыка работают в проверенном Windows SDL-бэкенде; нативная
-  Win32/headless сборка без звука. Mouse/gamepad/OPL пока не реализованы.
+  Win32/headless сборка без звука. Мышь работает в SDL-бэкенде (поворот,
+  `grabmouse`/`novert`/ускорение, захват снимается в меню/паузе/демо/при потере
+  фокуса). Управление по умолчанию — WASD + мышь, стрелки тоже поворачивают.
+  Win32-бэкенд мышь пока не получает (стабы `DG_GetMouse`); геймпад и OPL не
+  реализованы.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
 - Boom/MBF maps: реализован sky transfer (linedef 271/272, per-sector
   `sector->sky` вне savegame, visplane учитывает текстуру), весь диапазон

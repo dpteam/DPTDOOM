@@ -23,6 +23,17 @@ static unsigned char held_keys[SDL_NUM_SCANCODES];
 static unsigned int key_refs[256];
 static int releasing_keys;
 
+// Mouse state is accumulated while draining the event queue in DG_GetKey and
+// consumed by DG_GetMouse. There is exactly one place that calls
+// SDL_PollEvent, so events are never pushed back and forth between the two
+// entry points.
+static int mouse_dx, mouse_dy;
+static unsigned int mouse_buttons;
+static int mouse_captured;
+// Set on motion or on a button change, cleared by DG_GetMouse. Without it a
+// held button would make DG_GetMouse report data forever.
+static int mouse_dirty;
+
 static unsigned char ConvertKey(SDL_Keycode key)
 {
     switch (key)
@@ -160,6 +171,43 @@ int DG_GetKey(int *pressed, unsigned char *doom_key)
         }
         if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
             releasing_keys = 1;
+        // Mouse events are accumulated here and consumed by DG_GetMouse, so
+        // they never reach the key path and no event is pushed back.
+        if (event.type == SDL_MOUSEMOTION)
+        {
+            if (mouse_captured && (event.motion.xrel || event.motion.yrel))
+            {
+                mouse_dx += event.motion.xrel;
+                mouse_dy += event.motion.yrel;
+                mouse_dirty = 1;
+            }
+            continue;
+        }
+        if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP)
+        {
+            int button = event.button.button;
+            if (button >= 1 && button <= 8)
+            {
+                unsigned int bit = 1u << (button - 1);
+                unsigned int before = mouse_buttons;
+                if (event.type == SDL_MOUSEBUTTONDOWN)
+                    mouse_buttons |= bit;
+                else
+                    mouse_buttons &= ~bit;
+                if (mouse_buttons != before)
+                    mouse_dirty = 1;
+            }
+            continue;
+        }
+        if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+        {
+            // A button released while unfocused would otherwise stay stuck.
+            if (mouse_buttons)
+            {
+                mouse_buttons = 0;
+                mouse_dirty = 1;
+            }
+        }
         if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
         {
             SDL_Scancode scan = event.key.keysym.scancode;
@@ -191,6 +239,36 @@ int DG_GetKey(int *pressed, unsigned char *doom_key)
 void DG_SetWindowTitle(const char *title)
 {
     if (window) SDL_SetWindowTitle(window, title);
+}
+
+int DG_GetMouse(int *dx, int *dy, unsigned int *buttons)
+{
+    if (!mouse_dirty)
+        return 0;
+    if (dx) *dx = mouse_dx;
+    if (dy) *dy = mouse_dy;
+    if (buttons) *buttons = mouse_buttons;
+    mouse_dx = mouse_dy = 0;
+    mouse_dirty = 0;
+    return 1;
+}
+
+void DG_SetMouseCapture(int capture)
+{
+    capture = capture != 0;
+    if (capture == mouse_captured)
+        return;
+    mouse_captured = capture;
+    // Relative mode also hides the cursor and keeps it inside the window.
+    // Ignoring the result is deliberate: on a backend without relative mode
+    // the game still works, it just cannot turn with the mouse.
+    SDL_SetRelativeMouseMode(capture ? SDL_TRUE : SDL_FALSE);
+    // Drop motion accumulated while uncaptured so the view does not jump when
+    // the pointer is grabbed again, and force a button re-sync: a button still
+    // held across the transition must not stay latched in the engine.
+    mouse_dx = mouse_dy = 0;
+    mouse_buttons = 0;
+    mouse_dirty = 1;
 }
 
 #ifndef DPTDOOM_BACKEND_TEST
