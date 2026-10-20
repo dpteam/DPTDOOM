@@ -773,17 +773,35 @@ void R_DrawPlayerSprites (void)
     mfloorclip = screenheightarray;
     mceilingclip = negonearray;
     
-    // add all active psprites. The flag tells R_DrawVisSprite to anchor them to
-    // the un-pitched screen centre instead of the horizon.
-    dpt_drawing_psprite = true;
-    for (i=0, psp=viewplayer->psprites;
-	 i<NUMPSPRITES;
-	 i++,psp++)
+    // Draw player sprites against the un-pitched view centre.
+    //
+    // Anchoring only sprtopscreen was not enough: the column renderer derives
+    // texture coordinates from `centery` itself (r_draw.c: frac = dc_texturemid
+    // + (dc_yl-centery)*fracstep). With a pitched centery the weapon kept its
+    // position but sampled the wrong rows of its patch, which shows up as the
+    // sprite's content sliding out of its own shape and reading out of bounds.
+    // Swapping centery/centeryfrac for the duration makes position and texture
+    // agree again, and the weapon stays fixed on screen like Duke3D's.
     {
-	if (psp->state)
-	    R_DrawPSprite (psp);
+	int saved_centery = centery;
+	fixed_t saved_centeryfrac = centeryfrac;
+
+	centery = viewheight/2;
+	centeryfrac = centery<<FRACBITS;
+
+	dpt_drawing_psprite = true;
+	for (i=0, psp=viewplayer->psprites;
+	     i<NUMPSPRITES;
+	     i++,psp++)
+	{
+	    if (psp->state)
+		R_DrawPSprite (psp);
+	}
+	dpt_drawing_psprite = false;
+
+	centery = saved_centery;
+	centeryfrac = saved_centeryfrac;
     }
-    dpt_drawing_psprite = false;
 }
 
 
