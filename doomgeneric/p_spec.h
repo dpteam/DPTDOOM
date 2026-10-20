@@ -378,8 +378,16 @@ int EV_DoGenCrusher (line_t* line);
 int EV_DoGenStairs (line_t* line);
 int EV_DoGenLift (line_t* line);
 
+// Boom generalized locked doors (0x3800..0x3bff).
+boolean DPT_GenLockedDoorKeyOK (int special, mobj_t* thing);
+int EV_DoGenLockedDoor (line_t* line);
+int EV_DoGenLockedDoorSector (sector_t* sec, int special);
+void DPT_GenLockedDeny (line_t* line, mobj_t* thing);
+
 // Boom generalized linedef dispatch shared by the walk/switch/gun paths.
+boolean DPT_GenSpecialIsSupported (int special);
 boolean DPT_GenSpecialAllowsMonsters (int special);
+boolean DPT_GenSpecialKeyOK (int special, mobj_t* thing);
 int DPT_GenSpecialTrigger (line_t* line);
 
 void

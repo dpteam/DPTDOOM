@@ -21,6 +21,7 @@
 #include "doomdef.h"
 #include "deh_main.h"
 #include "dpt_gendoor.h"
+#include "dpt_genlocked.h"
 #include "p_local.h"
 
 #include "s_sound.h"
@@ -332,6 +333,90 @@ EV_DoDoor
 		
     }
     return rtn;
+}
+
+
+//
+// Boom generalized locked doors (0x3800..0x3bff).
+//
+// Only the two open kinds exist, and monsters can never open them. The key
+// requirement is checked against the player's card/skull inventory before any
+// thinker is created, so a failed check leaves the door untouched.
+//
+static unsigned int GenLockedHeldKeys (mobj_t* thing)
+{
+    player_t* p;
+    unsigned int held = 0;
+
+    if (!thing || !(p = thing->player))
+        return 0;
+    if (p->cards[it_bluecard])   held |= DPT_KEY_BLUECARD;
+    if (p->cards[it_yellowcard]) held |= DPT_KEY_YELLOWCARD;
+    if (p->cards[it_redcard])    held |= DPT_KEY_REDCARD;
+    if (p->cards[it_blueskull])  held |= DPT_KEY_BLUESKULL;
+    if (p->cards[it_yellowskull])held |= DPT_KEY_YELLOWSKULL;
+    if (p->cards[it_redskull])   held |= DPT_KEY_REDSKULL;
+    return held;
+}
+
+boolean DPT_GenLockedDoorKeyOK (int special, mobj_t* thing)
+{
+    dpt_genlocked_t locked;
+
+    if (!DPT_GenLockedDecode(special, &locked))
+        return false;
+    return DPT_GenLockedSatisfied(locked.lock, locked.skull_card,
+                                 GenLockedHeldKeys(thing));
+}
+
+static int GenLockedDoorOnSector (sector_t* sec, int special)
+{
+    vldoor_t*	door;
+    dpt_genlocked_t locked;
+
+    if (!DPT_GenLockedDecode(special, &locked))
+        return 0;
+    if (sec->specialdata)
+        return 0;
+
+    door = Z_Malloc (sizeof(*door), PU_LEVSPEC, 0);
+    memset(door, 0, sizeof(*door));
+    P_AddThinker (&door->thinker);
+    sec->specialdata = door;
+
+    door->thinker.function.acp1 = (actionf_p1) T_VerticalDoor;
+    door->sector = sec;
+    door->type = locked.kind ? vld_open : vld_normal;
+    door->speed = VDOORSPEED << locked.speed_shift;
+    // Locked doors wait 34 tics (about one second) at the top, matching the
+    // ZDoom/BOOM translation of the fixed wait for locked doors.
+    door->topwait = 34;
+    door->direction = 1;
+    door->topheight = P_FindLowestCeilingSurrounding(sec);
+    door->topheight -= 4*FRACUNIT;
+    if (door->topheight != sec->ceilingheight)
+	S_StartSound(&door->sector->soundorg, sfx_doropn);
+
+    return 1;
+}
+
+int EV_DoGenLockedDoor (line_t* line)
+{
+    int		secnum, rtn;
+
+    secnum = -1;
+    rtn = 0;
+    while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
+	if (GenLockedDoorOnSector (&sectors[secnum], line->special))
+	    rtn = 1;
+    return rtn;
+}
+
+int EV_DoGenLockedDoorSector (sector_t* sec, int special)
+{
+    if (!sec)
+        return 0;
+    return GenLockedDoorOnSector (sec, special);
 }
 
 

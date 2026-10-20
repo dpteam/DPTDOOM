@@ -27,6 +27,7 @@
 #include "dpt_gencrusher.h"
 #include "dpt_genstairs.h"
 #include "dpt_genlift.h"
+#include "dpt_genlocked.h"
 #include "p_local.h"
 
 #include "g_game.h"
@@ -331,15 +332,15 @@ P_UseSpecialLine
 	int trigger = line->special & 0x0007;
 
 	if ((trigger == 2 || trigger == 3)
-	    && (DPT_GenLiftSupported(line->special)
-		|| DPT_GenStairsSupported(line->special)
-		|| DPT_GenCrusherSupported(line->special)
-		|| DPT_GenCeilingSupported(line->special)
-		|| DPT_GenFloorSupported(line->special)
-		|| DPT_GenDoorSupported(line->special)))
+	    && DPT_GenSpecialIsSupported(line->special))
 	{
 	    boolean once = (trigger == 2);
 
+	    if (!DPT_GenSpecialKeyOK(line->special, thing))
+	    {
+		DPT_GenLockedDeny(line, thing);
+		return false;
+	    }
 	    if (DPT_GenSpecialTrigger(line) && once)
 	    {
 		line->special = 0;
@@ -351,7 +352,7 @@ P_UseSpecialLine
 
     // Boom generalized push triggers (P1/PR) act on the sector behind the line,
     // not by tag, matching BOOM's "push is a switch with a zero tag" rule.
-    if (DPT_GenDoorSupported(line->special))
+    if (DPT_GenSpecialIsSupported(line->special))
     {
 	int trigger = line->special & 0x0007;
 
@@ -359,8 +360,20 @@ P_UseSpecialLine
 	{
 	    sector_t *back = sides[line->sidenum[side ^ 1]].sector;
 	    boolean once = (trigger == 6);
+	    int done;
 
-	    if (EV_DoGenDoorSector(back, line->special) && once)
+	    if (!DPT_GenSpecialKeyOK(line->special, thing))
+	    {
+		DPT_GenLockedDeny(line, thing);
+		return false;
+	    }
+	    if (DPT_GenLockedSupported(line->special))
+		done = EV_DoGenLockedDoorSector(back, line->special);
+	    else if (DPT_GenDoorSupported(line->special))
+		done = EV_DoGenDoorSector(back, line->special);
+	    else
+		done = 0;   // other families have no back-sector path
+	    if (done && once)
 		line->special = 0;
 	    return true;
 	}

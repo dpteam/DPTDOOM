@@ -33,6 +33,7 @@
 #include "dpt_gencrusher.h"
 #include "dpt_genstairs.h"
 #include "dpt_genlift.h"
+#include "dpt_genlocked.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -51,6 +52,7 @@
 #include "r_state.h"
 
 // Data.
+#include "dstrings.h"
 #include "sounds.h"
 
 
@@ -530,6 +532,9 @@ boolean DPT_GenSpecialAllowsMonsters (int special)
         return DPT_GenStairsDecode(special,&stairs) && stairs.monsters;
     if (DPT_GenLiftSupported(special))
         return DPT_GenLiftDecode(special,&lift) && lift.monsters;
+    // Locked doors can never be opened by monsters.
+    if (DPT_GenLockedSupported(special))
+        return false;
     return false;
 }
 
@@ -539,6 +544,8 @@ boolean DPT_GenSpecialAllowsMonsters (int special)
 //
 int DPT_GenSpecialTrigger (line_t* line)
 {
+    if (DPT_GenLockedSupported(line->special))
+        return EV_DoGenLockedDoor(line);
     if (DPT_GenLiftSupported(line->special))
         return EV_DoGenLift(line);
     if (DPT_GenStairsSupported(line->special))
@@ -552,6 +559,74 @@ int DPT_GenSpecialTrigger (line_t* line)
     if (DPT_GenDoorSupported(line->special))
         return EV_DoGenDoor(line);
     return 0;
+}
+
+//
+// True when this special belongs to any supported generalized Boom family.
+// Used by the trigger paths so they do not fall through to vanilla handling.
+//
+boolean DPT_GenSpecialIsSupported (int special)
+{
+    return DPT_GenLockedSupported(special)
+        || DPT_GenLiftSupported(special)
+        || DPT_GenStairsSupported(special)
+        || DPT_GenCrusherSupported(special)
+        || DPT_GenCeilingSupported(special)
+        || DPT_GenFloorSupported(special)
+        || DPT_GenDoorSupported(special);
+}
+
+//
+// Boom locked doors need the matching key; every other generalized family has
+// no access requirement.
+//
+boolean DPT_GenSpecialKeyOK (int special, mobj_t* thing)
+{
+    if (DPT_GenLockedSupported(special))
+        return DPT_GenLockedDoorKeyOK(special, thing);
+    return true;
+}
+
+//
+// Message shown when the player lacks the key for a generalized locked door.
+// Specific card/skull locks name the colour; "any" and "all" have no single
+// colour, so they only get the refusal sound.
+//
+static const char *GenLockedDeniedMessage (int special)
+{
+    dpt_genlocked_t locked;
+
+    if (!DPT_GenLockedDecode(special, &locked))
+        return NULL;
+
+    switch (locked.lock)
+    {
+      case DPT_LOCK_REDCARD:
+      case DPT_LOCK_REDSKULL:
+        return PD_REDK;
+      case DPT_LOCK_BLUECARD:
+      case DPT_LOCK_BLUESKULL:
+        return PD_BLUEK;
+      case DPT_LOCK_YELLOWCARD:
+      case DPT_LOCK_YELLOWSKULL:
+        return PD_YELLOWK;
+    }
+    return NULL;
+}
+
+//
+// Report a refused locked door to the player, matching vanilla behaviour.
+//
+void DPT_GenLockedDeny (line_t* line, mobj_t* thing)
+{
+    const char *message;
+
+    if (!thing->player)
+        return;
+    message = GenLockedDeniedMessage(line->special);
+    if (message)
+        thing->player->message = DEH_String(message);
+    S_StartSound(NULL, sfx_oof);
 }
 
 void
@@ -602,15 +677,15 @@ P_CrossSpecialLine
 
     // Boom generalized walk triggers (W1/WR), any family.
     if ((line->special & 0x0007) <= 1
-        && (DPT_GenLiftSupported(line->special)
-            || DPT_GenStairsSupported(line->special)
-            || DPT_GenCrusherSupported(line->special)
-            || DPT_GenCeilingSupported(line->special)
-            || DPT_GenFloorSupported(line->special)
-            || DPT_GenDoorSupported(line->special)))
+        && DPT_GenSpecialIsSupported(line->special))
     {
 	boolean once = !(line->special & 0x0001);
 
+	if (!DPT_GenSpecialKeyOK(line->special, thing))
+	{
+	    DPT_GenLockedDeny(line, thing);
+	    return;
+	}
 	if (DPT_GenSpecialTrigger(line) && once)
 	    line->special = 0;
 	return;
@@ -1063,42 +1138,25 @@ P_ShootSpecialLine
 	    return;
     }
 
-    // Boom generalized gun triggers (G1/GR), any family.
+    // Boom generalized gun triggers (G1/GR), any family. A one-shot gun trigger
+    // also swaps the switch texture, like the vanilla impact specials do.
     {
 	int trigger = line->special & 0x0007;
 
 	if ((trigger == 4 || trigger == 5)
-	    && (DPT_GenLiftSupported(line->special)
-		|| DPT_GenStairsSupported(line->special)
-		|| DPT_GenCrusherSupported(line->special)
-		|| DPT_GenCeilingSupported(line->special)
-		|| DPT_GenFloorSupported(line->special)
-		|| DPT_GenDoorSupported(line->special)))
+	    && DPT_GenSpecialIsSupported(line->special))
 	{
 	    boolean once = (trigger == 4);
 
-	    if (DPT_GenSpecialTrigger(line) && once)
-		line->special = 0;
-	    return;
-	}
-    }
-
-    // Boom generalized doors with gun triggers (G1/GR).
-    if (DPT_GenDoorSupported(line->special))
-    {
-	int trigger = line->special & 0x0007;
-
-	if (trigger == 4 || trigger == 5)
-	{
-	    boolean once = (trigger == 4);
-
-	    if (EV_DoGenDoor(line))
+	    if (!DPT_GenSpecialKeyOK(line->special, thing))
 	    {
-		if (once)
-		{
-		    line->special = 0;
-		    P_ChangeSwitchTexture(line,0);
-		}
+		DPT_GenLockedDeny(line, thing);
+		return;
+	    }
+	    if (DPT_GenSpecialTrigger(line) && once)
+	    {
+		line->special = 0;
+		P_ChangeSwitchTexture(line,0);
 	    }
 	    return;
 	}
@@ -1653,6 +1711,8 @@ void P_SpawnSpecials (void)
 	    if (DPT_GenStairsSupported(special))
 		continue;
 	    if (DPT_GenLiftSupported(special))
+		continue;
+	    if (DPT_GenLockedSupported(special))
 		continue;
 	    ++unsupported_occurrences;
 	    for (k = 0; k < unique; ++k)
