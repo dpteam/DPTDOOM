@@ -440,6 +440,12 @@ partition может породить две отдельные локальны
 - [ ] MBF-совместимые карты/моды (medium по просьбе владельца); оценить BEX/Boom
   как промежуточные этапы, MBF21 отдельно. Сначала compatibility matrix/tests,
   не выдавать загрузку карты за корректную реализацию её mechanics.
+- [ ] **Ванильный пробел (найден при аудите):** в `p_spec.c` отсутствует часть
+  vanilla-типов Doom/Doom II — например 101/102/103; стоковый MAP01 использует
+  102 и 103. Это не Boom и не следствие недавних изменений. Нужно реализовать
+  отсутствующие типы по авторитетной таблице (PrBoom editing reference) и
+  покрыть тестом на реальной карте. Пока — отчёт `Map compatibility:` для
+  specials >= 142 и раздел в `docs/MAPS.md`.
 - [x] Первый map-срез: Boom/MBF **sky transfer** (linedef 271/272), per-sector
   `sector->sky` вне savegame, учёт текстуры неба при слиянии visplane,
   framebuffer-тест `map-sky` и `docs/MAPS.md`. Остальные Boom/MBF specials не

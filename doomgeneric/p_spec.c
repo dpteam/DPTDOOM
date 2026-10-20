@@ -21,6 +21,7 @@
 //
 
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "doomdef.h"
@@ -1502,6 +1503,45 @@ void P_SpawnSpecials (void)
 	    linespeciallist[numlinespecials] = &lines[i];
 	    numlinespecials++;
 	    break;
+	}
+    }
+
+    // Boom/MBF extended linedef specials start at 142 (vanilla Doom uses
+    // 1..141). Everything at or above 142 except the two sky transfers we
+    // implement is inert in this engine, so say so once per level instead of
+    // letting a map look supported while its mechanics do nothing.
+    // Note: a few *vanilla* specials are also unimplemented in this port; that
+    // is a separate gap tracked in docs/MAPS.md, not a Boom compatibility note.
+    {
+	int unsupported_ids[16];
+	int unsupported_count = 0;
+	int unsupported_occurrences = 0;
+	int unique = 0;
+
+	for (i = 0; i < numlines; ++i)
+	{
+	    int special = lines[i].special;
+	    int k;
+	    if (special < 142 || special == 271 || special == 272)
+		continue;
+	    ++unsupported_occurrences;
+	    for (k = 0; k < unique; ++k)
+		if (unsupported_ids[k] == special)
+		    break;
+	    if (k == unique && unique < 16)
+		unsupported_ids[unique++] = special;
+	}
+	if (unsupported_occurrences)
+	{
+	    printf("Map compatibility: %i linedef special(s) in the Boom/MBF "
+		   "extended range are not implemented (this level is not fully "
+		   "supported):", unsupported_occurrences);
+	    for (i = 0; i < unique; ++i)
+		printf(" %i", unsupported_ids[i]);
+	    if (unique == 16)
+		printf(" ...");
+	    printf("\n");
+	    fflush(stdout);
 	}
     }
 

@@ -142,6 +142,18 @@ def main():
         _, text = run("sky272", ["-file", str(root / "sky272.wad")])
         assert "Map sky: count=1 first=0:" in text, text
 
+        # Unimplemented Boom/MBF extended specials must be reported, not
+        # silently inert. 142 is the first Boom extended type; vanilla Doom
+        # uses 1..141.
+        overlay(iwad, root / "unsupported.wad", 142)
+        _, text = run("unsupported", ["-file", str(root / "unsupported.wad")])
+        assert "Map compatibility:" in text and " 142" in text, text
+        assert "Map sky: count=0" in text, text
+        # The baseline overlay has no 142+ specials and must stay quiet, even
+        # though stock Doom II MAP01 does use vanilla types 102 and 103.
+        assert "Map compatibility:" not in run("base-quiet", ["-file", str(root / "sky-base.wad")])[1]
+        assert "Map compatibility:" not in run("vanilla-quiet", [])[1]
+
         # Note: a transfer line whose sidedef has neither upper nor lower
         # texture is ignored defensively. Vanilla MAP01 has no such two-sided
         # line, and an empty sidedef texture name is itself an invalid map, so
