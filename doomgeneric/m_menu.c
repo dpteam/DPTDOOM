@@ -349,29 +349,36 @@ enum
     opt_end
 } options_e;
 
-// Mouse settings used to be reachable only by editing the config file. Both the
-// label and the value are drawn as plain HUD-font text: there is no IWAD menu
-// patch for these, and M_ON/M_OFF do not exist in the IWAD (only M_MSGON/
-// M_MSGOFF and M_GDHIGH/M_GDLOW do, and their wording would be wrong here).
-static char *mouseaccelNames[2] = {"OFF", "ON"};
-static char *mousevertNames[2] = {"OFF", "ON"};
-static char *mousegrabNames[2] = {"OFF", "ON"};
+// The options menu is drawn entirely in the small HUD font (the one the chat
+// and messages use) instead of the big IWAD menu patches, and adjustable values
+// are drawn as small text bars rather than M_DrawThermo graphics.
+//
+// Why: the patch layout needed 16px lines from y=37, which put the tenth entry
+// at y=181 and straight onto the status bar (its top edge is y=168).
+//
+// Line height must be at least the font's own height, otherwise rows overlap.
+// This font is ~13px tall, so 14px lines starting at y=22 fit ten entries
+// (last one at y=148, ending at 161) with the header above them.
+#define OPTIONS_LINEHEIGHT 14
+#define OPTIONS_TOP        22
+#define OPTIONS_VALUE_X    130
+
+// Set by menus that paint themselves, so M_Drawer does not draw the patch
+// items or the skull cursor on top.
+static boolean menu_items_drawn;
 
 menuitem_t OptionsMenu[]=
 {
-    {1,"M_ENDGAM",	M_EndGame,'e'},
-    {1,"M_MESSG",	M_ChangeMessages,'m'},
-    {1,"M_DETAIL",	M_ChangeDetail,'g'},
-    {2,"M_SCRNSZ",	M_SizeDisplay,'s'},
+    {1,"",	M_EndGame,'e'},
+    {1,"",	M_ChangeMessages,'m'},
+    {1,"",	M_ChangeDetail,'g'},
+    {2,"",	M_SizeDisplay,'s'},
     {-1,"",0,'\0'},
-    {2,"M_MSENS",	M_ChangeSensitivity,'m'},
-    {1,"",		M_ChangeMouseAccel,'a'},
-    {1,"",		M_ChangeMouseVert,'v'},
-    {1,"",		M_ChangeMouseGrab,'r'},
-    // No separator before the sound item: the menu starts at y=37 with 16px
-    // lines, so a tenth separator-padded entry would land at y=197 and be
-    // clipped by the 200px screen.
-    {1,"M_SVOL",	M_Sound,'s'}
+    {2,"",	M_ChangeSensitivity,'m'},
+    {1,"",	M_ChangeMouseAccel,'a'},
+    {1,"",	M_ChangeMouseVert,'v'},
+    {1,"",	M_ChangeMouseGrab,'r'},
+    {1,"",	M_Sound,'s'}
 };
 
 // The menu code indexes menuitems[] up to numitems (opt_end). If the enum and
@@ -380,10 +387,11 @@ menuitem_t OptionsMenu[]=
 typedef char dpt_options_menu_size_check[
     (sizeof(OptionsMenu) / sizeof(OptionsMenu[0]) == opt_end) ? 1 : -1];
 
-// The options menu starts at y=37 with 16px lines on a 200px screen, so the
-// last entry must start at or above 200-16 to stay fully visible.
+// The status bar starts at y=168. Every entry must sit fully above it, otherwise
+// the menu overlaps the HUD (this happened with the old 16px patch layout, whose
+// tenth entry landed at y=181).
 typedef char dpt_options_menu_fits_screen[
-    (37 + 16 * (opt_end - 1) <= 200 - 16) ? 1 : -1];
+    (OPTIONS_TOP + OPTIONS_LINEHEIGHT * (opt_end - 1) + 13 <= 168) ? 1 : -1];
 
 menu_t  OptionsDef =
 {
@@ -391,7 +399,7 @@ menu_t  OptionsDef =
     &MainDef,
     OptionsMenu,
     M_DrawOptions,
-    60,37,
+    60,OPTIONS_TOP,
     0
 };
 
@@ -1026,41 +1034,113 @@ void M_Episode(int choice)
 static char *detailNames[2] = {"M_GDHIGH","M_GDLOW"};
 static char *msgNames[2] = {"M_MSGOFF","M_MSGON"};
 
+//
+// M_DrawOptions
+//
+// Drawn entirely in the small HUD font (the one the chat and messages use)
+// instead of the big IWAD menu patches, and the adjustable values are drawn as
+// small text bars rather than the M_DrawThermo graphics.
+//
+// Why: the patch layout needed 16px lines starting at y=37, which put the tenth
+// entry at y=181 - on top of the status bar, whose top edge is y=168. The small
+// font fits ten entries in 12px lines from y=40 and ends well above the HUD.
+//
+static const char *optionsLabels[opt_end] = {
+    "END GAME",
+    "MESSAGES",
+    "DETAIL",
+    "SCREEN",
+    "",             // separator
+    "SENSITIVITY",
+    "ACCEL",
+    "VERT MOUSE",
+    "GRAB MOUSE",
+    "VOLUME"
+};
+
+// Compact text bar, e.g. [#####.....] for 5 of 10. Small and unambiguous
+// without pulling in the thermometer graphics.
+static void DrawSmallBar(int x, int y, int value, int maximum)
+{
+    char bar[24];
+    int i;
+
+    if (maximum < 1)
+        maximum = 1;
+    if (value < 0)
+        value = 0;
+    if (value > maximum)
+        value = maximum;
+
+    bar[0] = '[';
+    for (i = 0; i < maximum && i < (int) sizeof(bar) - 3; ++i)
+        bar[i + 1] = i < value ? '#' : '.';
+    bar[i + 1] = ']';
+    bar[i + 2] = '\0';
+
+    M_WriteText(x, y, bar);
+}
+
 void M_DrawOptions(void)
 {
-    V_DrawPatchDirect(108, 15, W_CacheLumpName(DEH_String("M_OPTTTL"),
-                                               PU_CACHE));
-	
-    V_DrawPatchDirect(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * detail,
-		      W_CacheLumpName(DEH_String(detailNames[detailLevel]),
-			              PU_CACHE));
+    int i;
+    int y = OptionsDef.y;
 
-    V_DrawPatchDirect(OptionsDef.x + 120, OptionsDef.y + LINEHEIGHT * messages,
-                      W_CacheLumpName(DEH_String(msgNames[showMessages]),
-                                      PU_CACHE));
+    // M_Drawer must not draw the patch items or the skull after this routine;
+    // this menu paints its own labels and cursor.
+    menu_items_drawn = true;
 
-    M_DrawThermo(OptionsDef.x, OptionsDef.y + LINEHEIGHT * (mousesens + 1),
-		 10, mouseSensitivity);
+    M_WriteText(OptionsDef.x, 6, "OPTIONS");
 
-    // Mouse toggles. Label and value are HUD-font text because no IWAD menu
-    // patch exists for them; drawing a missing lump would abort the game.
-    M_WriteText(OptionsDef.x, OptionsDef.y + LINEHEIGHT * mouseaccel,
-                "MOUSE ACCEL");
-    M_WriteText(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * mouseaccel,
-                mouseaccelNames[mouse_acceleration > 1.0f ? 1 : 0]);
+    for (i = 0; i < opt_end; ++i)
+    {
+        int liney = y + i * OPTIONS_LINEHEIGHT;
 
-    M_WriteText(OptionsDef.x, OptionsDef.y + LINEHEIGHT * mousevert,
-                "VERT MOUSE");
-    M_WriteText(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * mousevert,
-                mousevertNames[novert ? 0 : 1]);
+        if (i == option_empty1)
+            continue;
 
-    M_WriteText(OptionsDef.x, OptionsDef.y + LINEHEIGHT * mousegrab,
-                "GRAB MOUSE");
-    M_WriteText(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * mousegrab,
-                mousegrabNames[grabmouse ? 1 : 0]);
+        if (i == itemOn)
+            M_WriteText(OptionsDef.x - 10, liney, ">");
 
-    M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(scrnsize+1),
-		 9,screenSize);
+        M_WriteText(OptionsDef.x, liney, (char *) optionsLabels[i]);
+
+        switch (i)
+        {
+          case messages:
+            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney, showMessages ? "ON" : "OFF");
+            break;
+
+          case detail:
+            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney, detailLevel ? "LOW" : "HIGH");
+            break;
+
+          case scrnsize:
+            DrawSmallBar(OptionsDef.x + OPTIONS_VALUE_X, liney, screenSize, 8);
+            break;
+
+          case mousesens:
+            DrawSmallBar(OptionsDef.x + OPTIONS_VALUE_X, liney, mouseSensitivity, 9);
+            break;
+
+          case mouseaccel:
+            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney,
+                        mouse_acceleration > 1.0f ? "ON" : "OFF");
+            break;
+
+          case mousevert:
+            // novert means "ignore vertical motion", so the menu shows the
+            // player-facing meaning, not the internal flag.
+            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney, novert ? "OFF" : "ON");
+            break;
+
+          case mousegrab:
+            M_WriteText(OptionsDef.x + OPTIONS_VALUE_X, liney, grabmouse ? "ON" : "OFF");
+            break;
+
+          default:
+            break;
+        }
+    }
 }
 
 void M_Options(int choice)
@@ -2115,9 +2195,16 @@ void M_Drawer (void)
     if (!menuactive)
 	return;
 
+    // Reset before the menu's own draw routine runs, so a self-drawing menu can
+    // set it and the next frame starts clean even if the menu changed.
+    menu_items_drawn = false;
+
     if (currentMenu->routine)
 	currentMenu->routine();         // call Draw routine
-    
+
+    if (menu_items_drawn)
+	return;
+
     // DRAW MENU
     x = currentMenu->x;
     y = currentMenu->y;

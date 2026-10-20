@@ -781,6 +781,14 @@ static default_t extra_defaults_list[] =
     CONFIG_VARIABLE_INT(mouse_threshold),
 
     //!
+    // Internal marker for the one-time input layout migration. When a config
+    // written before the WASD defaults is loaded, the untouched movement binds
+    // are moved to WASD once and this is set to 1. Not a user setting.
+    //
+
+    CONFIG_VARIABLE_INT(dpt_input_version),
+
+    //!
     // Sound output sample rate, in Hz.  Typical values to use are
     // 11025, 22050, 44100 and 48000.
     //

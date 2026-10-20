@@ -22,7 +22,8 @@ extern int key_left;
 
 extern int key_up;
 extern int key_down;
-extern int key_strafeleft;
+// Internal one-time migration marker for the WASD defaults; not a user setting.
+extern int dpt_input_version;extern int key_strafeleft;
 extern int key_straferight;
 extern int key_fire;
 extern int key_use;
@@ -159,6 +160,7 @@ extern int joybmenu;
 extern int dclick_use;
 
 void M_BindBaseControls(void);
+void M_MigrateInputLayout(void);
 void M_BindHereticControls(void);
 void M_BindHexenControls(void);
 void M_BindStrifeControls(void);

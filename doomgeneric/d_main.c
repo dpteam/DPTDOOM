@@ -1380,6 +1380,9 @@ void D_DoomMain (void)
     D_BindVariables();
     M_LoadDefaults();
 
+    // Move a pre-WASD config onto the new movement defaults, once.
+    M_MigrateInputLayout();
+
     // Rules are CLI-only until a server config and extended save/demo formats
     // exist. Never leak them silently into single-player/vanilla demos.
     p = M_CheckParm("-dmflags");

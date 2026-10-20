@@ -41,6 +41,41 @@ int key_use = KEY_USE;
 int key_strafe = KEY_RALT;
 int key_speed = KEY_RSHIFT; 
 
+// 0 means the config was written before the WASD defaults existed. See
+// M_MigrateInputLayout.
+int dpt_input_version = 0;
+
+//
+// Move an older config onto the WASD defaults, exactly once.
+//
+// A saved default.cfg overrides the compiled-in defaults, so players who already
+// had a config kept the old arrow-key binds and the unproducible KEY_STRAFE_L/R
+// placeholders, which is why WASD "did not work" after the change. This only
+// rewrites binds that still hold the *old default* value, i.e. ones the player
+// never touched, so a deliberate custom binding is left alone.
+//
+void M_MigrateInputLayout(void)
+{
+    if (dpt_input_version >= 1)
+        return;
+
+    if (key_up == KEY_UPARROW)
+        key_up = 'w';
+    if (key_down == KEY_DOWNARROW)
+        key_down = 's';
+
+    // The old strafe default was KEY_STRAFE_L/KEY_STRAFE_R (0xa0/0xa1), which no
+    // backend ever produced. Those values have no entry in the config
+    // scancode table, so a saved config loads them back as 0 ("unbound"), not as
+    // 0xa0. Both forms mean the bind was never usable, so treat them alike.
+    if (key_strafeleft == KEY_STRAFE_L || key_strafeleft == 0)
+        key_strafeleft = 'a';
+    if (key_straferight == KEY_STRAFE_R || key_straferight == 0)
+        key_straferight = 'd';
+
+    dpt_input_version = 1;
+}
+
 // 
 // Heretic keyboard controls
 //
@@ -217,6 +252,7 @@ void M_BindBaseControls(void)
     M_BindVariable("key_use",            &key_use);
     M_BindVariable("key_strafe",         &key_strafe);
     M_BindVariable("key_speed",          &key_speed);
+    M_BindVariable("dpt_input_version",  &dpt_input_version);
 
     M_BindVariable("mouseb_fire",        &mousebfire);
     M_BindVariable("mouseb_strafe",      &mousebstrafe);
