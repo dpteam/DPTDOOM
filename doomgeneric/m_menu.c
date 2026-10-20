@@ -188,6 +188,9 @@ void M_QuitDOOM(int choice);
 
 void M_ChangeMessages(int choice);
 void M_ChangeSensitivity(int choice);
+void M_ChangeMouseAccel(int choice);
+void M_ChangeMouseVert(int choice);
+void M_ChangeMouseGrab(int choice);
 void M_SfxVol(int choice);
 void M_MusicVol(int choice);
 void M_ChangeDetail(int choice);
@@ -339,10 +342,20 @@ enum
     scrnsize,
     option_empty1,
     mousesens,
-    option_empty2,
+    mouseaccel,
+    mousevert,
+    mousegrab,
     soundvol,
     opt_end
 } options_e;
+
+// Mouse settings used to be reachable only by editing the config file. Both the
+// label and the value are drawn as plain HUD-font text: there is no IWAD menu
+// patch for these, and M_ON/M_OFF do not exist in the IWAD (only M_MSGON/
+// M_MSGOFF and M_GDHIGH/M_GDLOW do, and their wording would be wrong here).
+static char *mouseaccelNames[2] = {"OFF", "ON"};
+static char *mousevertNames[2] = {"OFF", "ON"};
+static char *mousegrabNames[2] = {"OFF", "ON"};
 
 menuitem_t OptionsMenu[]=
 {
@@ -352,9 +365,25 @@ menuitem_t OptionsMenu[]=
     {2,"M_SCRNSZ",	M_SizeDisplay,'s'},
     {-1,"",0,'\0'},
     {2,"M_MSENS",	M_ChangeSensitivity,'m'},
-    {-1,"",0,'\0'},
+    {1,"",		M_ChangeMouseAccel,'a'},
+    {1,"",		M_ChangeMouseVert,'v'},
+    {1,"",		M_ChangeMouseGrab,'r'},
+    // No separator before the sound item: the menu starts at y=37 with 16px
+    // lines, so a tenth separator-padded entry would land at y=197 and be
+    // clipped by the 200px screen.
     {1,"M_SVOL",	M_Sound,'s'}
 };
+
+// The menu code indexes menuitems[] up to numitems (opt_end). If the enum and
+// the array ever drift apart, that is an out-of-bounds read, so make it a
+// compile error instead of a crash at runtime.
+typedef char dpt_options_menu_size_check[
+    (sizeof(OptionsMenu) / sizeof(OptionsMenu[0]) == opt_end) ? 1 : -1];
+
+// The options menu starts at y=37 with 16px lines on a 200px screen, so the
+// last entry must start at or above 200-16 to stay fully visible.
+typedef char dpt_options_menu_fits_screen[
+    (37 + 16 * (opt_end - 1) <= 200 - 16) ? 1 : -1];
 
 menu_t  OptionsDef =
 {
@@ -1013,6 +1042,23 @@ void M_DrawOptions(void)
     M_DrawThermo(OptionsDef.x, OptionsDef.y + LINEHEIGHT * (mousesens + 1),
 		 10, mouseSensitivity);
 
+    // Mouse toggles. Label and value are HUD-font text because no IWAD menu
+    // patch exists for them; drawing a missing lump would abort the game.
+    M_WriteText(OptionsDef.x, OptionsDef.y + LINEHEIGHT * mouseaccel,
+                "MOUSE ACCEL");
+    M_WriteText(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * mouseaccel,
+                mouseaccelNames[mouse_acceleration > 1.0f ? 1 : 0]);
+
+    M_WriteText(OptionsDef.x, OptionsDef.y + LINEHEIGHT * mousevert,
+                "VERT MOUSE");
+    M_WriteText(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * mousevert,
+                mousevertNames[novert ? 0 : 1]);
+
+    M_WriteText(OptionsDef.x, OptionsDef.y + LINEHEIGHT * mousegrab,
+                "GRAB MOUSE");
+    M_WriteText(OptionsDef.x + 175, OptionsDef.y + LINEHEIGHT * mousegrab,
+                mousegrabNames[grabmouse ? 1 : 0]);
+
     M_DrawThermo(OptionsDef.x,OptionsDef.y+LINEHEIGHT*(scrnsize+1),
 		 9,screenSize);
 }
@@ -1230,6 +1276,34 @@ void M_ChangeDetail(int choice)
 	players[consoleplayer].message = DEH_String(DETAILHI);
     else
 	players[consoleplayer].message = DEH_String(DETAILLO);
+}
+
+//
+// Mouse option toggles. These change the same variables the config file writes,
+// so a change here is saved with the rest of the settings on exit.
+//
+
+void M_ChangeMouseAccel(int choice)
+{
+    (void) choice;
+    // OFF means "no acceleration", which is acceleration 1.0, not 0: a zero
+    // factor would disable the mouse entirely in AccelerateMouse.
+    mouse_acceleration = mouse_acceleration > 1.0f ? 1.0f : 2.0f;
+}
+
+void M_ChangeMouseVert(int choice)
+{
+    (void) choice;
+    novert = !novert;
+}
+
+void M_ChangeMouseGrab(int choice)
+{
+    (void) choice;
+    grabmouse = !grabmouse;
+    // Apply immediately instead of waiting for the next tic so the pointer is
+    // released while the user is still in the menu.
+    I_ApplyMouseCapture();
 }
 
 
