@@ -1,7 +1,7 @@
 # DeHackEd: classic-срез + BEX `[STRINGS]`/`[PARS]`/`[CODEPTR]`
 
 Это **не полная поддержка DeHackEd/BEX**, Boom, MBF или MBF21. Реализован
-отдельный `DPT-deh-bexcodeptr-v18` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
+отдельный `DPT-deh-levelnames-v19` parser на C, написанный для DPT.DOOM. Из ACE/csDoom
 ничего не скопировано; их parser/gameplay код остаётся материалом для дальнейшего
 аудита. Полный upstream `FEATURE_DEHACKED` по-прежнему OFF.
 
@@ -64,11 +64,17 @@ patches или их поиска на диске; launcher пока не име�
 Понижение bullet capacity ниже Initial Bullets отклоняет весь источник.
 
 `Text` принимает classic `Text old-length new-length` только для заранее
-зарегистрированных vanilla messages. Разрешены pickup/save/chat/gamma strings из
-текущего whitelist (25 записей); старые bytes должны совпасть полностью. Новый
-payload — до 2047 bytes, printable ASCII с `\\n`/`\\r`/`\\t`; `%`, NUL, другие
-control и non-ASCII bytes запрещены. Неизвестные old strings и format strings
-не поддерживаются.
+зарегистрированных vanilla messages. Разрешены pickup/save/chat/gamma strings,
+а также **имена уровней Doom II** (`HUSTR_1..HUSTR_32`) — всего 57 записей;
+старые bytes должны совпасть полностью. Новый payload — до 2047 bytes,
+printable ASCII с `\\n`/`\\r`/`\\t`; `%`, NUL, другие control и non-ASCII bytes
+запрещены. Неизвестные old strings и format strings не поддерживаются.
+
+Имена уровней доступны **только через classic `Text`**: их BEX-ключи не
+подтверждены нашими reference-источниками, поэтому `[STRINGS] HUSTR_1 = ...`
+отклоняется как неизвестное имя, а не принимается «на всякий случай». Имена
+эпизодов Doom I (`HUSTR_E?M?`), Plutonia/TNT (`PHUSTR_*`, `THUSTR_*`) и
+quit-сообщения в этот срез не входят.
 
 ```text
 Text 20 10
@@ -285,7 +291,7 @@ Next frame = 15
 и (для weapon states) `state.misc1/misc2`.
 Источник staged целиком вместе с другими секциями; при ошибке в конце файла
 не применяются даже предыдущие корректные Duration assignments. Digest subset
-обновлён до v18, чтобы peers не путали разные semantics.
+обновлён до v19, чтобы peers не путали разные semantics.
 
 Намеренно не поддержаны `Duration=0` (instant transition chains), `-1` и другие
 отрицательные значения. Диапазон `S_SARG_RUN1..S_SARG_PAIN2`, который `-fast`/
@@ -342,7 +348,7 @@ Sprite subnumber = 32769
   `sx/sy`, поэтому offset на них не виден; для постоянного смещения используют
   firing/raising состояния без bob-перезаписи. Это тоже vanilla-поведение, не
   ошибка parser-а.
-- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v18.
+- Значения staged и восстанавливаются `DPT_DehReset`; digest subset — v19.
 
 ```text
 Frame 12
@@ -422,6 +428,7 @@ old/new exact bytes and unsafe payload rejection, BEX `[STRINGS]` whitelist,
 case-insensitive names, value bounds, rejected continuation and shared
 classic/BEX table, BEX `[PARS]` MAP/E?M? forms, gamemode mismatch, episode 4
 fallthrough and bounds, BEX `[CODEPTR]` allowlist/prefix/class checks,
+Doom II level-name replacement via classic Text and its rejection as a BEX key,
 atomic rollback, digest repeatability и load order, без
 IWAD/окна/Internet.
 

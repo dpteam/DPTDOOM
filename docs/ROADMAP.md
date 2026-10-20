@@ -432,6 +432,11 @@ partition может породить две отдельные локальны
 - [x] Владелец добавил игровые `csDoomNew` / `csDoomOld07` в refs. Найдены
   DeHackEd/BEX, Boom-элементы и MBF skies; первичный source/license inventory —
   `docs/REFERENCE-SOURCES.md`. Ничего не перенесено/не собрано из refs.
+- [x] `DPT-deh-levelnames-v19`: classic `Text` расширен на имена уровней Doom II
+  (`HUSTR_1..32`), 57 записей whitelist; BEX-ключи для них не выдумываются и
+  отклоняются. Engine report `level=`, unit/engine tests, digest v19.
+- [ ] Следующий map-срез: Boom generalized linedefs. Нужна точная битовая
+  спецификация из первичного источника; не угадывать номера specials.
 - [ ] MBF-совместимые карты/моды (medium по просьбе владельца); оценить BEX/Boom
   как промежуточные этапы, MBF21 отдельно. Сначала compatibility matrix/tests,
   не выдавать загрузку карты за корректную реализацию её mechanics.

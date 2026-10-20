@@ -23,7 +23,7 @@
 #include <limits.h>
 
 enum { MAX_LINE=2047, MAX_SOURCE=262144, MAX_PATCHES=16, FIELD_COUNT=16,
-       TEXT_MAX=2047, TEXT_COUNT=25 };
+       TEXT_MAX=2047, TEXT_COUNT=57 };
 #define MISC_FIELDS(X) \
     X("Initial Health",initial_health,100,1,10000) \
     X("Initial Bullets",initial_bullets,50,0,200) \
@@ -72,19 +72,31 @@ static boolean base_weapon_state[NUMSTATES];
 static weaponinfo_t staged_weapons[NUMWEAPONS];
 typedef struct { const char *original; char replacement[TEXT_MAX+1]; boolean present; } text_replacement_t;
 // Classic Text matches the original bytes; BEX [STRINGS] matches these names.
+// A NULL name means the string is reachable through classic Text only: the BEX
+// key for it is not verified in our reference sources, and guessing one would
+// accept a patch that silently targets nothing.
 static const char *const text_names[TEXT_COUNT]={
     "GOTARMOR","GOTMEGA","GOTHTHBONUS","GOTARMBONUS","GOTSTIM","GOTMEDINEED",
     "GOTMEDIKIT","GOTSUPER","GOTBLUECARD","GOTYELWCARD","GOTREDCARD","GOTBLUESKUL",
     "GOTYELWSKUL","GOTREDSKULL","GGSAVED","HUSTR_MSGU","MSGON","MSGOFF",
     "DETAILHI","DETAILLO","GAMMALVL0","GAMMALVL1","GAMMALVL2","GAMMALVL3",
-    "GAMMALVL4"
+    "GAMMALVL4",
+    // Doom II level names: classic Text only.
+    NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+    NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+    NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+    NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL
 };
 static const char *const text_originals[TEXT_COUNT]={
     GOTARMOR,GOTMEGA,GOTHTHBONUS,GOTARMBONUS,GOTSTIM,GOTMEDINEED,
     GOTMEDIKIT,GOTSUPER,GOTBLUECARD,GOTYELWCARD,GOTREDCARD,GOTBLUESKUL,
     GOTYELWSKUL,GOTREDSKULL,GGSAVED,HUSTR_MSGU,MSGON,MSGOFF,
     DETAILHI,DETAILLO,GAMMALVL0,GAMMALVL1,GAMMALVL2,GAMMALVL3,
-    GAMMALVL4
+    GAMMALVL4,
+    HUSTR_1,HUSTR_2,HUSTR_3,HUSTR_4,HUSTR_5,HUSTR_6,HUSTR_7,HUSTR_8,
+    HUSTR_9,HUSTR_10,HUSTR_11,HUSTR_12,HUSTR_13,HUSTR_14,HUSTR_15,HUSTR_16,
+    HUSTR_17,HUSTR_18,HUSTR_19,HUSTR_20,HUSTR_21,HUSTR_22,HUSTR_23,HUSTR_24,
+    HUSTR_25,HUSTR_26,HUSTR_27,HUSTR_28,HUSTR_29,HUSTR_30,HUSTR_31,HUSTR_32
 };
 static text_replacement_t text_replacements[TEXT_COUNT],staged_text[TEXT_COUNT];
 // BEX [PARS] writes the same tables G_DoCompleted reads. Episode 4 has no row
@@ -203,7 +215,7 @@ static boolean ApplyBexString(const char *name,const char *value,
     unsigned int i;
     size_t length=strlen(value);
     for(i=0;i<TEXT_COUNT;++i)
-        if(Equal(name,text_names[i]))break;
+        if(text_names[i]&&Equal(name,text_names[i]))break;
     if(i==TEXT_COUNT)return Error(line,"unknown [STRINGS] name (not in the bounded whitelist)");
     if(length>TEXT_MAX)return Error(line,"[STRINGS] value exceeds 2047 bytes");
     // BEX allows a trailing backslash to continue the value on the next line.

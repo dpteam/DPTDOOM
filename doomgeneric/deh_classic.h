@@ -5,7 +5,7 @@
 #include "doomtype.h"
 #include "sha1.h"
 #include "d_think.h"
-#define DPT_DEH_SUBSET "DPT-deh-bexcodeptr-v18"
+#define DPT_DEH_SUBSET "DPT-deh-levelnames-v19"
 void DPT_DehReset(void);
 boolean DPT_DehLoadLump(int lump);
 boolean DPT_DehLoadFile(const char *path);

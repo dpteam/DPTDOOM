@@ -113,6 +113,19 @@ int main(void)
         REQUIRE(!strcmp(DPT_DehString(GGSAVED),""));DPT_DehReset();
     }
     {
+        const char old[]=HUSTR_1,replacement[]="DPT LEVEL ONE";
+        unsigned char text_patch[512];size_t head,n=strlen(old),r=strlen(replacement);
+        head=(size_t)snprintf((char *)text_patch,sizeof(text_patch),HEADER "Text %u %u\n",(unsigned)n,(unsigned)r);
+        memcpy(text_patch+head,old,n);memcpy(text_patch+head+n,replacement,r);
+        REQUIRE(LoadData(text_patch,head+n+r));
+        REQUIRE(!strcmp(DPT_DehString(HUSTR_1),replacement));
+        REQUIRE(!strcmp(DPT_DehString(HUSTR_2),HUSTR_2));
+        // Level names are classic-Text only: the BEX key is not verified here.
+        REQUIRE(!Load(HEADER "[STRINGS]\nHUSTR_1 = Nope\n"));
+        REQUIRE(!strcmp(DPT_DehString(HUSTR_1),replacement));
+        DPT_DehReset();REQUIRE(!strcmp(DPT_DehString(HUSTR_1),HUSTR_1));
+    }
+    {
         const char old[]=GOTARMOR;const unsigned char bad[]={ 'X','%','Y' };unsigned char patch[256];
         size_t head=(size_t)snprintf((char *)patch,sizeof(patch),HEADER "Text %u 3\n",(unsigned)strlen(old));
         memcpy(patch+head,old,strlen(old));memcpy(patch+head+strlen(old),bad,sizeof(bad));

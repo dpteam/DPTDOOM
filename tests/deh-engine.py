@@ -103,6 +103,11 @@ def main():
         bex_bad=root/'bex-bad.deh';bex_bad.write_bytes(HEADER+b'[STRINGS]\nNOSUCHSTRING = value\n')
         _,text=run('bex-unknown',['-deh',str(bex_bad)],False)
         assert 'unknown [STRINGS] name' in text,text
+        level_name=b'level 1: entryway';level_new=b'DPT LEVEL ONE'
+        level_patch=root/'level-name.deh'
+        level_patch.write_bytes(HEADER+b'Text '+str(len(level_name)).encode()+b' '+str(len(level_new)).encode()+b'\n'+level_name+level_new)
+        _,text=run('level-name',['-deh',str(level_patch)])
+        assert 'level=DPT LEVEL ONE' in text,text
         bex_pars=root/'bex-pars.deh';bex_pars_copy=root/'bex-pars-copy.deh'
         bex_pars.write_bytes(HEADER+b'[PARS]\npar 1 45\npar 32 20\n')
         bex_pars_copy.write_bytes(bex_pars.read_bytes())
