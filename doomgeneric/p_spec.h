@@ -375,6 +375,7 @@ int EV_DoGenDoorSector (sector_t* sec, int special);
 int EV_DoGenFloor (line_t* line);
 int EV_DoGenCeiling (line_t* line);
 int EV_DoGenCrusher (line_t* line);
+int EV_DoGenStairs (line_t* line);
 
 // Boom generalized linedef dispatch shared by the walk/switch/gun paths.
 boolean DPT_GenSpecialAllowsMonsters (int special);

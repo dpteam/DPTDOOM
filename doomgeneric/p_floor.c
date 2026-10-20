@@ -21,6 +21,7 @@
 #include "z_zone.h"
 #include "doomdef.h"
 #include "dpt_genfloor.h"
+#include "dpt_genstairs.h"
 #include "p_local.h"
 
 #include "s_sound.h"
@@ -514,6 +515,117 @@ EV_DoGenFloor
     return rtn;
 }
 
+
+
+
+//
+// Boom generalized stair builder.
+//
+// Mirrors EV_BuildStairs' traversal (follow the same-front-sided two-sided lines
+// from the tagged sector) but with the step size, speed, direction and the
+// texture rule taken from the generalized bits. The vanilla builder only goes up
+// with a fixed 8/16 step, so it cannot be reused directly.
+//
+int
+EV_DoGenStairs
+( line_t*	line )
+{
+    int			secnum;
+    int			i;
+    int			newsecnum;
+    int			texture;
+    int			ok;
+    int			rtn;
+    dpt_genstairs_t	gen;
+
+    sector_t*		sec;
+    sector_t*		tsec;
+    floormove_t*	floor;
+
+    fixed_t		stairsize;
+    fixed_t		speed;
+    fixed_t		height;
+
+    if (!DPT_GenStairsDecode(line->special, &gen)
+        || !DPT_GenStairsSupported(line->special))
+        return 0;
+
+    stairsize = gen.step * FRACUNIT;
+    speed = (FRACUNIT / 8) * gen.speed_eighths;
+
+    secnum = -1;
+    rtn = 0;
+    while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
+    {
+	sec = &sectors[secnum];
+
+	// ALREADY MOVING?  IF SO, KEEP GOING...
+	if (sec->specialdata)
+	    continue;
+
+	rtn = 1;
+	floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
+	memset(floor, 0, sizeof(*floor));
+	P_AddThinker (&floor->thinker);
+	sec->specialdata = floor;
+	floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
+	floor->direction = gen.up ? 1 : -1;
+	floor->sector = sec;
+	floor->speed = speed;
+	height = gen.up ? sec->floorheight + stairsize
+			: sec->floorheight - stairsize;
+	floor->floordestheight = height;
+
+	texture = sec->floorpic;
+
+	// Find next sector to raise (or lower):
+	// 1.	Find 2-sided line with same sector side[0]
+	// 2.	Other side is the next sector to move
+	do
+	{
+	    ok = 0;
+	    for (i = 0;i < sec->linecount;i++)
+	    {
+		if ( !((sec->lines[i])->flags & ML_TWOSIDED) )
+		    continue;
+
+		tsec = (sec->lines[i])->frontsector;
+		newsecnum = tsec-sectors;
+
+		if (secnum != newsecnum)
+		    continue;
+
+		tsec = (sec->lines[i])->backsector;
+		newsecnum = tsec - sectors;
+
+		if (!gen.ignore_texture && tsec->floorpic != texture)
+		    continue;
+
+		height += gen.up ? stairsize : -stairsize;
+
+		if (tsec->specialdata)
+		    continue;
+
+		sec = tsec;
+		secnum = newsecnum;
+		floor = Z_Malloc (sizeof(*floor), PU_LEVSPEC, 0);
+		memset(floor, 0, sizeof(*floor));
+
+		P_AddThinker (&floor->thinker);
+
+		sec->specialdata = floor;
+		floor->thinker.function.acp1 = (actionf_p1) T_MoveFloor;
+		floor->direction = gen.up ? 1 : -1;
+		floor->sector = sec;
+		floor->speed = speed;
+		floor->floordestheight = height;
+		ok = 1;
+		break;
+	    }
+	} while(ok);
+    }
+    return rtn;
+}
 
 
 

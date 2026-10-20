@@ -25,6 +25,7 @@
 #include "dpt_genfloor.h"
 #include "dpt_genceiling.h"
 #include "dpt_gencrusher.h"
+#include "dpt_genstairs.h"
 #include "p_local.h"
 
 #include "g_game.h"
@@ -329,7 +330,8 @@ P_UseSpecialLine
 	int trigger = line->special & 0x0007;
 
 	if ((trigger == 2 || trigger == 3)
-	    && (DPT_GenCrusherSupported(line->special)
+	    && (DPT_GenStairsSupported(line->special)
+		|| DPT_GenCrusherSupported(line->special)
 		|| DPT_GenCeilingSupported(line->special)
 		|| DPT_GenFloorSupported(line->special)
 		|| DPT_GenDoorSupported(line->special)))

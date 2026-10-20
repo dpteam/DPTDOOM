@@ -27,6 +27,8 @@ DeHackEd/BEX; patched saves используют `DPTDEH1` manifest (тот же
 ceiling-целей (отличается от floors) и правила подмножества.
 `gencrusher` — то же для Boom generalized crushers: 128 комбинаций, отсутствие
 утечки старших битов и правила поддержки триггеров.
+`genstairs` — то же для Boom generalized stairs: 512 комбинаций и
+документированная таблица скоростей (2/4/16/32, не степени двойки).
 См. [MAPS.md](MAPS.md).
 Не запускать повторный build/test в одном build tree, пока предыдущий не завершён:
 Windows может удерживать EXE, а тесты — читать разные версии Python fixtures.
