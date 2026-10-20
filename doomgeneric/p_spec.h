@@ -373,6 +373,7 @@ boolean DPT_GenDoorSupported (int special);
 int EV_DoGenDoor (line_t* line);
 int EV_DoGenDoorSector (sector_t* sec, int special);
 int EV_DoGenFloor (line_t* line);
+int EV_DoGenCeiling (line_t* line);
 
 void
 EV_VerticalDoor

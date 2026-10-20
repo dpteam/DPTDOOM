@@ -19,6 +19,7 @@
 
 #include "z_zone.h"
 #include "doomdef.h"
+#include "dpt_genceiling.h"
 #include "p_local.h"
 
 #include "s_sound.h"
@@ -229,6 +230,70 @@ EV_DoCeiling
 		
 	ceiling->tag = sec->tag;
 	ceiling->type = type;
+	P_AddActiveCeiling(ceiling);
+    }
+    return rtn;
+}
+
+
+//
+// Boom generalized ceiling.
+//
+// Only the supported subset is accepted (see DPT_GenCeilingSupported): raise to
+// the highest neighbour ceiling, or lower to the floor with an optional crush.
+// The speed comes from the generalized bits instead of the fixed CEILSPEED.
+//
+int
+EV_DoGenCeiling
+( line_t*	line )
+{
+    int			secnum;
+    int			rtn;
+    sector_t*		sec;
+    ceiling_t*		ceiling;
+    dpt_genceiling_t	gen;
+
+    if (!DPT_GenCeilingDecode(line->special, &gen)
+        || !DPT_GenCeilingSupported(line->special))
+        return 0;
+
+    secnum = -1;
+    rtn = 0;
+    while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
+    {
+	sec = &sectors[secnum];
+	if (sec->specialdata)
+	    continue;
+
+	rtn = 1;
+	ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVSPEC, 0);
+	memset(ceiling, 0, sizeof(*ceiling));
+	P_AddThinker (&ceiling->thinker);
+	sec->specialdata = ceiling;
+	ceiling->thinker.function.acp1 = (actionf_p1)T_MoveCeiling;
+	ceiling->sector = sec;
+	ceiling->crush = false;
+	ceiling->speed = CEILSPEED << gen.speed_shift;
+
+	if (gen.up)
+	{
+	    // Raise to the highest surrounding ceiling. Vanilla has no separate
+	    // "next neighbour" ceiling type, which is why only HnC is supported.
+	    ceiling->type = raiseToHighest;
+	    ceiling->topheight = P_FindHighestCeilingSurrounding(sec);
+	    ceiling->direction = 1;
+	}
+	else
+	{
+	    ceiling->type = gen.crush ? lowerAndCrush : lowerToFloor;
+	    ceiling->crush = gen.crush;
+	    ceiling->bottomheight = sec->floorheight;
+	    if (gen.crush)
+		ceiling->bottomheight += 8*FRACUNIT;
+	    ceiling->direction = -1;
+	}
+
+	ceiling->tag = sec->tag;
 	P_AddActiveCeiling(ceiling);
     }
     return rtn;

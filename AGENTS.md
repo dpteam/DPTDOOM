@@ -162,12 +162,14 @@ ctest --preset windows-headless
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
 - Boom/MBF maps: реализован sky transfer (linedef 271/272, per-sector
   `sector->sky` вне savegame, visplane учитывает текстуру), весь диапазон
-  generalized-дверей `0x3c00..0x3fff` и подмножество generalized floors
-  `0x6000..0x7fff` (декодеры в `dpt_gendoor.c`/`dpt_genfloor.c`, data-free
-  тесты `gendoor`/`genfloor`). Остальные Boom/MBF specials (locked doors,
-  generalized ceilings/lifts/stairs/crushers, часть floor-целей) не реализованы
+  generalized-дверей `0x3c00..0x3fff` и подмножества generalized floors
+  `0x6000..0x7fff` и ceilings `0x4000..0x5fff` (декодеры в
+  `dpt_gendoor.c`/`dpt_genfloor.c`/`dpt_genceiling.c`, data-free тесты
+  `gendoor`/`genfloor`/`genceiling`). Остальные Boom/MBF specials (locked doors,
+  lifts/stairs/crushers, часть floor/ceiling-целей) не реализованы
   и попадают в отчёт `Map compatibility:`; не выдавать загрузку карты за
-  совместимость. Детали/тесты — `docs/MAPS.md`, `map-sky`, `gendoor`, `genfloor`.
+  совместимость. Детали/тесты — `docs/MAPS.md`, `map-sky`, `gendoor`, `genfloor`,
+  `genceiling`.
 - DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Text + Weapon frames + Thing numeric/flags/states/sounds + Frame graph/visual/psprite** classic
   v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.

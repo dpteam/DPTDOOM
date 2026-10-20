@@ -29,6 +29,7 @@
 
 #include "deh_main.h"
 #include "dpt_genfloor.h"
+#include "dpt_genceiling.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -546,10 +547,29 @@ P_CrossSpecialLine
 		     && (line->special & 0x0080)))
 	{
 	    dpt_genfloor_t gen;
-	    if (!(DPT_GenFloorSupported(line->special)
-		  && DPT_GenFloorDecode(line->special, &gen) && gen.monsters))
+	    dpt_genceiling_t ceil;
+	    boolean allowed = false;
+
+	    if (DPT_GenFloorSupported(line->special)
+		&& DPT_GenFloorDecode(line->special, &gen) && gen.monsters)
+		allowed = true;
+	    if (DPT_GenCeilingSupported(line->special)
+		&& DPT_GenCeilingDecode(line->special, &ceil) && ceil.monsters)
+		allowed = true;
+	    if (!allowed)
 		return;
 	}
+    }
+
+    // Boom generalized ceilings with walk triggers (W1/WR).
+    if (DPT_GenCeilingSupported(line->special) && (line->special & 0x0007) <= 1)
+    {
+	boolean once = !(line->special & 0x0001);
+
+	EV_DoGenCeiling(line);
+	if (once)
+	    line->special = 0;
+	return;
     }
 
     // Boom generalized floors with walk triggers (W1/WR).
@@ -1020,9 +1040,32 @@ P_ShootSpecialLine
 	if (!ok)
 	{
 	    dpt_genfloor_t gen;
-	    if (!(DPT_GenFloorSupported(line->special)
-		  && DPT_GenFloorDecode(line->special, &gen) && gen.monsters))
+	    dpt_genceiling_t ceil;
+	    boolean allowed = false;
+
+	    if (DPT_GenFloorSupported(line->special)
+		&& DPT_GenFloorDecode(line->special, &gen) && gen.monsters)
+		allowed = true;
+	    if (DPT_GenCeilingSupported(line->special)
+		&& DPT_GenCeilingDecode(line->special, &ceil) && ceil.monsters)
+		allowed = true;
+	    if (!allowed)
 		return;
+	}
+    }
+
+    // Boom generalized ceilings with gun triggers (G1/GR).
+    if (DPT_GenCeilingSupported(line->special))
+    {
+	int trigger = line->special & 0x0007;
+
+	if (trigger == 4 || trigger == 5)
+	{
+	    boolean once = (trigger == 4);
+
+	    if (EV_DoGenCeiling(line) && once)
+		line->special = 0;
+	    return;
 	}
     }
 
@@ -1603,6 +1646,8 @@ void P_SpawnSpecials (void)
 	    if (DPT_GenDoorSupported(special))
 		continue;
 	    if (DPT_GenFloorSupported(special))
+		continue;
+	    if (DPT_GenCeilingSupported(special))
 		continue;
 	    ++unsupported_occurrences;
 	    for (k = 0; k < unique; ++k)
