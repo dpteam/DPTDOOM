@@ -361,6 +361,19 @@ typedef struct
 #define VDOORSPEED		FRACUNIT*2
 #define VDOORWAIT		150
 
+// Boom generalized doors occupy 0x3c00..0x3fff. The low three bits select the
+// trigger (0=W1, 1=WR, 2=S1, 3=SR, 4=G1, 5=GR, 6=P1, 7=PR), bits 3-4 the
+// speed (1x..8x VDOORSPEED), bits 5-6 the kind, bit 7 monster activation and
+// bits 8-9 the delay. Only walk and switch triggers are implemented here; push
+// triggers and the locked-door range stay unsupported and are reported.
+#define DPT_GEN_DOOR_BASE	0x3c00
+#define DPT_GEN_DOOR_END	0x3fff
+
+boolean DPT_GenDoorSupported (int special);
+boolean DPT_GenDoorDecode (int special, int *kind, int *speed_shift,
+                           int *delay_seconds);
+int EV_DoGenDoor (line_t* line);
+
 void
 EV_VerticalDoor
 ( line_t*	line,

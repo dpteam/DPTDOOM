@@ -294,6 +294,14 @@ P_UseSpecialLine
     // Switches that other things can activate.
     if (!thing->player)
     {
+	// Boom generalized doors opt in through bit 7.
+	if (DPT_GenDoorSupported(line->special) && (line->special & 0x0080))
+	{
+	    if (line->flags & ML_SECRET)
+		return false;
+	}
+	else
+	{
 	// never open secret doors
 	if (line->flags & ML_SECRET)
 	    return false;
@@ -310,6 +318,23 @@ P_UseSpecialLine
 	    return false;
 	    break;
 	}
+	}
+    }
+
+    // Boom generalized doors with switch triggers (S1/SR).
+    if (DPT_GenDoorSupported(line->special) && (line->special & 0x0007) >= 2)
+    {
+	boolean once = !(line->special & 0x0001);
+
+	if (EV_DoGenDoor(line))
+	{
+	    if (once)
+	    {
+		line->special = 0;
+		P_ChangeSwitchTexture(line,0);
+	    }
+	}
+	return true;
     }
 
     

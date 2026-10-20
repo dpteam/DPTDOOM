@@ -130,7 +130,7 @@ void T_VerticalDoor (vldoor_t* door)
 		
 	      case vld_close30ThenOpen:
 		door->direction = 0;
-		door->topcountdown = TICRATE*30;
+		door->topcountdown = door->topwait;
 		break;
 		
 	      default:
@@ -300,6 +300,9 @@ EV_DoDoor
 	  case vld_close30ThenOpen:
 	    door->topheight = sec->ceilingheight;
 	    door->direction = -1;
+	    // Vanilla waits 30 seconds here; the generalized door reuses this
+	    // type with its own delay, so the wait now comes from topwait.
+	    door->topwait = TICRATE*30;
 	    S_StartSound(&door->sector->soundorg, sfx_dorcls);
 	    break;
 	    
@@ -327,6 +330,116 @@ EV_DoDoor
 	}
 		
     }
+    return rtn;
+}
+
+
+//
+// Boom generalized doors
+//
+// Bit layout and trigger numbering follow BOOM's generalized linedef
+// definitions (0x3c00..0x3fff): low 3 bits = trigger, bits 3-4 = speed,
+// bits 5-6 = kind, bit 7 = monsters may activate, bits 8-9 = delay.
+//
+boolean DPT_GenDoorSupported (int special)
+{
+    int trigger;
+
+    if (special < DPT_GEN_DOOR_BASE || special > DPT_GEN_DOOR_END)
+        return false;
+
+    // Only walk (W1/WR) and switch (S1/SR) triggers are wired up. Gun, push and
+    // the locked-door range stay unsupported instead of half-working.
+    trigger = special & 0x0007;
+    return trigger <= 3;
+}
+
+boolean DPT_GenDoorDecode (int special, int *kind, int *speed_shift,
+                           int *delay_seconds)
+{
+    static const int delays[4] = {1, 4, 9, 30};
+
+    if (!DPT_GenDoorSupported(special))
+        return false;
+    if (kind)
+        *kind = (special & 0x0060) >> 5;
+    if (speed_shift)
+        *speed_shift = (special & 0x0018) >> 3;
+    if (delay_seconds)
+        *delay_seconds = delays[(special & 0x0300) >> 8];
+    return true;
+}
+
+int EV_DoGenDoor (line_t* line)
+{
+    int		secnum, rtn, kind, speed_shift, delay_seconds;
+    sector_t*	sec;
+    vldoor_t*	door;
+    vldoor_e	type;
+    fixed_t	speed;
+
+    if (!DPT_GenDoorDecode (line->special, &kind, &speed_shift, &delay_seconds))
+        return 0;
+
+    // BOOM's four door speeds double each step and start at the vanilla speed
+    // (VDOORSPEED). ZDoom's BOOM translation uses the same 16/32/64/128 scale
+    // for slow/normal/fast/turbo, i.e. 1x, 2x, 4x and 8x vanilla.
+    speed = VDOORSPEED << speed_shift;
+
+    switch (kind)
+    {
+      case 0:  type = vld_normal;          break;  // open, wait, close
+      case 1:  type = vld_open;            break;  // open and stay
+      case 2:  type = vld_close30ThenOpen; break;  // close, wait, open
+      default: type = vld_close;           break;  // close and stay
+    }
+
+    secnum = -1;
+    rtn = 0;
+
+    while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
+    {
+	sec = &sectors[secnum];
+	if (sec->specialdata)
+	    continue;
+
+	rtn = 1;
+	door = Z_Malloc (sizeof(*door), PU_LEVSPEC, 0);
+	memset(door, 0, sizeof(*door));
+	P_AddThinker (&door->thinker);
+	sec->specialdata = door;
+
+	door->thinker.function.acp1 = (actionf_p1) T_VerticalDoor;
+	door->sector = sec;
+	door->type = type;
+	door->speed = speed;
+	door->topwait = delay_seconds * TICRATE;
+
+	switch (type)
+	{
+	  case vld_close:
+	    door->topheight = P_FindLowestCeilingSurrounding(sec);
+	    door->topheight -= 4*FRACUNIT;
+	    door->direction = -1;
+	    S_StartSound(&door->sector->soundorg, sfx_dorcls);
+	    break;
+
+	  case vld_close30ThenOpen:
+	    door->topheight = sec->ceilingheight;
+	    door->direction = -1;
+	    S_StartSound(&door->sector->soundorg, sfx_dorcls);
+	    break;
+
+	  default:	// vld_open / vld_normal
+	    door->direction = 1;
+	    door->topheight = P_FindLowestCeilingSurrounding(sec);
+	    door->topheight -= 4*FRACUNIT;
+	    if (door->topheight != sec->ceilingheight)
+		S_StartSound(&door->sector->soundorg, sfx_doropn);
+	    break;
+	}
+    }
+
     return rtn;
 }
 

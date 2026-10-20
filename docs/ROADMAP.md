@@ -437,6 +437,11 @@ partition может породить две отдельные локальны
   отклоняются. Engine report `level=`, unit/engine tests, digest v19.
 - [ ] Следующий map-срез: Boom generalized linedefs. Нужна точная битовая
   спецификация из первичного источника; не угадывать номера specials.
+- [x] Boom generalized **doors** (0x3c00..0x3fff) для W1/WR/S1/SR: битовый
+  layout и нумерация триггеров взяты из `p_xlat.cpp` (BOOM), скорости 1x..8x
+  VDOORSPEED, задержки 1/4/9/30s через `door->topwait`. Push/gun/locked и
+  generalized floor/ceiling/lift/stairs/crusher остаются неподдерживаемыми и
+  попадают в отчёт. Автоматически проверена классификация, не анимация.
 - [ ] MBF-совместимые карты/моды (medium по просьбе владельца); оценить BEX/Boom
   как промежуточные этапы, MBF21 отдельно. Сначала compatibility matrix/tests,
   не выдавать загрузку карты за корректную реализацию её mechanics.

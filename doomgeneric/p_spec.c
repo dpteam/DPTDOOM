@@ -541,8 +541,20 @@ P_CrossSpecialLine
 	    ok = 1;
 	    break;
 	}
-	if (!ok)
+	if (!ok && !(DPT_GenDoorSupported(line->special)
+		     && (line->special & 0x0080)))
 	    return;
+    }
+
+    // Boom generalized doors with walk triggers (W1/WR).
+    if (DPT_GenDoorSupported(line->special) && (line->special & 0x0007) <= 1)
+    {
+	boolean once = !(line->special & 0x0001);
+
+	EV_DoGenDoor(line);
+	if (once)
+	    line->special = 0;
+	return;
     }
 
     
@@ -1525,6 +1537,8 @@ void P_SpawnSpecials (void)
 	    if (special < 142 && special != 78 && special != 85)
 		continue;
 	    if (special == 271 || special == 272)
+		continue;
+	    if (DPT_GenDoorSupported(special))
 		continue;
 	    ++unsupported_occurrences;
 	    for (k = 0; k < unique; ++k)

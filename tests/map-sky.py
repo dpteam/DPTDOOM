@@ -151,6 +151,19 @@ def main():
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and (" %d" % special) in text, text
             assert "Map sky: count=0" in text, text
+        # Boom generalized doors (0x3c00..0x3fff): walk/switch triggers are
+        # implemented, so they must not be reported as unsupported.
+        for name, special in (("gendoor-w1", 0x3c00), ("gendoor-s1", 0x3c02)):
+            overlay(iwad, root / (name + ".wad"), special)
+            _, text = run(name, ["-file", str(root / (name + ".wad"))])
+            assert "Map compatibility:" not in text, text
+        # Push triggers and the non-door generalized ranges stay unsupported.
+        for name, special in (("gendoor-push", 0x3c06), ("genfloor", 0x6000),
+                              ("genlocked", 0x3800)):
+            overlay(iwad, root / (name + ".wad"), special)
+            _, text = run(name, ["-file", str(root / (name + ".wad"))])
+            assert "Map compatibility:" in text and (" %d" % special) in text, text
+
         # The baseline overlay has no Boom specials and must stay quiet, even
         # though stock Doom II MAP01 does use vanilla types 102 and 103.
         assert "Map compatibility:" not in run("base-quiet", ["-file", str(root / "sky-base.wad")])[1]
