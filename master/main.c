@@ -343,11 +343,67 @@ static int Number(const char *text, unsigned int low, unsigned int high, unsigne
 // every config line, and the address must outlive LoadConfig.
 static char config_bind[64];
 
+// Template written when --config points at a file that does not exist yet, so an
+// operator gets something to edit instead of an error. Every key is commented
+// out, so the file is inert until the operator changes it.
+static const char *ConfigTemplate =
+"# dptdoom-master configuration.\n"
+"# Generated automatically because this file did not exist.\n"
+"# Every line is commented out, so this file does nothing until you edit it.\n"
+"# Restart the master after editing. Lines starting with # are ignored.\n"
+"\n"
+"# Address to listen on. Default is loopback, which only this machine can reach.\n"
+"# Use 0.0.0.0 for all interfaces, or one specific interface address.\n"
+"# A --bind command line argument overrides this value.\n"
+"# bind=0.0.0.0\n"
+"\n"
+"# Public address rewriting for NAT hairpin / SNAT. Off unless set here.\n"
+"# Source must be a canonical RFC1918 or loopback CIDR; destination numeric IPv4.\n"
+"# Up to 8 non-overlapping ranges. No game-port rewriting, no NAT traversal.\n"
+"# address-map=192.168.50.0/24=203.0.113.10\n"
+"\n"
+"# How the master learns its own public address: off | manual | dns | api.\n"
+"#   off     - advertise the observed source address (default)\n"
+"#   manual  - use public-ip\n"
+"#   dns     - resolve public-host\n"
+"#   api     - query public-api over HTTPS (explicit opt-in)\n"
+"# public-address-mode=off\n"
+"# public-host=games.example.org\n"
+"# public-ip=203.0.113.10\n"
+"# public-api=https://example.org/myip\n"
+"# Seconds between public address refreshes (30..86400).\n"
+"# public-refresh-seconds=300\n"
+"\n"
+"# Clients on this subnet are treated as hairpin (see address-map) so they get\n"
+"# the public address of peers on the same LAN. Optional.\n"
+"# hairpin-subnet=192.168.50.0/24\n";
+
+static int WriteConfigTemplate(const char *path)
+{
+    FILE *file=fopen(path,"wb");
+    if(!file)return 0;
+    if(fputs(ConfigTemplate,file)==EOF){fclose(file);return 0;}
+    return fclose(file)==0;
+}
+
 static int LoadConfig(const char *path, const char **host, int host_from_cli)
 {
     FILE *file=fopen(path,"rb");
     char line[768];unsigned int number=0;
-    if(!file){fprintf(stderr,"Master: cannot open config: %s\n",path);return 0;}
+    if(!file)
+    {
+        // A missing file is almost always a first run rather than a typo. A
+        // typo in the directory still fails here, so a mistyped path cannot
+        // silently produce a "configured" master that ignores an existing
+        // config elsewhere.
+        if(!WriteConfigTemplate(path))
+        { fprintf(stderr,"Master: cannot open or create config: %s\n",path); return 0; }
+        ML_Message("Master: config did not exist, wrote a commented template (all defaults)");
+        { char message[320]; snprintf(message,sizeof(message),
+            "Master: edit %s to set bind=, address-map= and public address; every line in it is commented out, so nothing is active yet",path);
+          ML_Message(message); }
+        return 1;
+    }
     while(fgets(line,sizeof(line),file))
     {
         char *start=line,*end;size_t length=strlen(line);++number;
@@ -419,6 +475,8 @@ int main(int argc, char **argv)
         else goto usage;
     }
     if(config_path && !LoadConfig(config_path,&host,host_from_cli))return 2;
+    if(!config_path)
+        ML_Message("Master: no --config given; pass --config dptdoom-master.conf to get a commented template you can edit (it is created if missing)");
     if(!PA_Prepare(&public_address,&directory)){fputs("Master: invalid public address mode/config combination or subnet overlap\n",stderr);return 2;}
     if(!ML_Open(log_path,log_size)) { fputs("Master: cannot open event log (check --log path/permissions)\n",stderr); return 1; }
 #ifdef _WIN32

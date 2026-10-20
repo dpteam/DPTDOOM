@@ -30,6 +30,37 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
     config.write_text('bind=not-an-ip\n')
     result=subprocess.run([exe,'--config',str(config)],cwd=root,capture_output=True,timeout=10)
     assert result.returncode!=0 and b'must be numeric IPv4' in result.stdout+result.stderr,result
+    # A config path that does not exist yet is created as a commented template,
+    # so a first run gives something to edit instead of an error.
+    fresh=root/'fresh.conf'
+    assert not fresh.exists()
+    with socket.socket() as reservation:
+        reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+    with (root/'fresh.log').open('wb') as log:
+        process=subprocess.Popen([exe,'--port',str(port),'--config',str(fresh)],
+                                 cwd=root,stdout=log,stderr=log)
+        try:
+            deadline=time.monotonic()+10
+            while b'listening on' not in (root/'fresh.log').read_bytes():
+                assert process.poll() is None
+                assert time.monotonic()<deadline
+                time.sleep(.02)
+        finally:
+            process.terminate();process.wait(10)
+    text=(root/'fresh.log').read_bytes()
+    assert b'wrote a commented template' in text,text
+    body=fresh.read_text()
+    # The template must be inert: every directive commented out, otherwise the
+    # master would silently start with settings the operator never chose.
+    assert body.strip(), 'template is empty'
+    directives=[l for l in body.splitlines() if l.strip() and not l.lstrip().startswith('#')]
+    assert not directives, directives
+    assert 'bind=0.0.0.0' in body and 'address-map=' in body, body
+    # A mistyped directory must still fail rather than "succeed" with a master
+    # that ignores an existing config elsewhere.
+    missing=root/'nosuchdir'/'x.conf'
+    result=subprocess.run([exe,'--config',str(missing)],cwd=root,capture_output=True,timeout=10)
+    assert result.returncode!=0,result
     # bind= in the config persists the operator's choice; loopback stays the
     # default, and an explicit --bind must still win over the config.
     for expected,extra in (('0.0.0.0',[]),('127.0.0.1',['--bind','127.0.0.1'])):

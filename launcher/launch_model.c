@@ -277,6 +277,34 @@ BOOL LP_Save(const wchar_t *ini, int slot, const launch_profile_t *p)
         {
             const unsigned char bom[2] = {0xff, 0xfe}; DWORD written;
             BOOL ok = WriteFile(file, bom, 2, &written, NULL) && written == 2;
+            // Explain the file while it is being created, so whoever opens it
+            // later knows what the sections mean. Only on creation: appending on
+            // every save would grow duplicate headers. INI comments use ';'.
+            if (ok)
+            {
+                static const wchar_t header[] =
+                    L"; DPT.DOOM launcher settings (UTF-16, INI format).\n"
+                    L"; Written when you launch a game from the launcher.\n"
+                    L"; You can edit by hand, but the launcher rewrites these on the next launch.\n"
+                    L"; Lines starting with ';' are comments. [Profile1]..[Profile3] are the three slots.\n"
+                    L";\n"
+                    L"; Executable = path to dptdoom.exe\n"
+                    L"; IWAD       = path to DOOM2.WAD (or Freedoom / shareware DOOM1.WAD)\n"
+                    L"; Mod0, Mod1, Mod2 = PWAD paths, loaded in order; ModCount = how many are used\n"
+                    L"; Mode       = 0 single player, 1 host, 2 join\n"
+                    L"; Address    = join target IPv4:port (Mode 2 only)\n"
+                    L"; Port       = host listen port, 1..65535\n"
+                    L"; Map/Episode/Skill = start level and difficulty\n"
+                    L"; DMFlags    = 0 vanilla, 1 hide multiplayer weapons, 2 players pass through, 3 both\n"
+                    L"; LAN        = 1 binds the host to 0.0.0.0 so other machines can join\n"
+                    L"; NoMonsters/Fast/Respawn = 0 or 1\n"
+                    L";\n"
+                    L"; [Master] Endpoint is the server-list address; delete the line to reset the default.\n"
+                    L"\n";
+                int need = (int)((sizeof(header) / sizeof(header[0])) - 1) * (int)sizeof(wchar_t);
+                if (need > 0)
+                    ok = WriteFile(file, header, (DWORD)need, &written, NULL) && written == (DWORD)need;
+            }
             CloseHandle(file); if (!ok) return FALSE;
         }
         else if (GetLastError() != ERROR_FILE_EXISTS && GetLastError() != ERROR_ALREADY_EXISTS) return FALSE;

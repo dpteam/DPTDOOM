@@ -1659,6 +1659,28 @@ static void SaveDefaultCollection(default_collection_t *collection)
     if (!f)
 	return; // can't write the file, but don't complain
 
+    // Explain the file to whoever opens it. The loader skips lines it cannot
+    // parse as "name value", so comments are safe here, and the values below are
+    // written by the game on exit - editing them by hand works, but a change is
+    // overwritten the next time the game quits.
+    fprintf(f, "# %s - DPT.DOOM settings.\n", collection->filename);
+    fprintf(f, "#\n");
+    fprintf(f, "# Written automatically when the game exits. You can edit it by hand,\n");
+    fprintf(f, "# but the game rewrites these values on the next exit, so prefer the\n");
+    fprintf(f, "# in-game Options menu for anything it exposes.\n");
+    fprintf(f, "#\n");
+    fprintf(f, "# Format: one \"name value\" per line. Lines starting with # are ignored.\n");
+    fprintf(f, "# Keys are stored as decimal Doom key codes, not characters:\n");
+    fprintf(f, "#   a-z = 97-122, 0-9 = 48-57, arrows = 72/75/77/80,\n");
+    fprintf(f, "#   Ctrl = 29, Space = 57, Shift = 54, Alt = 56.\n");
+    fprintf(f, "#\n");
+    fprintf(f, "# Input defaults: W/S move, A/D strafe, mouse turns.\n");
+    fprintf(f, "#   crosshair / auto_run / mouseflip / dpt_pitch_enabled: 0 or 1.\n");
+    fprintf(f, "#   novert 1 ignores vertical mouse motion; set 0 to use the mouse\n");
+    fprintf(f, "#   vertically (with dpt_pitch_enabled 1 that looks up/down).\n");
+    fprintf(f, "#   grabmouse 0 keeps the pointer free (for window controls).\n");
+    fprintf(f, "\n");
+
     defaults = collection->defaults;
 		
     for (i=0 ; i<collection->numdefaults ; i++)
