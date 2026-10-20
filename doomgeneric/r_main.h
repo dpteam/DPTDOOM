@@ -44,6 +44,9 @@ extern int		centery;
 extern int		dpt_view_pitch;
 extern int		dpt_pitch_enabled;
 extern int		dpt_pitch_max;
+// Anchor for player sprites (the weapon): the view centre without pitch.
+extern fixed_t		dpt_centeryfrac_nopitch;
+extern boolean		dpt_drawing_psprite;
 void R_UpdatePitchHorizon(void);
 void R_UpdateViewPitch(void);
 

@@ -429,7 +429,11 @@ R_DrawVisSprite
     dc_texturemid = vis->texturemid;
     frac = vis->startfrac;
     spryscale = vis->scale;
-    sprtopscreen = centeryfrac - FixedMul(dc_texturemid,spryscale);
+    // Player sprites (weapons) stay anchored to the screen centre; world sprites
+    // follow the pitched horizon. Using centeryfrac for both made the gun slide
+    // up and down with the view.
+    sprtopscreen = (dpt_drawing_psprite ? dpt_centeryfrac_nopitch : centeryfrac)
+		   - FixedMul(dc_texturemid,spryscale);
 	
     for (dc_x=vis->x1 ; dc_x<=vis->x2 ; dc_x++, frac += vis->xiscale)
     {
@@ -769,7 +773,9 @@ void R_DrawPlayerSprites (void)
     mfloorclip = screenheightarray;
     mceilingclip = negonearray;
     
-    // add all active psprites
+    // add all active psprites. The flag tells R_DrawVisSprite to anchor them to
+    // the un-pitched screen centre instead of the horizon.
+    dpt_drawing_psprite = true;
     for (i=0, psp=viewplayer->psprites;
 	 i<NUMPSPRITES;
 	 i++,psp++)
@@ -777,6 +783,7 @@ void R_DrawPlayerSprites (void)
 	if (psp->state)
 	    R_DrawPSprite (psp);
     }
+    dpt_drawing_psprite = false;
 }
 
 

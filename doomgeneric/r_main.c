@@ -68,6 +68,17 @@ int			dpt_pitch_enabled = 1;
 int			dpt_pitch_max = DPT_PITCH_MAX;
 static int		last_pitch;
 
+// Screen centre without pitch. Player sprites (the weapon) are anchored to this
+// rather than to centeryfrac: a first-person weapon must stay fixed on screen
+// while the world tilts, which is what Duke Nukem 3D does too. Moving the
+// weapon with the horizon looks like the gun is sliding out of the player's
+// hands.
+fixed_t			dpt_centeryfrac_nopitch;
+
+// Set while player sprites are being drawn, so R_DrawVisSprite knows which
+// anchor to use. World sprites must follow the pitched horizon.
+boolean			dpt_drawing_psprite;
+
 void R_UpdatePitchHorizon (void)
 {
     int i;
@@ -94,6 +105,9 @@ void R_UpdatePitchHorizon (void)
 
     centery = horizon;
     centeryfrac = centery<<FRACBITS;
+
+    // The weapon anchor never moves: it is the physical centre of the view.
+    dpt_centeryfrac_nopitch = (viewheight/2)<<FRACBITS;
 
     // Plane slope table, using the shifted horizon instead of the fixed middle
     // of the screen. FRACUNIT/2 keeps the divisor away from zero.
