@@ -456,6 +456,13 @@ partition может породить две отдельные локальны
   включая порядок ceiling-целей (отличается от floors). LnC/NnC/HnF/sT,
   абсолютные высоты, `change != 0`, crush-вверх и push остаются
   неподдерживаемыми. Реальная анимация — вручную.
+- [x] Boom generalized **crushers** (`0x2f80..0x2fff`): trigger/speed/monster/
+  silent, скорости 1x..8x `CEILSPEED`, `silent` → `silentCrushAndRaise`.
+  Добавлено `ceiling_t.basespeed`, чтобы `T_MoveCeiling` не сбрасывал
+  turbo-крашер к `CEILSPEED`; при нулевом значении ванильное поведение
+  (включая квирк `fastCrushAndRaise`) не изменилось. Декодер `dpt_gencrusher.c`
+  покрыт data-free тестом `gencrusher` на 128 комбинаций. Push-триггеры
+  неподдерживаемы и попадают в отчёт.
 - [ ] MBF-совместимые карты/моды (medium по просьбе владельца); оценить BEX/Boom
   как промежуточные этапы, MBF21 отдельно. Сначала compatibility matrix/tests,
   не выдавать загрузку карты за корректную реализацию её mechanics.

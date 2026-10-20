@@ -30,6 +30,7 @@
 #include "deh_main.h"
 #include "dpt_genfloor.h"
 #include "dpt_genceiling.h"
+#include "dpt_gencrusher.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -501,6 +502,46 @@ P_FindMinSurroundingLight
 // Called every time a thing origin is about
 //  to cross a line with a non 0 special.
 //
+//
+// Whether a generalized Boom special may be activated by a monster.
+// Each family stores this flag differently: doors use bit 7 directly, while
+// floors/ceilings reuse the model bit (only when no texture change) and
+// crushers have their own monster bit.
+//
+boolean DPT_GenSpecialAllowsMonsters (int special)
+{
+    dpt_genfloor_t floor;
+    dpt_genceiling_t ceiling;
+    dpt_gencrusher_t crusher;
+
+    if (DPT_GenDoorSupported(special))
+        return (special & 0x0080) != 0;
+    if (DPT_GenFloorSupported(special))
+        return DPT_GenFloorDecode(special,&floor) && floor.monsters;
+    if (DPT_GenCeilingSupported(special))
+        return DPT_GenCeilingDecode(special,&ceiling) && ceiling.monsters;
+    if (DPT_GenCrusherSupported(special))
+        return DPT_GenCrusherDecode(special,&crusher) && crusher.monsters;
+    return false;
+}
+
+//
+// Start the generalized special on its tagged sectors. Returns 0 when the line
+// is not a supported generalized type.
+//
+int DPT_GenSpecialTrigger (line_t* line)
+{
+    if (DPT_GenCrusherSupported(line->special))
+        return EV_DoGenCrusher(line);
+    if (DPT_GenCeilingSupported(line->special))
+        return EV_DoGenCeiling(line);
+    if (DPT_GenFloorSupported(line->special))
+        return EV_DoGenFloor(line);
+    if (DPT_GenDoorSupported(line->special))
+        return EV_DoGenDoor(line);
+    return 0;
+}
+
 void
 P_CrossSpecialLine
 ( int		linenum,
@@ -543,53 +584,20 @@ P_CrossSpecialLine
 	    ok = 1;
 	    break;
 	}
-	if (!ok && !(DPT_GenDoorSupported(line->special)
-		     && (line->special & 0x0080)))
-	{
-	    dpt_genfloor_t gen;
-	    dpt_genceiling_t ceil;
-	    boolean allowed = false;
-
-	    if (DPT_GenFloorSupported(line->special)
-		&& DPT_GenFloorDecode(line->special, &gen) && gen.monsters)
-		allowed = true;
-	    if (DPT_GenCeilingSupported(line->special)
-		&& DPT_GenCeilingDecode(line->special, &ceil) && ceil.monsters)
-		allowed = true;
-	    if (!allowed)
-		return;
-	}
+	if (!ok && !DPT_GenSpecialAllowsMonsters(line->special))
+	    return;
     }
 
-    // Boom generalized ceilings with walk triggers (W1/WR).
-    if (DPT_GenCeilingSupported(line->special) && (line->special & 0x0007) <= 1)
+    // Boom generalized walk triggers (W1/WR), any family.
+    if ((line->special & 0x0007) <= 1
+        && (DPT_GenCrusherSupported(line->special)
+            || DPT_GenCeilingSupported(line->special)
+            || DPT_GenFloorSupported(line->special)
+            || DPT_GenDoorSupported(line->special)))
     {
 	boolean once = !(line->special & 0x0001);
 
-	EV_DoGenCeiling(line);
-	if (once)
-	    line->special = 0;
-	return;
-    }
-
-    // Boom generalized floors with walk triggers (W1/WR).
-    if (DPT_GenFloorSupported(line->special) && (line->special & 0x0007) <= 1)
-    {
-	boolean once = !(line->special & 0x0001);
-
-	EV_DoGenFloor(line);
-	if (once)
-	    line->special = 0;
-	return;
-    }
-
-    // Boom generalized doors with walk triggers (W1/WR).
-    if (DPT_GenDoorSupported(line->special) && (line->special & 0x0007) <= 1)
-    {
-	boolean once = !(line->special & 0x0001);
-
-	EV_DoGenDoor(line);
-	if (once)
+	if (DPT_GenSpecialTrigger(line) && once)
 	    line->special = 0;
 	return;
     }
@@ -1037,48 +1045,23 @@ P_ShootSpecialLine
 	if (!ok && DPT_GenDoorSupported(line->special)
 		&& (line->special & 0x0080))
 	    ok = 1;
-	if (!ok)
-	{
-	    dpt_genfloor_t gen;
-	    dpt_genceiling_t ceil;
-	    boolean allowed = false;
-
-	    if (DPT_GenFloorSupported(line->special)
-		&& DPT_GenFloorDecode(line->special, &gen) && gen.monsters)
-		allowed = true;
-	    if (DPT_GenCeilingSupported(line->special)
-		&& DPT_GenCeilingDecode(line->special, &ceil) && ceil.monsters)
-		allowed = true;
-	    if (!allowed)
-		return;
-	}
-    }
-
-    // Boom generalized ceilings with gun triggers (G1/GR).
-    if (DPT_GenCeilingSupported(line->special))
-    {
-	int trigger = line->special & 0x0007;
-
-	if (trigger == 4 || trigger == 5)
-	{
-	    boolean once = (trigger == 4);
-
-	    if (EV_DoGenCeiling(line) && once)
-		line->special = 0;
+	if (!ok && !DPT_GenSpecialAllowsMonsters(line->special))
 	    return;
-	}
     }
 
-    // Boom generalized floors with gun triggers (G1/GR).
-    if (DPT_GenFloorSupported(line->special))
+    // Boom generalized gun triggers (G1/GR), any family.
     {
 	int trigger = line->special & 0x0007;
 
-	if (trigger == 4 || trigger == 5)
+	if ((trigger == 4 || trigger == 5)
+	    && (DPT_GenCrusherSupported(line->special)
+		|| DPT_GenCeilingSupported(line->special)
+		|| DPT_GenFloorSupported(line->special)
+		|| DPT_GenDoorSupported(line->special)))
 	{
 	    boolean once = (trigger == 4);
 
-	    if (EV_DoGenFloor(line) && once)
+	    if (DPT_GenSpecialTrigger(line) && once)
 		line->special = 0;
 	    return;
 	}
@@ -1648,6 +1631,8 @@ void P_SpawnSpecials (void)
 	    if (DPT_GenFloorSupported(special))
 		continue;
 	    if (DPT_GenCeilingSupported(special))
+		continue;
+	    if (DPT_GenCrusherSupported(special))
 		continue;
 	    ++unsupported_occurrences;
 	    for (k = 0; k < unique; ++k)

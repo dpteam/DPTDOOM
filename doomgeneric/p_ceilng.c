@@ -20,6 +20,7 @@
 #include "z_zone.h"
 #include "doomdef.h"
 #include "dpt_genceiling.h"
+#include "dpt_gencrusher.h"
 #include "p_local.h"
 
 #include "s_sound.h"
@@ -118,7 +119,8 @@ void T_MoveCeiling (ceiling_t* ceiling)
 	      case silentCrushAndRaise:
 		S_StartSound(&ceiling->sector->soundorg, sfx_pstop);
 	      case crushAndRaise:
-		ceiling->speed = CEILSPEED;
+		ceiling->speed = ceiling->basespeed
+			       ? ceiling->basespeed : CEILSPEED;
 	      case fastCrushAndRaise:
 		ceiling->direction = 1;
 		break;
@@ -141,7 +143,8 @@ void T_MoveCeiling (ceiling_t* ceiling)
 		  case silentCrushAndRaise:
 		  case crushAndRaise:
 		  case lowerAndCrush:
-		    ceiling->speed = CEILSPEED / 8;
+		    ceiling->speed = (ceiling->basespeed
+				      ? ceiling->basespeed : CEILSPEED) / 8;
 		    break;
 
 		  default:
@@ -293,6 +296,56 @@ EV_DoGenCeiling
 	    ceiling->direction = -1;
 	}
 
+	ceiling->tag = sec->tag;
+	P_AddActiveCeiling(ceiling);
+    }
+    return rtn;
+}
+
+
+//
+// Boom generalized crusher.
+//
+// Every generalized crusher crushes, so the type only selects silent or audible
+// and the speed comes from the bits. basespeed is stored so T_MoveCeiling does
+// not reset a turbo crusher to CEILSPEED at the bottom of its stroke.
+//
+int
+EV_DoGenCrusher
+( line_t*	line )
+{
+    int			secnum;
+    int			rtn;
+    sector_t*		sec;
+    ceiling_t*		ceiling;
+    dpt_gencrusher_t	gen;
+
+    if (!DPT_GenCrusherDecode(line->special, &gen)
+        || !DPT_GenCrusherSupported(line->special))
+        return 0;
+
+    secnum = -1;
+    rtn = 0;
+    while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
+    {
+	sec = &sectors[secnum];
+	if (sec->specialdata)
+	    continue;
+
+	rtn = 1;
+	ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVSPEC, 0);
+	memset(ceiling, 0, sizeof(*ceiling));
+	P_AddThinker (&ceiling->thinker);
+	sec->specialdata = ceiling;
+	ceiling->thinker.function.acp1 = (actionf_p1)T_MoveCeiling;
+	ceiling->sector = sec;
+	ceiling->crush = true;
+	ceiling->type = gen.silent ? silentCrushAndRaise : crushAndRaise;
+	ceiling->topheight = sec->ceilingheight;
+	ceiling->bottomheight = sec->floorheight + (8*FRACUNIT);
+	ceiling->direction = -1;
+	ceiling->speed = CEILSPEED << gen.speed_shift;
+	ceiling->basespeed = ceiling->speed;
 	ceiling->tag = sec->tag;
 	P_AddActiveCeiling(ceiling);
     }

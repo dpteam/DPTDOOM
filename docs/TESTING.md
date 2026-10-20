@@ -25,6 +25,8 @@ DeHackEd/BEX; patched saves используют `DPTDEH1` manifest (тот же
 абсолютные высоты, двойная роль бита model/monster и правила supported-подмножества.
 `genceiling` — то же для Boom generalized ceilings: 2048 комбинаций, порядок
 ceiling-целей (отличается от floors) и правила подмножества.
+`gencrusher` — то же для Boom generalized crushers: 128 комбинаций, отсутствие
+утечки старших битов и правила поддержки триггеров.
 См. [MAPS.md](MAPS.md).
 Не запускать повторный build/test в одном build tree, пока предыдущий не завершён:
 Windows может удерживать EXE, а тесты — читать разные версии Python fixtures.

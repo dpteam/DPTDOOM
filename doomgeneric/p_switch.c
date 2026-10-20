@@ -24,6 +24,7 @@
 #include "doomdef.h"
 #include "dpt_genfloor.h"
 #include "dpt_genceiling.h"
+#include "dpt_gencrusher.h"
 #include "p_local.h"
 
 #include "g_game.h"
@@ -296,8 +297,8 @@ P_UseSpecialLine
     // Switches that other things can activate.
     if (!thing->player)
     {
-	// Boom generalized doors opt in through bit 7.
-	if (DPT_GenDoorSupported(line->special) && (line->special & 0x0080))
+	// Boom generalized specials opt in through their monster bit.
+	if (DPT_GenSpecialAllowsMonsters(line->special))
 	{
 	    if (line->flags & ML_SECRET)
 		return false;
@@ -323,16 +324,19 @@ P_UseSpecialLine
 	}
     }
 
-    // Boom generalized ceilings with switch triggers (S1/SR).
-    if (DPT_GenCeilingSupported(line->special))
+    // Boom generalized switch triggers (S1/SR), any family.
     {
 	int trigger = line->special & 0x0007;
 
-	if (trigger >= 2 && trigger <= 3)
+	if ((trigger == 2 || trigger == 3)
+	    && (DPT_GenCrusherSupported(line->special)
+		|| DPT_GenCeilingSupported(line->special)
+		|| DPT_GenFloorSupported(line->special)
+		|| DPT_GenDoorSupported(line->special)))
 	{
-	    boolean once = !(line->special & 0x0001);
+	    boolean once = (trigger == 2);
 
-	    if (EV_DoGenCeiling(line) && once)
+	    if (DPT_GenSpecialTrigger(line) && once)
 	    {
 		line->special = 0;
 		P_ChangeSwitchTexture(line,0);
@@ -341,27 +345,8 @@ P_UseSpecialLine
 	}
     }
 
-    // Boom generalized floors with switch triggers (S1/SR).
-    if (DPT_GenFloorSupported(line->special))
-    {
-	int trigger = line->special & 0x0007;
-
-	if (trigger >= 2 && trigger <= 3)
-	{
-	    boolean once = !(line->special & 0x0001);
-
-	    if (EV_DoGenFloor(line) && once)
-	    {
-		line->special = 0;
-		P_ChangeSwitchTexture(line,0);
-	    }
-	    return true;
-	}
-    }
-
-    // Boom generalized doors with switch (S1/SR) and push (P1/PR) triggers.
-    // Push triggers act on the sector behind the line, not by tag, matching
-    // BOOM's "push is a switch with a zero tag" rule.
+    // Boom generalized push triggers (P1/PR) act on the sector behind the line,
+    // not by tag, matching BOOM's "push is a switch with a zero tag" rule.
     if (DPT_GenDoorSupported(line->special))
     {
 	int trigger = line->special & 0x0007;
@@ -375,23 +360,8 @@ P_UseSpecialLine
 		line->special = 0;
 	    return true;
 	}
-	if (trigger >= 2)
-	{
-	    boolean once = !(line->special & 0x0001);
-
-	    if (EV_DoGenDoor(line))
-	    {
-		if (once)
-		{
-		    line->special = 0;
-		    P_ChangeSwitchTexture(line,0);
-		}
-	    }
-	    return true;
-	}
     }
 
-    
     // do something  
     switch (line->special)
     {

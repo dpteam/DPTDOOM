@@ -374,6 +374,11 @@ int EV_DoGenDoor (line_t* line);
 int EV_DoGenDoorSector (sector_t* sec, int special);
 int EV_DoGenFloor (line_t* line);
 int EV_DoGenCeiling (line_t* line);
+int EV_DoGenCrusher (line_t* line);
+
+// Boom generalized linedef dispatch shared by the walk/switch/gun paths.
+boolean DPT_GenSpecialAllowsMonsters (int special);
+int DPT_GenSpecialTrigger (line_t* line);
 
 void
 EV_VerticalDoor
@@ -509,6 +514,10 @@ typedef struct
     fixed_t	bottomheight;
     fixed_t	topheight;
     fixed_t	speed;
+    // Non-zero only for generalized crushers, which must keep their configured
+    // speed when the ceiling reverses or slows down while crushing. Vanilla
+    // crushers leave this zero and keep their original hardcoded behaviour.
+    fixed_t	basespeed;
     boolean	crush;
 
     // 1 = up, 0 = waiting, -1 = down
