@@ -19,6 +19,8 @@ DeHackEd/BEX; patched saves используют `DPTDEH1` manifest (тот же
 
 `map-sky` — Boom/MBF sky transfer (linedef 271/272): временные MAP01 overlays,
 разные/повторяемые framebuffer-пиксели и подсчёт затронутых секторов.
+`gendoor` — data-free проверка битового layout Boom generalized doors: границы
+диапазона, все 512 комбинаций trigger×speed×kind×delay, бит монстра.
 См. [MAPS.md](MAPS.md).
 Не запускать повторный build/test в одном build tree, пока предыдущий не завершён:
 Windows может удерживать EXE, а тесты — читать разные версии Python fixtures.

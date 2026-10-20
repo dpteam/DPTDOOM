@@ -996,8 +996,33 @@ P_ShootSpecialLine
 	    ok = 1;
 	    break;
 	}
+	// Boom generalized doors opt in through bit 7.
+	if (!ok && DPT_GenDoorSupported(line->special)
+		&& (line->special & 0x0080))
+	    ok = 1;
 	if (!ok)
 	    return;
+    }
+
+    // Boom generalized doors with gun triggers (G1/GR).
+    if (DPT_GenDoorSupported(line->special))
+    {
+	int trigger = line->special & 0x0007;
+
+	if (trigger == 4 || trigger == 5)
+	{
+	    boolean once = (trigger == 4);
+
+	    if (EV_DoGenDoor(line))
+	    {
+		if (once)
+		{
+		    line->special = 0;
+		    P_ChangeSwitchTexture(line,0);
+		}
+	    }
+	    return;
+	}
     }
 
     switch(line->special)

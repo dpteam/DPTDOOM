@@ -20,6 +20,7 @@
 #include "z_zone.h"
 #include "doomdef.h"
 #include "deh_main.h"
+#include "dpt_gendoor.h"
 #include "p_local.h"
 
 #include "s_sound.h"
@@ -343,50 +344,28 @@ EV_DoDoor
 //
 boolean DPT_GenDoorSupported (int special)
 {
-    int trigger;
-
-    if (special < DPT_GEN_DOOR_BASE || special > DPT_GEN_DOOR_END)
-        return false;
-
-    // Only walk (W1/WR) and switch (S1/SR) triggers are wired up. Gun, push and
-    // the locked-door range stay unsupported instead of half-working.
-    trigger = special & 0x0007;
-    return trigger <= 3;
+    return DPT_GenDoorIsDoor(special);
 }
 
-boolean DPT_GenDoorDecode (int special, int *kind, int *speed_shift,
-                           int *delay_seconds)
+//
+// Start one generalized door on a single sector. Used by the tagged form and by
+// push triggers, which act on the sector behind the line instead of by tag.
+//
+static int GenDoorOnSector (sector_t* sec, int special)
 {
-    static const int delays[4] = {1, 4, 9, 30};
-
-    if (!DPT_GenDoorSupported(special))
-        return false;
-    if (kind)
-        *kind = (special & 0x0060) >> 5;
-    if (speed_shift)
-        *speed_shift = (special & 0x0018) >> 3;
-    if (delay_seconds)
-        *delay_seconds = delays[(special & 0x0300) >> 8];
-    return true;
-}
-
-int EV_DoGenDoor (line_t* line)
-{
-    int		secnum, rtn, kind, speed_shift, delay_seconds;
-    sector_t*	sec;
     vldoor_t*	door;
     vldoor_e	type;
-    fixed_t	speed;
+    dpt_gendoor_t decoded;
 
-    if (!DPT_GenDoorDecode (line->special, &kind, &speed_shift, &delay_seconds))
+    if (!DPT_GenDoorDecode (special, &decoded))
+        return 0;
+    if (sec->specialdata)
         return 0;
 
     // BOOM's four door speeds double each step and start at the vanilla speed
     // (VDOORSPEED). ZDoom's BOOM translation uses the same 16/32/64/128 scale
     // for slow/normal/fast/turbo, i.e. 1x, 2x, 4x and 8x vanilla.
-    speed = VDOORSPEED << speed_shift;
-
-    switch (kind)
+    switch (decoded.kind)
     {
       case 0:  type = vld_normal;          break;  // open, wait, close
       case 1:  type = vld_open;            break;  // open and stay
@@ -394,53 +373,63 @@ int EV_DoGenDoor (line_t* line)
       default: type = vld_close;           break;  // close and stay
     }
 
+    door = Z_Malloc (sizeof(*door), PU_LEVSPEC, 0);
+    memset(door, 0, sizeof(*door));
+    P_AddThinker (&door->thinker);
+    sec->specialdata = door;
+
+    door->thinker.function.acp1 = (actionf_p1) T_VerticalDoor;
+    door->sector = sec;
+    door->type = type;
+    door->speed = VDOORSPEED << decoded.speed_shift;
+    door->topwait = decoded.delay_seconds * TICRATE;
+
+    switch (type)
+    {
+      case vld_close:
+	door->topheight = P_FindLowestCeilingSurrounding(sec);
+	door->topheight -= 4*FRACUNIT;
+	door->direction = -1;
+	S_StartSound(&door->sector->soundorg, sfx_dorcls);
+	break;
+
+      case vld_close30ThenOpen:
+	door->topheight = sec->ceilingheight;
+	door->direction = -1;
+	S_StartSound(&door->sector->soundorg, sfx_dorcls);
+	break;
+
+      default:	// vld_open / vld_normal
+	door->direction = 1;
+	door->topheight = P_FindLowestCeilingSurrounding(sec);
+	door->topheight -= 4*FRACUNIT;
+	if (door->topheight != sec->ceilingheight)
+	    S_StartSound(&door->sector->soundorg, sfx_doropn);
+	break;
+    }
+
+    return 1;
+}
+
+int EV_DoGenDoor (line_t* line)
+{
+    int		secnum, rtn;
+
     secnum = -1;
     rtn = 0;
 
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
-    {
-	sec = &sectors[secnum];
-	if (sec->specialdata)
-	    continue;
-
-	rtn = 1;
-	door = Z_Malloc (sizeof(*door), PU_LEVSPEC, 0);
-	memset(door, 0, sizeof(*door));
-	P_AddThinker (&door->thinker);
-	sec->specialdata = door;
-
-	door->thinker.function.acp1 = (actionf_p1) T_VerticalDoor;
-	door->sector = sec;
-	door->type = type;
-	door->speed = speed;
-	door->topwait = delay_seconds * TICRATE;
-
-	switch (type)
-	{
-	  case vld_close:
-	    door->topheight = P_FindLowestCeilingSurrounding(sec);
-	    door->topheight -= 4*FRACUNIT;
-	    door->direction = -1;
-	    S_StartSound(&door->sector->soundorg, sfx_dorcls);
-	    break;
-
-	  case vld_close30ThenOpen:
-	    door->topheight = sec->ceilingheight;
-	    door->direction = -1;
-	    S_StartSound(&door->sector->soundorg, sfx_dorcls);
-	    break;
-
-	  default:	// vld_open / vld_normal
-	    door->direction = 1;
-	    door->topheight = P_FindLowestCeilingSurrounding(sec);
-	    door->topheight -= 4*FRACUNIT;
-	    if (door->topheight != sec->ceilingheight)
-		S_StartSound(&door->sector->soundorg, sfx_doropn);
-	    break;
-	}
-    }
+	if (GenDoorOnSector (&sectors[secnum], line->special))
+	    rtn = 1;
 
     return rtn;
+}
+
+int EV_DoGenDoorSector (sector_t* sec, int special)
+{
+    if (!sec)
+        return 0;
+    return GenDoorOnSector (sec, special);
 }
 
 

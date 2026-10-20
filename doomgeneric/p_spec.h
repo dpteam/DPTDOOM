@@ -370,9 +370,8 @@ typedef struct
 #define DPT_GEN_DOOR_END	0x3fff
 
 boolean DPT_GenDoorSupported (int special);
-boolean DPT_GenDoorDecode (int special, int *kind, int *speed_shift,
-                           int *delay_seconds);
 int EV_DoGenDoor (line_t* line);
+int EV_DoGenDoorSector (sector_t* sec, int special);
 
 void
 EV_VerticalDoor

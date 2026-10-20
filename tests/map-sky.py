@@ -151,15 +151,17 @@ def main():
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and (" %d" % special) in text, text
             assert "Map sky: count=0" in text, text
-        # Boom generalized doors (0x3c00..0x3fff): walk/switch triggers are
-        # implemented, so they must not be reported as unsupported.
-        for name, special in (("gendoor-w1", 0x3c00), ("gendoor-s1", 0x3c02)):
-            overlay(iwad, root / (name + ".wad"), special)
+        # Boom generalized doors (0x3c00..0x3fff): all eight trigger classes are
+        # implemented, so none of them may be reported as unsupported.
+        for trigger in range(8):
+            name = "gendoor-t%d" % trigger
+            overlay(iwad, root / (name + ".wad"), 0x3c00 + trigger)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" not in text, text
-        # Push triggers and the non-door generalized ranges stay unsupported.
-        for name, special in (("gendoor-push", 0x3c06), ("genfloor", 0x6000),
-                              ("genlocked", 0x3800)):
+        # The rest of the generalized ranges and locked doors stay unsupported.
+        for name, special in (("genfloor", 0x6000), ("genceil", 0x4000),
+                              ("genlift", 0x3400), ("genstairs", 0x3000),
+                              ("gencrusher", 0x2f80), ("genlocked", 0x3800)):
             overlay(iwad, root / (name + ".wad"), special)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and (" %d" % special) in text, text

@@ -321,20 +321,36 @@ P_UseSpecialLine
 	}
     }
 
-    // Boom generalized doors with switch triggers (S1/SR).
-    if (DPT_GenDoorSupported(line->special) && (line->special & 0x0007) >= 2)
+    // Boom generalized doors with switch (S1/SR) and push (P1/PR) triggers.
+    // Push triggers act on the sector behind the line, not by tag, matching
+    // BOOM's "push is a switch with a zero tag" rule.
+    if (DPT_GenDoorSupported(line->special))
     {
-	boolean once = !(line->special & 0x0001);
+	int trigger = line->special & 0x0007;
 
-	if (EV_DoGenDoor(line))
+	if (trigger >= 6)
 	{
-	    if (once)
-	    {
+	    sector_t *back = sides[line->sidenum[side ^ 1]].sector;
+	    boolean once = (trigger == 6);
+
+	    if (EV_DoGenDoorSector(back, line->special) && once)
 		line->special = 0;
-		P_ChangeSwitchTexture(line,0);
-	    }
+	    return true;
 	}
-	return true;
+	if (trigger >= 2)
+	{
+	    boolean once = !(line->special & 0x0001);
+
+	    if (EV_DoGenDoor(line))
+	    {
+		if (once)
+		{
+		    line->special = 0;
+		    P_ChangeSwitchTexture(line,0);
+		}
+	    }
+	    return true;
+	}
     }
 
     
