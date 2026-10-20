@@ -32,6 +32,7 @@
 #include "dpt_genceiling.h"
 #include "dpt_gencrusher.h"
 #include "dpt_genstairs.h"
+#include "dpt_genlift.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -515,6 +516,7 @@ boolean DPT_GenSpecialAllowsMonsters (int special)
     dpt_genceiling_t ceiling;
     dpt_gencrusher_t crusher;
     dpt_genstairs_t stairs;
+    dpt_genlift_t lift;
 
     if (DPT_GenDoorSupported(special))
         return (special & 0x0080) != 0;
@@ -526,6 +528,8 @@ boolean DPT_GenSpecialAllowsMonsters (int special)
         return DPT_GenCrusherDecode(special,&crusher) && crusher.monsters;
     if (DPT_GenStairsSupported(special))
         return DPT_GenStairsDecode(special,&stairs) && stairs.monsters;
+    if (DPT_GenLiftSupported(special))
+        return DPT_GenLiftDecode(special,&lift) && lift.monsters;
     return false;
 }
 
@@ -535,6 +539,8 @@ boolean DPT_GenSpecialAllowsMonsters (int special)
 //
 int DPT_GenSpecialTrigger (line_t* line)
 {
+    if (DPT_GenLiftSupported(line->special))
+        return EV_DoGenLift(line);
     if (DPT_GenStairsSupported(line->special))
         return EV_DoGenStairs(line);
     if (DPT_GenCrusherSupported(line->special))
@@ -596,7 +602,8 @@ P_CrossSpecialLine
 
     // Boom generalized walk triggers (W1/WR), any family.
     if ((line->special & 0x0007) <= 1
-        && (DPT_GenStairsSupported(line->special)
+        && (DPT_GenLiftSupported(line->special)
+            || DPT_GenStairsSupported(line->special)
             || DPT_GenCrusherSupported(line->special)
             || DPT_GenCeilingSupported(line->special)
             || DPT_GenFloorSupported(line->special)
@@ -1061,7 +1068,8 @@ P_ShootSpecialLine
 	int trigger = line->special & 0x0007;
 
 	if ((trigger == 4 || trigger == 5)
-	    && (DPT_GenStairsSupported(line->special)
+	    && (DPT_GenLiftSupported(line->special)
+		|| DPT_GenStairsSupported(line->special)
 		|| DPT_GenCrusherSupported(line->special)
 		|| DPT_GenCeilingSupported(line->special)
 		|| DPT_GenFloorSupported(line->special)
@@ -1643,6 +1651,8 @@ void P_SpawnSpecials (void)
 	    if (DPT_GenCrusherSupported(special))
 		continue;
 	    if (DPT_GenStairsSupported(special))
+		continue;
+	    if (DPT_GenLiftSupported(special))
 		continue;
 	    ++unsupported_occurrences;
 	    for (k = 0; k < unique; ++k)

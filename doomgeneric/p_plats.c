@@ -23,6 +23,7 @@
 #include "m_random.h"
 
 #include "doomdef.h"
+#include "dpt_genlift.h"
 #include "p_local.h"
 
 #include "s_sound.h"
@@ -241,6 +242,64 @@ EV_DoPlat
 	    S_StartSound(&sec->soundorg,sfx_pstart);
 	    break;
 	}
+	P_AddActivePlat(plat);
+    }
+    return rtn;
+}
+
+
+
+//
+// Boom generalized lift.
+//
+// Only the "lowest neighbour floor" target maps onto this engine's
+// downWaitUpStay platform (lower, wait, raise). Speed and delay come from the
+// generalized bits instead of the fixed PLATSPEED/PLATWAIT.
+//
+int
+EV_DoGenLift
+( line_t*	line )
+{
+    plat_t*		plat;
+    int			secnum;
+    int			rtn;
+    sector_t*		sec;
+    dpt_genlift_t	gen;
+
+    if (!DPT_GenLiftDecode(line->special, &gen)
+        || !DPT_GenLiftSupported(line->special))
+        return 0;
+
+    secnum = -1;
+    rtn = 0;
+    while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
+    {
+	sec = &sectors[secnum];
+
+	if (sec->specialdata)
+	    continue;
+
+	rtn = 1;
+	plat = Z_Malloc( sizeof(*plat), PU_LEVSPEC, 0);
+	memset(plat, 0, sizeof(*plat));
+	P_AddThinker(&plat->thinker);
+
+	plat->type = downWaitUpStay;
+	plat->sector = sec;
+	plat->sector->specialdata = plat;
+	plat->thinker.function.acp1 = (actionf_p1) T_PlatRaise;
+	plat->crush = false;
+	plat->tag = line->tag;
+	plat->speed = (FRACUNIT / 8) * gen.speed_eighths;
+
+	plat->low = P_FindLowestFloorSurrounding(sec);
+	if (plat->low > sec->floorheight)
+	    plat->low = sec->floorheight;
+	plat->high = sec->floorheight;
+	plat->wait = gen.delay_tics;
+	plat->status = down;
+	S_StartSound(&sec->soundorg,sfx_pstart);
+
 	P_AddActivePlat(plat);
     }
     return rtn;

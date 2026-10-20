@@ -163,11 +163,12 @@ ctest --preset windows-headless
 - Boom/MBF maps: реализован sky transfer (linedef 271/272, per-sector
   `sector->sky` вне savegame, visplane учитывает текстуру), весь диапазон
   generalized-дверей `0x3c00..0x3fff`, generalized crushers `0x2f80..0x2fff`
-  и stairs `0x3000..0x33ff`, плюс подмножества generalized floors
-  `0x6000..0x7fff` и ceilings `0x4000..0x5fff` (декодеры в
-  `dpt_gendoor.c`/`dpt_genfloor.c`/`dpt_genceiling.c`/`dpt_gencrusher.c`/
-  `dpt_genstairs.c`, data-free тесты `gendoor`/`genfloor`/`genceiling`/
-  `gencrusher`/`genstairs`). Остальные Boom/MBF specials (locked doors, lifts,
+  и stairs `0x3000..0x33ff`, подмножество lifts `0x3400..0x37ff`, плюс
+  подмножества generalized floors `0x6000..0x7fff` и ceilings
+  `0x4000..0x5fff` (декодеры в `dpt_gendoor.c`/`dpt_genfloor.c`/
+  `dpt_genceiling.c`/`dpt_gencrusher.c`/`dpt_genstairs.c`/`dpt_genlift.c`,
+  data-free тесты `gendoor`/`genfloor`/`genceiling`/`gencrusher`/`genstairs`/
+  `genlift`). Остальные Boom/MBF specials (locked doors, часть lift-целей,
   часть floor/ceiling-целей) не реализованы и попадают в отчёт
   `Map compatibility:`; не выдавать загрузку карты за совместимость.
   Детали/тесты — `docs/MAPS.md`, `map-sky` и data-free тесты.

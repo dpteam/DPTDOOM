@@ -162,21 +162,23 @@ def main():
         # 0x6200 is a generalized floor with the ceiling target, which is not in
         # the supported subset (0x6000 itself is: W1, down, highest neighbour).
         for name, special in (("genfloor-target", 0x6200), ("genceil-target", 0x4080),
-                              ("genlift", 0x3400),
+                              ("genlift-target", 0x3500),
                               ("gencrusher-push", 0x2f86), ("genlocked", 0x3800),
                               ("genstairs-push", 0x3006)):
             overlay(iwad, root / (name + ".wad"), special)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and (" %d" % special) in text, text
-        # Supported generalized floors, ceilings, crushers and stairs must not
-        # be reported.
+        # Supported generalized floors, ceilings, crushers, stairs and lifts must
+        # not be reported.
         for name, special in (("genfloor-w1", 0x6000), ("genfloor-s1", 0x6002),
                               ("genfloor-g1", 0x6004),
                               ("genceil-w1", 0x4040), ("genceil-s1", 0x4042),
                               ("gencrusher-w1", 0x2f80), ("gencrusher-s1", 0x2f82),
                               ("gencrusher-silent", 0x2fd8),
                               ("genstairs-w1", 0x3140), ("genstairs-s1", 0x3142),
-                              ("genstairs-g1", 0x3144)):
+                              ("genstairs-g1", 0x3144),
+                              ("genlift-w1", 0x3400), ("genlift-s1", 0x3402),
+                              ("genlift-g1", 0x3404)):
             overlay(iwad, root / (name + ".wad"), special)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" not in text, text
