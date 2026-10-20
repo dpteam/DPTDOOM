@@ -1506,15 +1506,15 @@ void P_SpawnSpecials (void)
 	}
     }
 
-    // Boom/MBF extended linedef specials start at 142 (vanilla Doom uses
-    // 1..141). Everything at or above 142 except the two sky transfers we
-    // implement is inert in this engine, so say so once per level instead of
-    // letting a map look supported while its mechanics do nothing.
-    // Note: a few *vanilla* specials are also unimplemented in this port; that
-    // is a separate gap tracked in docs/MAPS.md, not a Boom compatibility note.
+    // Boom/MBF extended linedef specials are 142 and above, plus two types that
+    // Boom placed inside the vanilla 1..141 range: 78 (SR change floor texture
+    // and type, numeric model) and 85 (scrolling wall, right). Vanilla Doom and
+    // Doom II do not use 78 or 85 at all. Everything in that set except the two
+    // sky transfers we implement is inert in this engine, so say so once per
+    // level instead of letting a map look supported while its mechanics do
+    // nothing.
     {
 	int unsupported_ids[16];
-	int unsupported_count = 0;
 	int unsupported_occurrences = 0;
 	int unique = 0;
 
@@ -1522,7 +1522,9 @@ void P_SpawnSpecials (void)
 	{
 	    int special = lines[i].special;
 	    int k;
-	    if (special < 142 || special == 271 || special == 272)
+	    if (special < 142 && special != 78 && special != 85)
+		continue;
+	    if (special == 271 || special == 272)
 		continue;
 	    ++unsupported_occurrences;
 	    for (k = 0; k < unique; ++k)

@@ -142,14 +142,16 @@ def main():
         _, text = run("sky272", ["-file", str(root / "sky272.wad")])
         assert "Map sky: count=1 first=0:" in text, text
 
-        # Unimplemented Boom/MBF extended specials must be reported, not
-        # silently inert. 142 is the first Boom extended type; vanilla Doom
-        # uses 1..141.
-        overlay(iwad, root / "unsupported.wad", 142)
-        _, text = run("unsupported", ["-file", str(root / "unsupported.wad")])
-        assert "Map compatibility:" in text and " 142" in text, text
-        assert "Map sky: count=0" in text, text
-        # The baseline overlay has no 142+ specials and must stay quiet, even
+        # Unimplemented Boom/MBF specials must be reported, not silently inert.
+        # 142+ is the main Boom extended range; 78 and 85 are Boom types placed
+        # inside the vanilla 1..141 range (vanilla never uses those numbers).
+        for name, special in (("unsupported-142", 142), ("unsupported-78", 78),
+                              ("unsupported-85", 85)):
+            overlay(iwad, root / (name + ".wad"), special)
+            _, text = run(name, ["-file", str(root / (name + ".wad"))])
+            assert "Map compatibility:" in text and (" %d" % special) in text, text
+            assert "Map sky: count=0" in text, text
+        # The baseline overlay has no Boom specials and must stay quiet, even
         # though stock Doom II MAP01 does use vanilla types 102 and 103.
         assert "Map compatibility:" not in run("base-quiet", ["-file", str(root / "sky-base.wad")])[1]
         assert "Map compatibility:" not in run("vanilla-quiet", [])[1]
