@@ -339,7 +339,11 @@ static int Number(const char *text, unsigned int low, unsigned int high, unsigne
     if(value<low)return 0;
     *out=value; return 1;
 }
-static int LoadConfig(const char *path)
+// Config-supplied bind address. Static because the line buffer is reused for
+// every config line, and the address must outlive LoadConfig.
+static char config_bind[64];
+
+static int LoadConfig(const char *path, const char **host, int host_from_cli)
 {
     FILE *file=fopen(path,"rb");
     char line[768];unsigned int number=0;
@@ -353,6 +357,15 @@ static int LoadConfig(const char *path)
         if(!*start || *start=='#')continue;
         if(!strncmp(start,"address-map=",12))
         {if(!DM_AddAddressMap(&directory,start+12))goto invalid;}
+        else if(!strncmp(start,"bind=",5))
+        {
+            // Loopback is the safe default, so making the master reachable has
+            // to be an explicit choice. It still is: this only lets an operator
+            // persist that choice instead of retyping --bind on every start.
+            if(strlen(start+5)>=sizeof(config_bind))goto invalid;
+            strcpy(config_bind,start+5);
+            if(!host_from_cli)*host=config_bind;
+        }
         else
         {
             char *separator=strchr(start,'=');if(!separator)goto invalid;
@@ -362,7 +375,7 @@ static int LoadConfig(const char *path)
     if(ferror(file)){fclose(file);fputs("Master: config read failed\n",stderr);return 0;}
     fclose(file);return 1;
 invalid:
-    fprintf(stderr,"Master: invalid config line %u (address-map/public-address-mode/public-host/public-ip/public-api/hairpin-subnet/public-refresh-seconds; see docs/MASTER.md)\n",number);
+    fprintf(stderr,"Master: invalid config line %u (bind/address-map/public-address-mode/public-host/public-ip/public-api/hairpin-subnet/public-refresh-seconds; see docs/MASTER.md)\n",number);
     fclose(file);return 0;
 }
 #ifdef _WIN32
@@ -377,6 +390,9 @@ static void Stop(int event) { (void)event; stopping=1; }
 int main(int argc, char **argv)
 {
     const char *host="127.0.0.1";
+    // Command line wins over the config file for the bind address, so a shared
+    // config cannot silently override an explicit --bind.
+    int host_from_cli=0;
     const char *log_path="dptdoom-master.log";
     const char *config_path=NULL;
     unsigned int port=25135,i;
@@ -391,10 +407,10 @@ int main(int argc, char **argv)
     {
         if(!strcmp(argv[i],"--version")) { puts("DPT.DOOM master 0.1.0-dev"); return 0; }
         if(!strcmp(argv[i],"--help"))
-        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path] [--relay]\nDefault loopback:25135, TTL 60s, no address rewriting, relay OFF.\n--relay: opt-in 8 bounded session pairs over this port, no arbitrary proxy or TLS.\nConfig: see docs/MASTER.md. No game-port probing or router changes."); return 0; }
+        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path] [--relay]\nDefault loopback:25135, TTL 60s, no address rewriting, relay OFF.\nLoopback means only this machine can connect; for LAN/Internet clients pass\n  --bind 0.0.0.0 (or a specific interface address), or bind=0.0.0.0 in --config.\n--relay: opt-in 8 bounded session pairs over this port, no arbitrary proxy or TLS.\nConfig: see docs/MASTER.md. No game-port probing or router changes."); return 0; }
         if(!strcmp(argv[i],"--relay")){relay_enabled=1;continue;}
         if(i+1>=(unsigned int)argc)goto usage;
-        if(!strcmp(argv[i],"--bind"))host=argv[++i];
+        if(!strcmp(argv[i],"--bind")){host=argv[++i];host_from_cli=1;}
         else if(!strcmp(argv[i],"--config")){if(config_path)goto usage;config_path=argv[++i];}
         else if(!strcmp(argv[i],"--log"))log_path=argv[++i];
         else if(!strcmp(argv[i],"--log-max-bytes")) { if(!Number(argv[++i],4096,16777216,&log_size))goto usage; }
@@ -402,7 +418,7 @@ int main(int argc, char **argv)
         else if(!strcmp(argv[i],"--lease-seconds")) { if(!Number(argv[++i],3,300,&directory.lease_seconds))goto usage; }
         else goto usage;
     }
-    if(config_path && !LoadConfig(config_path))return 2;
+    if(config_path && !LoadConfig(config_path,&host,host_from_cli))return 2;
     if(!PA_Prepare(&public_address,&directory)){fputs("Master: invalid public address mode/config combination or subnet overlap\n",stderr);return 2;}
     if(!ML_Open(log_path,log_size)) { fputs("Master: cannot open event log (check --log path/permissions)\n",stderr); return 1; }
 #ifdef _WIN32
@@ -412,7 +428,7 @@ int main(int argc, char **argv)
     signal(SIGINT,Stop); signal(SIGTERM,Stop); signal(SIGPIPE,SIG_IGN);
 #endif
     memset(&address,0,sizeof(address)); address.sin_family=AF_INET; address.sin_port=htons((uint16_t)port);
-    if(inet_pton(AF_INET,host,&address.sin_addr)!=1) { ML_Message("Master: --bind must be numeric IPv4"); result=2; goto cleanup; }
+    if(inet_pton(AF_INET,host,&address.sin_addr)!=1) { ML_Message("Master: bind address must be numeric IPv4 (from --bind or bind= in --config)"); result=2; goto cleanup; }
     for(i=0;i<DM_CLIENTS;++i)clients[i].socket=INVALID_SOCKET;
     listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
     if(listener==INVALID_SOCKET) { ML_Message("Master: socket failed"); result=1; goto cleanup; }
@@ -426,6 +442,14 @@ int main(int argc, char **argv)
     if(!Nonblocking(listener) || bind(listener,(struct sockaddr*)&address,sizeof(address))==SOCKET_ERROR || listen(listener,DM_CLIENTS)==SOCKET_ERROR)
     { ML_Message("Master: nonblocking/bind/listen failed; check address and port"); DM_Close(listener); result=1; goto cleanup; }
     { char message[256]; snprintf(message,sizeof(message),"DPT.DOOM master: listening on %s:%u (directory v1, TTL %us, experimental LAN; no TLS)",host,port,directory.lease_seconds); ML_Message(message); }
+    // A loopback bind is the safe default, but it also means remote clients get
+    // connection refused with no hint why. Say so explicitly, with the fix.
+    if(!strcmp(host,"127.0.0.1") || !strcmp(host,"localhost"))
+        ML_Message("Master: bound to loopback, so only this machine can reach it. "
+                   "For LAN/Internet clients start with --bind 0.0.0.0 (or a specific "
+                   "interface address), or put bind=0.0.0.0 in the --config file. "
+                   "Reachability still depends on your firewall/router, which this "
+                   "program does not change.");
     for(i=0;i<directory.address_map_count;++i)
     {
         const dm_address_map_t *rule=&directory.address_maps[i];char message[320];

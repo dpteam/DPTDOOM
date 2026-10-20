@@ -24,6 +24,35 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
         config.write_text(invalid)
         result=subprocess.run([exe,'--config',str(config)],cwd=root,capture_output=True,timeout=10)
         assert result.returncode!=0 and b'invalid public address' in result.stderr,result
+    # A bad bind address from the config must fail loudly instead of silently
+    # falling back to loopback, which would look like "the server is up" while
+    # no remote client can ever connect.
+    config.write_text('bind=not-an-ip\n')
+    result=subprocess.run([exe,'--config',str(config)],cwd=root,capture_output=True,timeout=10)
+    assert result.returncode!=0 and b'must be numeric IPv4' in result.stdout+result.stderr,result
+    # bind= in the config persists the operator's choice; loopback stays the
+    # default, and an explicit --bind must still win over the config.
+    for expected,extra in (('0.0.0.0',[]),('127.0.0.1',['--bind','127.0.0.1'])):
+        config.write_text('bind=0.0.0.0\n')
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+        logpath=root/'bind.log'
+        with logpath.open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(port),'--config',str(config)]+extra,
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'listening on' not in logpath.read_bytes():
+                    assert process.poll() is None
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                text=logpath.read_bytes()
+                assert ('listening on %s:'%expected).encode() in text,text
+                # The loopback hint must appear only when remote clients really
+                # cannot connect, otherwise it becomes noise operators ignore.
+                assert (b'bound to loopback' in text)==(expected=='127.0.0.1'),text
+            finally:
+                process.terminate();process.wait(10)
     for mode in ('off','map','manual','dns-failure'):
         mapped=mode in ('map','manual')
         config.write_text({'off':'# inert\n','map':'address-map=127.0.0.1/32=203.0.113.9\n',

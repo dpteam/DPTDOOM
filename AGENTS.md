@@ -139,6 +139,10 @@ ctest --preset windows-headless
   play.dartpower.xyz:25135 (не перезаписывать пользовательский адрес).
   По просьбе владельца допустим тестовый --bind 0.0.0.0:25135, но не создавать
   firewall/router rules и не заявлять внешнюю доступность без проверки.
+  Мастер по умолчанию слушает **loopback** (безопасный дефолт, не баг): для
+  LAN/Internet нужен `--bind 0.0.0.0` либо `bind=` в `--config`; CLI перекрывает
+  конфиг. При старте на loopback печатается предупреждение с подсказкой, а
+  некорректный адрес — ошибка запуска, не тихий откат на loopback.
 - Hairpin/SNAT: optional master --config с address-map=private-CIDR=public-IPv4,
   до 8 canonical nonoverlapping RFC1918/loopback ranges. По умолчанию OFF;
   actual source сохраняется для auth/limits, list IP отдельно, game port прежний.
