@@ -46,6 +46,86 @@
 
 int			viewangleoffset;
 
+//
+// DPT vertical look (y-shearing).
+//
+// Borrowed from Duke Nukem 3D, where the player carries an aim angle and the
+// software renderer simply shifts the view. In Doom the cheat-free equivalent
+// is to move the horizon: walls, sprites and columns read `centery`, and the
+// plane slopes read a horizon of viewheight/2. Shifting both keeps the two
+// projections consistent - shifting only one produces walls that slide against
+// the floor.
+//
+// This is deliberately VIEW-ONLY: it never touches player state, ticcmd, demos
+// or the network. Autoaim and shooting stay exactly as vanilla, so nothing can
+// desynchronise. A real aim angle would be simulation state and is a separate,
+// much larger change.
+//
+#define DPT_PITCH_MAX 80
+
+int			dpt_view_pitch;
+int			dpt_pitch_enabled = 1;
+int			dpt_pitch_max = DPT_PITCH_MAX;
+static int		last_pitch;
+
+void R_UpdatePitchHorizon (void)
+{
+    int i;
+    fixed_t dy;
+    int horizon;
+    int limit = dpt_pitch_max;
+
+    if (limit < 0)
+	limit = 0;
+    else if (limit > 160)
+	limit = 160;
+
+    if (dpt_view_pitch > limit)
+	dpt_view_pitch = limit;
+    else if (dpt_view_pitch < -limit)
+	dpt_view_pitch = -limit;
+
+    // Looking up moves the horizon down the screen.
+    horizon = viewheight/2 + dpt_view_pitch;
+    if (horizon < 0)
+	horizon = 0;
+    else if (horizon > viewheight)
+	horizon = viewheight;
+
+    centery = horizon;
+    centeryfrac = centery<<FRACBITS;
+
+    // Plane slope table, using the shifted horizon instead of the fixed middle
+    // of the screen. FRACUNIT/2 keeps the divisor away from zero.
+    for (i=0 ; i<viewheight ; i++)
+    {
+	dy = ((i-horizon)<<FRACBITS)+FRACUNIT/2;
+	dy = abs(dy);
+	yslope[i] = FixedDiv ( (viewwidth<<detailshift)/2*FRACUNIT, dy);
+    }
+
+    last_pitch = dpt_view_pitch;
+}
+
+//
+// Called once per frame before rendering. Only recomputes when the pitch
+// actually changed, since the slope table is viewheight entries of FixedDiv.
+//
+void R_UpdateViewPitch (void)
+{
+    if (!dpt_pitch_enabled)
+    {
+	if (dpt_view_pitch != 0)
+	    dpt_view_pitch = 0;
+	else if (last_pitch == 0)
+	    return;
+    }
+
+    if (dpt_view_pitch != last_pitch)
+	R_UpdatePitchHorizon();
+}
+
+
 // increment every time a check is made
 int			validcount = 1;		
 
@@ -689,11 +769,15 @@ void R_ExecuteSetViewSize (void)
     detailshift = setdetail;
     viewwidth = scaledviewwidth>>detailshift;
 	
-    centery = viewheight/2;
     centerx = viewwidth/2;
     centerxfrac = centerx<<FRACBITS;
-    centeryfrac = centery<<FRACBITS;
     projection = centerxfrac;
+
+    // Horizon and plane slopes depend on the vertical view offset, so they are
+    // computed by the same helper the per-frame pitch update uses. Keeping both
+    // paths in one place is what stops a view-size change from silently
+    // resetting the pitch and desynchronising the two projections.
+    R_UpdatePitchHorizon();
 
     if (!detailshift)
     {
@@ -721,14 +805,6 @@ void R_ExecuteSetViewSize (void)
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)
 	screenheightarray[i] = viewheight;
-    
-    // planes
-    for (i=0 ; i<viewheight ; i++)
-    {
-	dy = ((i-viewheight/2)<<FRACBITS)+FRACUNIT/2;
-	dy = abs(dy);
-	yslope[i] = FixedDiv ( (viewwidth<<detailshift)/2*FRACUNIT, dy);
-    }
 	
     for (i=0 ; i<viewwidth ; i++)
     {
@@ -829,6 +905,10 @@ void R_SetupFrame (player_t* player)
     viewy = player->mo->y;
     viewangle = player->mo->angle + viewangleoffset;
     extralight = player->extralight;
+
+    // Apply any vertical view offset before the projections are derived from
+    // the horizon.
+    R_UpdateViewPitch();
 
     viewz = player->viewz;
     

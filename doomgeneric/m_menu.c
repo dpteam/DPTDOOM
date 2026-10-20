@@ -194,6 +194,7 @@ void M_ChangeMouseGrab(int choice);
 void M_ChangeMouseFlip(int choice);
 void M_ChangeCrosshair(int choice);
 void M_ChangeAutoRun(int choice);
+void M_ChangePitch(int choice);
 void M_Controls(int choice);
 void M_DrawControls(void);
 void M_SfxVol(int choice);
@@ -361,6 +362,7 @@ enum
     ctl_flip,
     ctl_grab,
     ctl_crosshair,
+    ctl_pitch,
     ctl_autorun,
     ctl_end
 } controls_e;
@@ -402,6 +404,7 @@ menuitem_t ControlsMenu[]=
     {1,"",	M_ChangeMouseFlip,'f'},
     {1,"",	M_ChangeMouseGrab,'r'},
     {1,"",	M_ChangeCrosshair,'h'},
+    {1,"",	M_ChangePitch,'p'},
     {1,"",	M_ChangeAutoRun,'u'}
 };
 
@@ -1100,6 +1103,7 @@ static const char *controlsLabels[ctl_end] = {
     "FLIP AIM",
     "GRAB MOUSE",
     "CROSSHAIR",
+    "LOOK UP/DN",
     "AUTO RUN"
 };
 
@@ -1220,6 +1224,10 @@ void M_DrawControls(void)
 
           case ctl_crosshair:
             M_WriteText(vx, liney, crosshair ? "ON" : "OFF");
+            break;
+
+          case ctl_pitch:
+            M_WriteText(vx, liney, dpt_pitch_enabled ? "ON" : "OFF");
             break;
 
           case ctl_autorun:
@@ -1491,6 +1499,17 @@ void M_ChangeAutoRun(int choice)
 {
     (void) choice;
     auto_run = !auto_run;
+}
+
+void M_ChangePitch(int choice)
+{
+    (void) choice;
+    dpt_pitch_enabled = !dpt_pitch_enabled;
+    if (!dpt_pitch_enabled)
+    {
+	// Recentre so the view does not stay tilted with the feature off.
+	dpt_view_pitch = 0;
+    }
 }
 
 // Enter the Controls submenu. Borrowed from Duke3D's split between the top-level

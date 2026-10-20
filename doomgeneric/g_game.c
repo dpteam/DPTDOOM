@@ -636,12 +636,35 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
         } 
     }
 
-    // Without freelook there is no pitch to drive, so vertical motion would
-    // walk the player forward/back. novert (default on) drops it.
-    // mouseflip inverts the remaining meaning, matching Duke Nukem 3D's
-    // MouseAimingFlipped: with it on, pushing the mouse forward aims down.
+    // Without pitch there is no vertical aim, so vertical motion would walk the
+    // player forward/back. novert (default on) drops it.
+    //
+    // With pitch enabled the same motion drives the view instead, which is what
+    // makes mouseflip meaningful. Pitch is view-only (see r_main.c), so this
+    // cannot affect demos or the network.
     if (!novert)
-        forward += mouseflip ? -mousey : mousey; 
+    {
+        if (dpt_pitch_enabled)
+        {
+            dpt_view_pitch += mouseflip ? -mousey : mousey;
+        }
+        else
+        {
+            forward += mousey;
+        }
+    }
+
+    // Keyboard look. Reuses the Heretic go-nowhere bindings (PgDn/Del), which
+    // this engine already reads out of the config but never used.
+    if (dpt_pitch_enabled)
+    {
+        if (gamekeydown[key_lookup])
+            dpt_view_pitch -= 8;
+        if (gamekeydown[key_lookdown])
+            dpt_view_pitch += 8;
+        if (gamekeydown[key_lookcenter])
+            dpt_view_pitch = 0;
+    }
 
     if (strafe) 
 	side += mousex*2; 

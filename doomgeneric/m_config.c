@@ -810,6 +810,20 @@ static default_t extra_defaults_list[] =
     CONFIG_VARIABLE_INT(mouseflip),
 
     //!
+    // Vertical view look (y-shearing), after Duke Nukem 3D. View-only: it shifts
+    // the horizon and never changes player state, ticcmd, demos or the network.
+    // With it on, vertical mouse motion looks up/down instead of walking, so
+    // novert then only controls the legacy walk behaviour.
+    //
+
+    CONFIG_VARIABLE_INT(dpt_pitch_enabled),
+
+    //! Maximum vertical look offset, in screen pixels at 320x200.
+    //
+
+    CONFIG_VARIABLE_INT(dpt_pitch_max),
+
+    //!
     // Sound output sample rate, in Hz.  Typical values to use are
     // 11025, 22050, 44100 and 48000.
     //

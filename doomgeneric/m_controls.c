@@ -18,6 +18,7 @@
 
 #include "doomtype.h"
 #include "doomkeys.h"
+#include "r_main.h"
 
 #include "m_config.h"
 #include "m_misc.h"
@@ -262,6 +263,8 @@ void M_BindBaseControls(void)
     M_BindVariable("crosshair",          &crosshair);
     M_BindVariable("auto_run",           &auto_run);
     M_BindVariable("mouseflip",          &mouseflip);
+    M_BindVariable("dpt_pitch_enabled",  &dpt_pitch_enabled);
+    M_BindVariable("dpt_pitch_max",      &dpt_pitch_max);
 
     M_BindVariable("mouseb_fire",        &mousebfire);
     M_BindVariable("mouseb_strafe",      &mousebstrafe);

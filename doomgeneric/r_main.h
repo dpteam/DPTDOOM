@@ -40,6 +40,13 @@ extern int		viewwindowy;
 extern int		centerx;
 extern int		centery;
 
+// DPT view-only vertical look (y-shearing). Never part of the simulation.
+extern int		dpt_view_pitch;
+extern int		dpt_pitch_enabled;
+extern int		dpt_pitch_max;
+void R_UpdatePitchHorizon(void);
+void R_UpdateViewPitch(void);
+
 extern fixed_t		centerxfrac;
 extern fixed_t		centeryfrac;
 extern fixed_t		projection;

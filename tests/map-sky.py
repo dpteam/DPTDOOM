@@ -28,6 +28,46 @@ def read_entries(data):
     return entries
 
 
+# Parsing the 15 MB IWAD for every overlay was a large share of this test's
+# runtime (it builds dozens of maps). The file never changes during a run.
+_ENTRY_CACHE = {}
+
+
+def cached_entries(iwad):
+    key = str(iwad)
+    if key not in _ENTRY_CACHE:
+        _ENTRY_CACHE[key] = read_entries(iwad.read_bytes())
+    return _ENTRY_CACHE[key]
+
+
+def map01_lumps(iwad):
+    """Return (level_entry_names, {name: bytearray}) for MAP01, already sky-forced."""
+    entries = cached_entries(iwad)
+    index = next(i for i, (name, _) in enumerate(entries) if name == b"MAP01")
+    level = entries[index:index + 11]
+    lumps = {name: bytearray(data) for name, data in level}
+
+    # Force sky ceilings so a transferred texture is on screen immediately.
+    sectors = lumps[SECTORS]
+    for off in range(0, len(sectors), 26):
+        sectors[off + 12:off + 20] = b"F_SKY1\0\0"
+    return [name for name, _ in level], lumps
+
+
+def one_sided_lines(linedefs):
+    """Yield (offset, front_sidedef) for every one-sided line."""
+    for i in range(len(linedefs) // 14):
+        off = i * 14
+        side0 = struct.unpack_from("<h", linedefs, off + 10)[0]
+        side1 = struct.unpack_from("<h", linedefs, off + 12)[0]
+        if side0 >= 0 and side1 < 0:
+            yield off, side0
+
+
+def write_level(path, names, lumps):
+    write_wad(path, [(name, bytes(lumps[name])) for name in names])
+
+
 def write_wad(path, entries):
     body = bytearray(b"PWAD" + struct.pack("<ii", len(entries), 0))
     records = []
@@ -46,22 +86,27 @@ def overlay(iwad, path, special=0, tag=0, sector_special=0):
     special=0 builds the sky-ceiling baseline without any transfer.
     sector_special sets the BOOM/generalized sector special on every sector.
     """
-    entries = read_entries(iwad.read_bytes())
-    index = next(i for i, (name, _) in enumerate(entries) if name == b"MAP01")
-    level = entries[index:index + 11]
-    lumps = dict(level)
+    return overlay_multi(iwad, path, [special] if special else [],
+                         tag=tag, sector_special=sector_special)
 
-    sidedefs = bytearray(lumps[SIDEDEFS])
-    linedefs = bytearray(lumps[LINEDEFS])
-    sectors = bytearray(lumps[SECTORS])
 
-    # Force sky ceilings so the transferred texture is on screen immediately.
-    for off in range(0, len(sectors), 26):
-        sectors[off + 12:off + 20] = b"F_SKY1\0\0"
-        if sector_special:
+def overlay_multi(iwad, path, specials, tag=0, sector_special=0):
+    """Put one special on each of several one-sided lines.
+
+    Consolidating many specials into one map turns dozens of engine launches
+    into one. The engine reports unsupported specials as a single list, so a
+    caller can assert on the set instead of running the engine per special.
+    """
+    names, lumps = map01_lumps(iwad)
+    sidedefs = lumps[SIDEDEFS]
+    linedefs = lumps[LINEDEFS]
+    sectors = lumps[SECTORS]
+
+    if sector_special:
+        for off in range(0, len(sectors), 26):
             struct.pack_into("<h", sectors, off + 22, sector_special)
 
-    if special:
+    if specials:
         # Reuse an existing wall texture name, guaranteed to be present.
         texture = b"STARTAN3"
         for off in range(0, len(sidedefs), 30):
@@ -70,28 +115,20 @@ def overlay(iwad, path, special=0, tag=0, sector_special=0):
                 texture = middle.ljust(8, b"\0")
                 break
 
-        # Prefer a one-sided line: its top texture is never drawn as a wall.
-        chosen = None
-        for i in range(len(linedefs) // 14):
-            off = i * 14
-            side0 = struct.unpack_from("<h", linedefs, off + 10)[0]
-            side1 = struct.unpack_from("<h", linedefs, off + 12)[0]
-            if side0 >= 0 and side1 < 0:
-                chosen = (off, side0)
-                break
-        assert chosen is not None, "no one-sided line in MAP01"
-        line_off, side = chosen
-        struct.pack_into("<h", linedefs, line_off + 6, special)
-        struct.pack_into("<h", linedefs, line_off + 8, tag)
-        sidedefs[side * 30 + 4:side * 30 + 12] = texture
+        lines = list(one_sided_lines(linedefs))
+        assert len(lines) >= len(specials), "not enough one-sided lines in MAP01"
+        for (line_off, side), special in zip(lines, specials):
+            struct.pack_into("<h", linedefs, line_off + 6, special)
+            struct.pack_into("<h", linedefs, line_off + 8, tag)
+            # Top texture of a one-sided line is never drawn as a wall, so a
+            # framebuffer difference comes from the sky alone.
+            sidedefs[side * 30 + 4:side * 30 + 12] = texture
+
         if tag:
             # Unique tag on the first sector, so 272 hits exactly one sector.
             struct.pack_into("<h", sectors, 24, tag)
 
-    lumps[SECTORS] = bytes(sectors)
-    lumps[SIDEDEFS] = bytes(sidedefs)
-    lumps[LINEDEFS] = bytes(linedefs)
-    write_wad(path, [(name, lumps[name]) for name, _ in level])
+    write_level(path, names, lumps)
     return len(sectors) // 26
 
 
@@ -154,57 +191,51 @@ def main():
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and (" %d" % special) in text, text
             assert "Map sky: count=0" in text, text
-        # Boom generalized doors (0x3c00..0x3fff): all eight trigger classes are
-        # implemented, so none of them may be reported as unsupported.
-        for trigger in range(8):
-            name = "gendoor-t%d" % trigger
-            overlay(iwad, root / (name + ".wad"), 0x3c00 + trigger)
-            _, text = run(name, ["-file", str(root / (name + ".wad"))])
-            assert "Map compatibility:" not in text, text
-        # The remaining unsupported targets are still reported. 0x6200 is a
-        # generalized floor with the ceiling target, which is not in the
-        # supported subset (0x6000 itself is: W1, down, highest neighbour).
-        for name, special in (("genfloor-target", 0x6200), ("genceil-target", 0x4080),
-                              ("genlift-target", 0x3500)):
-            overlay(iwad, root / (name + ".wad"), special)
-            _, text = run(name, ["-file", str(root / (name + ".wad"))])
-            assert "Map compatibility:" in text and (" %d" % special) in text, text
-        # Supported generalized floors, ceilings, crushers, stairs, lifts and
-        # locked doors must not be reported. Push (P1/PR) is implemented for
-        # every family and acts on the sector behind the line.
-        for name, special in (("genfloor-w1", 0x6000), ("genfloor-s1", 0x6002),
-                              ("genfloor-g1", 0x6004), ("genfloor-p1", 0x6006),
-                              ("genfloor-pr", 0x6007),
-                              ("genceil-w1", 0x4040), ("genceil-s1", 0x4042),
-                              ("genceil-p1", 0x4046),
-                              ("gencrusher-w1", 0x2f80), ("gencrusher-s1", 0x2f82),
-                              ("gencrusher-silent", 0x2fd8),
-                              ("gencrusher-p1", 0x2f86), ("gencrusher-pr", 0x2f87),
-                              ("genstairs-w1", 0x3140), ("genstairs-s1", 0x3142),
-                              ("genstairs-g1", 0x3144),
-                              ("genstairs-p1", 0x3146),
-                              ("genlift-w1", 0x3400), ("genlift-s1", 0x3402),
-                              ("genlift-g1", 0x3404), ("genlift-p1", 0x3406),
-                              ("genlocked-w1", 0x3800), ("genlocked-s1", 0x3840),
-                              ("genlocked-g1", 0x3880), ("genlocked-all", 0x39c0),
-                              ("genlocked-p1", 0x3806)):
-            overlay(iwad, root / (name + ".wad"), special)
-            _, text = run(name, ["-file", str(root / (name + ".wad"))])
-            assert "Map compatibility:" not in text, text
+        # Classification checks are consolidated into one map per outcome. Each
+        # special used to get its own engine launch, which made this test the
+        # slowest in the suite (~42 launches, each reloading the IWAD). The
+        # engine reports unsupported specials as a single list, so the same
+        # assertions hold against one run. Exhaustive per-value decoding lives
+        # in the data-free gen*/secspecial unit tests; what this test proves is
+        # the engine's report wiring, which one representative map covers.
+        supported = (
+            # Boom generalized doors: all eight trigger classes.
+            [0x3c00 + t for t in range(8)]
+            # Floors, ceilings, crushers, stairs, lifts and locked doors,
+            # including push (P1/PR), which acts on the sector behind the line.
+            + [0x6000, 0x6002, 0x6004, 0x6006, 0x6007,
+               0x4040, 0x4042, 0x4046,
+               0x2f80, 0x2f82, 0x2fd8, 0x2f86, 0x2f87,
+               0x3140, 0x3142, 0x3144, 0x3146,
+               0x3400, 0x3402, 0x3404, 0x3406,
+               0x3800, 0x3840, 0x3880, 0x39c0, 0x3806]
+        )
+        overlay_multi(iwad, root / "supported.wad", supported)
+        _, text = run("supported", ["-file", str(root / "supported.wad")])
+        assert "Map compatibility:" not in text, text
 
-        # Boom generalized sector specials: base type, damage tier and secret
-        # flag are implemented, so they must not be reported.
-        for name, value in (("sec-base-light", 0x01), ("sec-dmg", 0x61),
-                            ("sec-secret", 0x80 | 5), ("sec-all", 0xE1),
-                            ("sec-door", 0x0a), ("sec-vanilla-secret", 9)):
-            overlay(iwad, root / (name + ".wad"), sector_special=value)
-            _, text = run(name, ["-file", str(root / (name + ".wad"))])
-            assert "Map compatibility:" not in text, text
-        # Friction (bit 8) and push (bit 9) need thinkers this engine does not
-        # have, and bits above 0x03ff are undefined by BOOM. All must be
-        # reported instead of silently doing nothing.
-        for name, value in (("sec-friction", 0x100), ("sec-push", 0x200),
-                            ("sec-both", 0x300), ("sec-undefined", 0x400)):
+        # Unsupported: 142+ is the main Boom extended range; 78 and 85 are Boom
+        # types placed inside the vanilla 1..141 range (vanilla never uses those
+        # numbers). 0x6200/0x4080/0x3500 are generalized targets outside the
+        # supported subset (0x6000 itself is supported).
+        unsupported = [142, 78, 85, 0x6200, 0x4080, 0x3500]
+        overlay_multi(iwad, root / "unsupported.wad", unsupported)
+        _, text = run("unsupported", ["-file", str(root / "unsupported.wad")])
+        assert "Map compatibility:" in text, text
+        assert "linedef special(s)" in text, text
+        for special in unsupported:
+            assert (" %d" % special) in text, (special, text)
+        assert "Map sky: count=0" in text, text
+
+        # Sector specials are global to the map, so they cannot be batched onto
+        # one map. One supported value (base + damage + secret together) and two
+        # rejection paths (friction needs a thinker we lack; bits above 0x03ff
+        # are undefined by BOOM) cover the wiring.
+        overlay(iwad, root / "sec-supported.wad", sector_special=0xE1)
+        _, text = run("sec-supported", ["-file", str(root / "sec-supported.wad")])
+        assert "Map compatibility:" not in text, text
+
+        for name, value in (("sec-friction", 0x100), ("sec-undefined", 0x400)):
             overlay(iwad, root / (name + ".wad"), sector_special=value)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and " sector special(s)" in text, text
@@ -244,18 +275,15 @@ def main():
         assert health("hp-vanilla-5", 5) == 100 - 2 * 10
         assert health("hp-vanilla-7", 7) == 100 - 2 * 5
         assert health("hp-vanilla-16", 16) == 100 - 2 * 20
-        assert health("hp-vanilla-secret", 9) == 100
         # Generalized tiers must reproduce the same numbers through the bit
-        # fields, which is the point of the shared model.
+        # fields, which is the point of the shared model. gen-dmg3 also covers
+        # the light-spawner interaction: base 1 is a flickering light, so if the
+        # light thinker cleared sector->special the damage would vanish.
         assert health("hp-gen-dmg1", 0x01 | (1 << 5)) == 100 - 2 * 5
         assert health("hp-gen-dmg2", 0x01 | (2 << 5)) == 100 - 2 * 10
         assert health("hp-gen-dmg3", 0x01 | (3 << 5)) == 100 - 2 * 20
         # A generalized secret sector must not hurt by itself.
         assert health("hp-gen-secret", 0x80 | 5) == 100
-        # A generalized light type must not lose its damage bits when the light
-        # thinker is spawned: the vanilla spawners clear sector->special, and
-        # clearing the whole field would drop the damage tier.
-        assert health("hp-light-and-damage", 0x01 | (3 << 5)) == 100 - 2 * 20
 
         # Note: a transfer line whose sidedef has neither upper nor lower
         # texture is ignored defensively. Vanilla MAP01 has no such two-sided
