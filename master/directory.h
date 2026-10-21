@@ -39,6 +39,12 @@ typedef struct
     unsigned int address_map_count;
     dm_ban_t bans[DM_MAX_BANS];
     unsigned int ban_count;
+    // Allow list, same rule grammar, matched the same way (TCP source only).
+    // Only consulted when allowlist_only is set: an allow list that is present
+    // but not enforced is reported at startup rather than silently ignored.
+    dm_ban_t allowed[DM_MAX_BANS];
+    unsigned int allowed_count;
+    int allowlist_only;
 } dm_directory_t;
 // Explicit operator policy, never metadata supplied by a registering peer.
 // Syntax: private-or-loopback-IPv4/canonical-prefix=public-IPv4.
@@ -47,12 +53,22 @@ int DM_AddHairpinSubnet(dm_directory_t *directory, const char *cidr);
 // Ban rule syntax: IPv4 or canonical IPv4/prefix. A host address means /32.
 // Returns 0 on malformed input, overflow or an exact duplicate; callers treat
 // that as a config error rather than silently ignoring half a ban list.
+// Shared rule parser, exposed so both lists use identical grammar and the
+// reload path can validate into a scratch array before committing.
+int DM_ParseRule(dm_ban_t *rules, unsigned int *count, const char *text);
 int DM_AddBan(dm_directory_t *directory, const char *text);
 // Clears every rule, used when reloading the file so a removed line really
 // removes the ban.
 void DM_ClearBans(dm_directory_t *directory);
 // True when the TCP source address matches any ban rule.
 int DM_IsBanned(const dm_directory_t *directory, const unsigned char source[4]);
+
+// Allow list: same grammar and the same TCP-source-only matching. When
+// allowlist_only is set, a source that is not listed is refused; bans still win
+// over the allow list, so denying always beats permitting.
+int DM_AddAllowed(dm_directory_t *directory, const char *text);
+void DM_ClearAllowed(dm_directory_t *directory);
+int DM_IsAllowed(const dm_directory_t *directory, const unsigned char source[4]);
 void DM_AdvertisedAddress(const dm_directory_t *directory, const unsigned char source[4], unsigned char output[4]);
 int DM_PublicIPv4(const unsigned char ip[4]);
 int DM_MappingReady(const dm_directory_t *directory, const unsigned char source[4]);

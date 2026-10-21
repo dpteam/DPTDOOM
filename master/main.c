@@ -281,6 +281,10 @@ static void Accept(SOCKET listener, uint64_t now)
         // source address only: the advertised/listing address is peer-supplied
         // and must never be able to lift a ban.
         if(DM_IsBanned(&directory,host)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=banned-source"); DM_Close(socket); continue; }
+        // Bans are checked first on purpose: denying must beat permitting, so a
+        // source that is both banned and allowed stays banned.
+        if(directory.allowlist_only && !DM_IsAllowed(&directory,host))
+        { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=not-in-allowlist"); DM_Close(socket); continue; }
         if(!Nonblocking(socket)) { ML_Event(ML_IO,host,0,now); DM_Close(socket); continue; }
         for(i=0;i<DM_CLIENTS;++i)
             if(clients[i].socket!=INVALID_SOCKET && !memcmp(clients[i].host,host,4))++ip_clients;
@@ -293,7 +297,7 @@ static void Accept(SOCKET listener, uint64_t now)
         ClientEvent(&clients[i],ML_CONNECT,"TCP-accepted-awaiting-DPTM",0,0,now);
     }
 }
-static void ReloadBansIfChanged(uint64_t now);
+static void ReloadRulesIfChanged(uint64_t now);
 
 static int Run(SOCKET listener)
 {
@@ -305,7 +309,7 @@ static int Run(SOCKET listener)
         unsigned int i;
         uint64_t now=Now();
         PA_Tick(&public_address,&directory,now);
-        ReloadBansIfChanged(now);
+        ReloadRulesIfChanged(now);
         Prune(now); ML_Flush(now,0);
         FD_ZERO(&reads); FD_ZERO(&writes); FD_SET(listener,&reads);
         for(i=0;i<DM_CLIENTS;++i)
@@ -378,6 +382,12 @@ static const char *ConfigTemplate =
 "# A malformed rule stops startup instead of loading a partial list.\n"
 "# banlist=banlist.txt\n"
 "\n"
+"# Allow list: only listed source addresses may connect. The mode is explicit on\n"
+"# purpose - a leftover file must not silently close an open server. Bans always\n"
+"# win over the allow list, and an empty enforced allow list refuses to start.\n"
+"# allowlist=allowlist.txt\n"
+"# access-mode=open | allowlist   (default: open)\n"
+"\n"
 "# How the master learns its own public address: off | manual | dns | api.\n"
 "#   off     - advertise the observed source address (default)\n"
 "#   manual  - use public-ip\n"
@@ -407,16 +417,20 @@ static int WriteConfigTemplate(const char *path)
 // enforcing half a list (which could ban the wrong people).
 static char ban_path[512];
 
+// Allow list, same reload treatment as the ban list.
+static char allow_path[512];
+
 // Change detection for the runtime reload. mtime alone is enough: the file is
 // tiny and rewritten wholesale, and a reload is cheap.
 static long long ban_file_stamp;
+static long long allow_file_stamp;
 static uint64_t ban_next_check;
 
-static int BanFileStamp(long long *stamp)
+static int FileStamp(const char *path, long long *stamp)
 {
     struct stat info;
-    if(!ban_path[0]) return 0;
-    if(stat(ban_path,&info)!=0) { *stamp=0; return 1; } // missing is a valid state
+    if(!path[0]) return 0;
+    if(stat(path,&info)!=0) { *stamp=0; return 1; } // missing is a valid state
     // mtime alone has one-second resolution, so a quick edit-save could look
     // unchanged. Mixing in the size makes that far less likely for a file that
     // is rewritten wholesale.
@@ -424,82 +438,125 @@ static int BanFileStamp(long long *stamp)
     return 1;
 }
 
-static int LoadBans(const char *path, int announce)
+// Shared loader for both lists. `is_allow` selects the destination and the
+// wording; the parsing and atomic-commit rules are identical on purpose, so a
+// ban list and an allow list cannot drift apart in behaviour.
+static int LoadRules(const char *path, int is_allow, int announce)
 {
     FILE *file=fopen(path,"rb");
     char line[256];unsigned int number=0,accepted=0;
-    dm_directory_t scratch;
+    dm_ban_t parsed[DM_MAX_BANS];
+    unsigned int parsed_count=0;
 
     if(!file)
     {
-        // No ban file is a normal state: nothing is banned.
-        if(announce) ML_Message("Master: no ban list found; nothing is banned");
+        // A missing file is a normal state. For the allow list that is only safe
+        // when the list is not enforced, which startup checks separately.
+        if(announce)
+            ML_Message(is_allow
+                       ? "Master: no allow list found"
+                       : "Master: no ban list found; nothing is banned");
         return 1;
     }
-
-    memcpy(&scratch,&directory,sizeof(scratch));
-    DM_ClearBans(&scratch);
 
     while(fgets(line,sizeof(line),file))
     {
         char *start=line,*end;size_t length=strlen(line);++number;
         if(length==sizeof(line)-1 && line[length-1]!='\n')
         {
-            fprintf(stderr,"Master: ban list line %u is too long\n",number);
+            fprintf(stderr,"Master: %s list line %u is too long\n",
+                    is_allow?"allow":"ban",number);
             fclose(file);return 0;
         }
         while(*start==' '||*start=='\t')++start;
         end=start+strlen(start);while(end>start && isspace((unsigned char)end[-1]))*--end=0;
         if(!*start || *start=='#')continue;
-        if(!DM_AddBan(&scratch,start))
+        if(!DM_ParseRule(parsed,&parsed_count,start))
         {
             // Fail the whole reload instead of applying the valid prefix: a
-            // partially loaded ban list is worse than the previous one.
-            fprintf(stderr,"Master: invalid ban rule on line %u: %s\n",number,start);
+            // partially loaded list is worse than the previous one.
+            fprintf(stderr,"Master: invalid %s rule on line %u: %s\n",
+                    is_allow?"allow":"ban",number,start);
             fclose(file);return 0;
         }
         ++accepted;
     }
-    if(ferror(file)){fclose(file);fprintf(stderr,"Master: ban list read failed\n");return 0;}
+    if(ferror(file))
+    {
+        fclose(file);
+        fprintf(stderr,"Master: %s list read failed\n",is_allow?"allow":"ban");
+        return 0;
+    }
     fclose(file);
 
-    memcpy(directory.bans,scratch.bans,sizeof(scratch.bans));
-    directory.ban_count=scratch.ban_count;
-    // Record the stamp only after a successful commit, so a failed reload is
-    // retried on the next check instead of being silently considered applied.
-    BanFileStamp(&ban_file_stamp);
+    if(is_allow)
+    {
+        memcpy(directory.allowed,parsed,sizeof(parsed));
+        directory.allowed_count=parsed_count;
+        FileStamp(allow_path,&allow_file_stamp);
+    }
+    else
+    {
+        memcpy(directory.bans,parsed,sizeof(parsed));
+        directory.ban_count=parsed_count;
+        // Record the stamp only after a successful commit, so a failed reload is
+        // retried on the next check instead of being silently considered applied.
+        FileStamp(ban_path,&ban_file_stamp);
+    }
+
     if(announce)
     {
-        char message[160];
-        snprintf(message,sizeof(message),"Master: %u ban rule(s) loaded from %s",accepted,path);
+        char message[192];
+        snprintf(message,sizeof(message),"Master: %u %s rule(s) loaded from %s",
+                 accepted,is_allow?"allow":"ban",path);
         ML_Message(message);
     }
     return 1;
 }
 
 // Called from the main loop. Cheap enough to poll once a second.
-static void ReloadBansIfChanged(uint64_t now)
+static void ReloadRulesIfChanged(uint64_t now)
 {
     long long stamp;
 
-    if(!ban_path[0] || now<ban_next_check) return;
+    if(now<ban_next_check) return;
     ban_next_check=now+1000;
-    if(!BanFileStamp(&stamp) || stamp==ban_file_stamp) return;
 
-    if(LoadBans(ban_path,0))
+    if(ban_path[0] && FileStamp(ban_path,&stamp) && stamp!=ban_file_stamp)
     {
-        char message[192];
-        snprintf(message,sizeof(message),
-                 "Master: ban list changed on disk, reloaded (%u rule(s) active)",
-                 directory.ban_count);
-        ML_Message(message);
+        if(LoadRules(ban_path,0,0))
+        {
+            char message[192];
+            snprintf(message,sizeof(message),
+                     "Master: ban list changed on disk, reloaded (%u rule(s) active)",
+                     directory.ban_count);
+            ML_Message(message);
+        }
+        else
+        {
+            // The previous list stays in force. Parsing into a scratch array is
+            // what makes this safe: a half-written file cannot weaken or widen
+            // the current bans.
+            ML_Message("Master: ban list reload failed; keeping the previous list");
+        }
     }
-    else
+
+    if(allow_path[0] && FileStamp(allow_path,&stamp) && stamp!=allow_file_stamp)
     {
-        // The previous list stays in force. Reloading into a scratch copy is
-        // what makes this safe: a half-written file cannot weaken or widen the
-        // current bans.
-        ML_Message("Master: ban list reload failed; keeping the previous list");
+        if(LoadRules(allow_path,1,0))
+        {
+            char message[192];
+            snprintf(message,sizeof(message),
+                     "Master: allow list changed on disk, reloaded (%u rule(s) active)",
+                     directory.allowed_count);
+            ML_Message(message);
+        }
+        else
+        {
+            // Same reasoning as the ban list, and it matters more here: a
+            // truncated allow list would lock out everyone it no longer lists.
+            ML_Message("Master: allow list reload failed; keeping the previous list");
+        }
     }
 }
 
@@ -537,6 +594,19 @@ static int LoadConfig(const char *path, const char **host, int host_from_cli)
             // it is relative to the working directory or absolute.
             if(strlen(start+8)>=sizeof(ban_path))goto invalid;
             strcpy(ban_path,start+8);
+        }
+        else if(!strncmp(start,"allowlist=",10))
+        {
+            if(strlen(start+10)>=sizeof(allow_path))goto invalid;
+            strcpy(allow_path,start+10);
+        }
+        else if(!strncmp(start,"access-mode=",12))
+        {
+            // Explicit mode rather than "allow list present means enforce".
+            // An implicit switch would turn a leftover file into a lockout.
+            if(!strcmp(start+12,"open")) directory.allowlist_only=0;
+            else if(!strcmp(start+12,"allowlist")) directory.allowlist_only=1;
+            else goto invalid;
         }
         else if(!strncmp(start,"bind=",5))
         {
@@ -600,7 +670,30 @@ int main(int argc, char **argv)
         else goto usage;
     }
     if(config_path && !LoadConfig(config_path,&host,host_from_cli))return 2;
-    if(ban_path[0] && !LoadBans(ban_path,1))return 2;
+    if(ban_path[0] && !LoadRules(ban_path,0,1))return 2;
+    if(allow_path[0] && !LoadRules(allow_path,1,1))return 2;
+    if(directory.allowlist_only)
+    {
+        // Refusing to start is the honest choice here. An enforced allow list
+        // with no usable rules locks every client out, and the operator would
+        // otherwise only discover it from failed connections.
+        if(!allow_path[0])
+        { fputs("Master: access-mode=allowlist requires allowlist= with a file\n",stderr); return 2; }
+        if(!directory.allowed_count)
+        { fputs("Master: access-mode=allowlist is enforced but the allow list is empty; refusing to lock every client out\n",stderr); return 2; }
+        { char message[192];
+          snprintf(message,sizeof(message),
+                   "Master: access-mode=allowlist: only %u listed source(s) may connect; bans still win",
+                   directory.allowed_count);
+          ML_Message(message); }
+    }
+    else if(allow_path[0] && directory.allowed_count)
+    {
+        // A present-but-ignored allow list is a trap: say so once rather than
+        // let the operator believe access is restricted.
+        ML_Message("Master: allow list loaded but access-mode is open; it is NOT enforced "
+                   "(set access-mode=allowlist to enforce it)");
+    }
     if(!config_path)
         ML_Message("Master: no --config given; pass --config dptdoom-master.conf to get a commented template you can edit (it is created if missing)");
     if(!PA_Prepare(&public_address,&directory)){fputs("Master: invalid public address mode/config combination or subnet overlap\n",stderr);return 2;}

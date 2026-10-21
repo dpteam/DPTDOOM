@@ -109,6 +109,24 @@ int main(void)
         DM_ClearBans(&bans);
         REQUIRE(bans.ban_count==0);
         REQUIRE(!DM_IsBanned(&bans,blocked));
+
+        // Allow list: same grammar and matching, but a separate set, and it is
+        // only consulted by the caller when allowlist_only is set.
+        memset(&bans,0,sizeof(bans));
+        REQUIRE(!DM_IsAllowed(&bans,blocked));      // empty allow list allows nothing
+        REQUIRE(DM_AddAllowed(&bans,"203.0.113.0/24"));
+        REQUIRE(DM_IsAllowed(&bans,blocked));
+        REQUIRE(!DM_IsAllowed(&bans,allowed));
+        REQUIRE(!DM_AddAllowed(&bans,"203.0.113.0/24"));  // duplicate
+        REQUIRE(!DM_AddAllowed(&bans,"192.168.10.5/24")); // non-canonical
+        REQUIRE(bans.allowed_count==1);
+        // The two lists are independent: allowing does not ban, banning does not allow.
+        REQUIRE(!DM_IsBanned(&bans,blocked));
+        REQUIRE(DM_AddBan(&bans,"203.0.113.7"));
+        REQUIRE(DM_IsBanned(&bans,blocked) && DM_IsAllowed(&bans,blocked));
+        DM_ClearAllowed(&bans);
+        REQUIRE(!DM_IsAllowed(&bans,blocked));
+        REQUIRE(DM_IsBanned(&bans,blocked));        // clearing one list leaves the other
     }
 
     puts("Master model: schema, bounds, lease/expiry, source/token auth, capacity, header validation and ban rules OK");

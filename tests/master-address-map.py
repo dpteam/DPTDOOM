@@ -181,6 +181,65 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
                 process.terminate();process.wait(10)
 
     check_live_reload()
+
+    # Allow list: explicit access-mode, not inferred from the file existing.
+    def run_with(name, conf_body, files):
+        for fname,body in files.items():
+            (root/fname).write_text(body)
+        conf=root/(name+'.conf')
+        conf.write_text(conf_body)
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+        logpath=root/(name+'.log')
+        with logpath.open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(port),'--config',str(conf),
+                                      '--log',str(root/(name+'-events.log'))],
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'listening on' not in logpath.read_bytes():
+                    if process.poll() is not None:
+                        return 'exit %d'%process.returncode, logpath.read_bytes()
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                try:
+                    with socket.create_connection(('127.0.0.1',port),timeout=3) as s:
+                        s.sendall(wire.packet(1,b''))
+                        wire.reply(s,1)
+                        return 'connected', logpath.read_bytes()
+                except OSError:
+                    return 'rejected', logpath.read_bytes()
+            finally:
+                process.terminate();process.wait(10)
+
+    # A list that exists but is not enforced must say so rather than look active.
+    state,text=run_with('allow-open','allowlist=allow-open.txt\n',
+                        {'allow-open.txt':'198.51.100.1\n'})
+    assert state=='connected',(state,text)
+    assert b'NOT enforced' in text,text
+
+    # Enforced: unlisted source refused, with the reason in the log.
+    state,text=run_with('allow-deny','allowlist=allow-deny.txt\naccess-mode=allowlist\n',
+                        {'allow-deny.txt':'198.51.100.1\n'})
+    assert state=='rejected',(state,text)
+    assert b'not-in-allowlist' in text,text
+
+    # Enforced: listed source accepted.
+    state,text=run_with('allow-permit','allowlist=allow-permit.txt\naccess-mode=allowlist\n',
+                        {'allow-permit.txt':'127.0.0.1\n'})
+    assert state=='connected',(state,text)
+
+    # Deny must beat permit: listed and banned stays banned.
+    state,text=run_with('allow-both',
+                        'allowlist=allow-both-a.txt\nbanlist=allow-both-b.txt\naccess-mode=allowlist\n',
+                        {'allow-both-a.txt':'127.0.0.1\n','allow-both-b.txt':'127.0.0.1\n'})
+    assert state=='rejected',(state,text)
+    assert b'banned-source' in text,text
+
+    # Enforced with no usable rules would lock everyone out: refuse to start.
+    state,text=run_with('allow-empty','allowlist=allow-empty.txt\naccess-mode=allowlist\n',
+                        {'allow-empty.txt':'# empty\n'})
+    assert state.startswith('exit '),(state,text)
     # bind= in the config persists the operator's choice; loopback stays the
     # default, and an explicit --bind must still win over the config.
     for expected,extra in (('0.0.0.0',[]),('127.0.0.1',['--bind','127.0.0.1'])):
