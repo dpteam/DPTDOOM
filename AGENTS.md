@@ -175,6 +175,12 @@ ctest --preset windows-headless
 - Relay разрешён владельцем: master --relay opt-in, 8 пар/4 на source, 4KiB
   buffers/side, 64KiB/s/side, idle120s/lifetime6h. Operations5/6 и LIST row156
   bit0; старые browser builds могут отклонить flag, обновлять обоих peers.
+  `--relay-port N` выносит relay на отдельный порт (нужен --relay, ≠ --port,
+  выключено по умолчанию): операции управления на relay-порту получают
+  DM_BAD_REQUEST, а relay-операция на порту управления — статус 5 DM_REDIRECT
+  с номером порта; движок следует редиректу один раз, строка LIST не меняется
+  (порт в неё не упаковывается). Ban/allow по-прежнему общие для обоих портов
+  (scope — в IDEAS).
   Native master/relay.c, docs/RELAY.md; not arbitrary proxy/TLS/auth. Host lease
   source+secret, guest public session-id, consumed listing; direct first then
   2s fallback. Tests master-relay/master-publish/UI include unavailable direct,

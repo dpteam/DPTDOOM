@@ -50,6 +50,12 @@ typedef struct
     uint64_t deadline;
     uint64_t began, id;
     unsigned int peer_port;
+    // Set when the connection arrived on the dedicated relay port, so Reply()
+    // can refuse control operations there (and vice versa). Keeping the two
+    // roles apart is the whole point of the separate port: a flood of relay
+    // traffic must not consume the control plane's accept budget, and the two
+    // can carry different access policies.
+    int relay_port;
 } dm_client_t;
 typedef struct { unsigned char host[4]; uint64_t time; unsigned int credit; int used; } dm_bucket_t;
 static dm_directory_t directory;
@@ -59,6 +65,8 @@ static volatile sig_atomic_t stopping;
 static uint64_t next_client_id;
 static pa_state_t public_address;
 static int relay_enabled;
+static int relay_port_enabled;
+static unsigned int relay_listen_port;
 
 static int LastSocketError(void)
 {
@@ -178,7 +186,34 @@ static int Reply(dm_client_t *client, uint64_t now)
     Prune(now);
     if(DM_RequestLength(client->request)>=0)
     {
-        if(op==DM_RELAY_HOST||op==DM_RELAY_JOIN)
+        int is_relay_op = (op==DM_RELAY_HOST||op==DM_RELAY_JOIN);
+
+        // With a dedicated relay port the two roles are kept apart. A control
+        // operation on the relay port is simply wrong, so it is refused. A
+        // relay operation on the control port is redirected: the client cannot
+        // discover the split port from the listing (DM_ROW has no spare bytes
+        // and the host attaches before any row of its own exists), but it does
+        // know the control endpoint, so answering with the port means the host
+        // and the guest both find it without any local setting.
+        if(relay_port_enabled && is_relay_op != client->relay_port)
+        {
+            if(client->relay_port)
+            {
+                ClientEvent(client,ML_LIMIT,"control-op-on-relay-port",DM_BAD_REQUEST,0,now);
+                DM_Header(client->response,op,0,DM_BAD_REQUEST);
+                client->response_size=DM_HEADER;
+            }
+            else
+            {
+                ClientEvent(client,ML_RELAY,"relay-redirected-to-separate-port",DM_REDIRECT,0,now);
+                DM_Put16(body,relay_listen_port);
+                DM_Header(client->response,op,DM_REDIRECT_BODY,DM_REDIRECT);
+                client->response_size=DM_HEADER+DM_REDIRECT_BODY;
+            }
+            return 1;
+        }
+
+        if(is_relay_op)
         {
             status=relay_enabled?MR_Attach(&directory,(uintptr_t)client->socket,op,client->host,client->request+DM_HEADER,now):DM_CAPACITY;
             if(status==DM_OK){client->socket=INVALID_SOCKET;Drop(client);return 1;}
@@ -267,7 +302,7 @@ static void WriteClient(dm_client_t *client)
     client->sent+=(unsigned int)sent;
     if(client->sent==client->response_size) { ClientEvent(client,ML_RESPONSE,"response-delivered-to-TCP",DM_Get16(client->response+12),0,Now());Drop(client); }
 }
-static void Accept(SOCKET listener, uint64_t now)
+static void Accept(SOCKET listener, int relay_port, uint64_t now)
 {
     // Bound accept work per loop so floods cannot starve existing connections.
     unsigned int accepted;
@@ -305,12 +340,13 @@ static void Accept(SOCKET listener, uint64_t now)
         clients[i].socket=socket; clients[i].wanted=DM_HEADER; clients[i].deadline=now+DM_DEADLINE;
         memcpy(clients[i].host,host,4);
         clients[i].began=now;clients[i].id=++next_client_id;clients[i].peer_port=ntohs(peer.sin_port);
+        clients[i].relay_port=relay_port;
         ClientEvent(&clients[i],ML_CONNECT,"TCP-accepted-awaiting-DPTM",0,0,now);
     }
 }
 static void ReloadRulesIfChanged(uint64_t now);
 
-static int Run(SOCKET listener)
+static int Run(SOCKET listener, SOCKET relay_listener)
 {
     while(!stopping)
     {
@@ -323,6 +359,11 @@ static int Run(SOCKET listener)
         ReloadRulesIfChanged(now);
         Prune(now); ML_Flush(now,0);
         FD_ZERO(&reads); FD_ZERO(&writes); FD_SET(listener,&reads);
+        if(relay_listener!=INVALID_SOCKET)
+        {
+            FD_SET(relay_listener,&reads);
+            if(relay_listener>maximum)maximum=relay_listener;
+        }
         for(i=0;i<DM_CLIENTS;++i)
         {
             dm_client_t *client=&clients[i];
@@ -347,7 +388,8 @@ static int Run(SOCKET listener)
             if(FD_ISSET(client->socket,&writes))WriteClient(client);
             else if(FD_ISSET(client->socket,&reads))ReadClient(client,now);
         }
-        if(FD_ISSET(listener,&reads))Accept(listener,now);
+        if(FD_ISSET(listener,&reads))Accept(listener,0,now);
+        if(relay_listener!=INVALID_SOCKET && FD_ISSET(relay_listener,&reads))Accept(relay_listener,1,now);
     }
     return 0;
 }
@@ -399,6 +441,12 @@ static const char *ConfigTemplate =
 "# win over the allow list, and an empty enforced allow list refuses to start.\n"
 "# allowlist=allowlist.txt\n"
 "# access-mode=open | allowlist   (default: open)\n"
+"\n"
+"# Relay is a command line flag, not a key in this file: --relay turns it on and\n"
+"# --relay-port N serves it on a separate port. Nothing here enables relay, so a\n"
+"# commented line cannot turn it on by accident. --relay-port requires --relay\n"
+"# and must differ from --port; a relay operation on the control port is then\n"
+"# answered with a redirect carrying the relay port, so clients need no setting.\n"
 "\n"
 "# How the master learns its own public address: off | manual | dns | api.\n"
 "#   off     - advertise the observed source address (default)\n"
@@ -677,9 +725,11 @@ int main(int argc, char **argv)
     const char *log_path="dptdoom-master.log";
     const char *config_path=NULL;
     unsigned int port=25135,i;
+    unsigned int relay_port=0;
     unsigned int log_size=1048576;
     struct sockaddr_in address;
     SOCKET listener;
+    SOCKET relay_listener=INVALID_SOCKET;
     int result;
     directory.lease_seconds=60;
     MR_Init();
@@ -688,7 +738,7 @@ int main(int argc, char **argv)
     {
         if(!strcmp(argv[i],"--version")) { puts("DPT.DOOM master 0.1.0-dev"); return 0; }
         if(!strcmp(argv[i],"--help"))
-        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path] [--relay]\nDefault loopback:25135, TTL 60s, no address rewriting, relay OFF.\nLoopback means only this machine can connect; for LAN/Internet clients pass\n  --bind 0.0.0.0 (or a specific interface address), or bind=0.0.0.0 in --config.\n--relay: opt-in 8 bounded session pairs over this port, no arbitrary proxy or TLS.\nConfig: see docs/MASTER.md. No game-port probing or router changes."); return 0; }
+        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path] [--relay]\n  [--relay-port 1..65535]\nDefault loopback:25135, TTL 60s, no address rewriting, relay OFF.\nLoopback means only this machine can connect; for LAN/Internet clients pass\n  --bind 0.0.0.0 (or a specific interface address), or bind=0.0.0.0 in --config.\n--relay: opt-in 8 bounded session pairs, no arbitrary proxy or TLS.\n--relay-port: serve relay on its own port instead of the control port; requires\n  --relay and a port different from --port. Control operations are refused on the\n  relay port, and a relay operation on the control port is answered with a\n  redirect carrying the relay port, so clients need no extra setting.\nConfig: see docs/MASTER.md. No game-port probing or router changes."); return 0; }
         if(!strcmp(argv[i],"--relay")){relay_enabled=1;continue;}
         if(i+1>=(unsigned int)argc)goto usage;
         if(!strcmp(argv[i],"--bind")){host=argv[++i];host_from_cli=1;}
@@ -696,6 +746,7 @@ int main(int argc, char **argv)
         else if(!strcmp(argv[i],"--log"))log_path=argv[++i];
         else if(!strcmp(argv[i],"--log-max-bytes")) { if(!Number(argv[++i],4096,16777216,&log_size))goto usage; }
         else if(!strcmp(argv[i],"--port")) { if(!Number(argv[++i],1,65535,&port))goto usage; }
+        else if(!strcmp(argv[i],"--relay-port")) { if(!Number(argv[++i],1,65535,&relay_port))goto usage; }
         else if(!strcmp(argv[i],"--lease-seconds")) { if(!Number(argv[++i],3,300,&directory.lease_seconds))goto usage; }
         else goto usage;
     }
@@ -748,7 +799,35 @@ int main(int argc, char **argv)
 #endif
     if(!Nonblocking(listener) || bind(listener,(struct sockaddr*)&address,sizeof(address))==SOCKET_ERROR || listen(listener,DM_CLIENTS)==SOCKET_ERROR)
     { ML_Message("Master: nonblocking/bind/listen failed; check address and port"); DM_Close(listener); result=1; goto cleanup; }
+    // Separate relay listener. Off by default so existing deployments keep the
+    // current single-port behaviour; --relay-port turns it on.
+    if(relay_port)
+    {
+        struct sockaddr_in relay_address=address;
+
+        if(relay_port==port)
+        { ML_Message("Master: --relay-port must differ from --port"); DM_Close(listener); result=2; goto cleanup; }
+        if(!relay_enabled)
+        { ML_Message("Master: --relay-port requires --relay"); DM_Close(listener); result=2; goto cleanup; }
+        relay_listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+        if(relay_listener==INVALID_SOCKET) { ML_Message("Master: relay socket failed"); DM_Close(listener); result=1; goto cleanup; }
+#ifdef _WIN32
+        { BOOL exclusive=TRUE; if(setsockopt(relay_listener,SOL_SOCKET,SO_EXCLUSIVEADDRUSE,(const char*)&exclusive,sizeof(exclusive)))
+          { ML_Message("Master: relay exclusive bind option failed"); DM_Close(relay_listener); DM_Close(listener); result=1; goto cleanup; } }
+#else
+        if(relay_listener>=FD_SETSIZE) { DM_Close(relay_listener); DM_Close(listener); result=1; goto cleanup; }
+#endif
+        relay_address.sin_port=htons((uint16_t)relay_port);
+        if(!Nonblocking(relay_listener) || bind(relay_listener,(struct sockaddr*)&relay_address,sizeof(relay_address))==SOCKET_ERROR || listen(relay_listener,DM_CLIENTS)==SOCKET_ERROR)
+        { ML_Message("Master: relay nonblocking/bind/listen failed; check the relay port"); DM_Close(relay_listener); DM_Close(listener); result=1; goto cleanup; }
+        relay_port_enabled=1;
+        relay_listen_port=relay_port;
+    }
     { char message[256]; snprintf(message,sizeof(message),"DPT.DOOM master: listening on %s:%u (directory v1, TTL %us, experimental LAN; no TLS)",host,port,directory.lease_seconds); ML_Message(message); }
+    if(relay_port_enabled)
+    { char message[256]; snprintf(message,sizeof(message),
+        "Master: relay listening on %s:%u; control operations are refused on this port, and relay operations on the control port are redirected here for clients that know the redirect",host,relay_port);
+      ML_Message(message); }
     // A loopback bind is the safe default, but it also means remote clients get
     // connection refused with no hint why. Say so explicitly, with the fix.
     if(!strcmp(host,"127.0.0.1") || !strcmp(host,"localhost"))
@@ -765,12 +844,13 @@ int main(int argc, char **argv)
             rule->advertised[0],rule->advertised[1],rule->advertised[2],rule->advertised[3],rule->dynamic?"yes":"no",rule->enabled?"yes":"no");ML_Message(message);
     }
     {char message[360];snprintf(message,sizeof(message),"Public address discovery: mode=%s host=%s refresh_seconds=%u (API URL omitted; HTTPS request only in explicit api mode)",public_address.mode,public_address.host[0]?public_address.host:"none",public_address.refresh_seconds);ML_Message(message);}
-    ML_Message("Master diagnostic v2: status 0=OK 1=BAD_REQUEST 2=UNAUTHORIZED 3=CONFLICT 4=CAPACITY; cid is local to this process, peer port is TCP source port, not game port");
+    ML_Message("Master diagnostic v2: status 0=OK 1=BAD_REQUEST 2=UNAUTHORIZED 3=CONFLICT 4=CAPACITY 5=REDIRECT(relay-on-separate-port,2-byte-body); cid is local to this process, peer port is TCP source port, not game port");
     ML_Message(relay_enabled?"Relay ENABLED: 8 session pairs, 4096-byte buffers/side, 64KiB/s/side, 120s idle, 6h lifetime; registered peers only; NO encryption":"Relay disabled (operator must explicitly pass --relay)");
     ML_Message("Requests are logged with byte progress and failure reason; no names/tokens/payload dumps. Missing remote events means no observed request, not proof of firewall cause.");
-    result=Run(listener);
+    result=Run(listener,relay_listener);
     MR_Close();
     for(i=0;i<DM_CLIENTS;++i)Drop(&clients[i]);
+    if(relay_listener!=INVALID_SOCKET)DM_Close(relay_listener);
     DM_Close(listener);
 cleanup:
     PA_Close(&public_address);

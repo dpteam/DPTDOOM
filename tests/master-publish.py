@@ -48,9 +48,14 @@ def main():
             return process, work / "stdout.log"
 
         try:
-            mp, gp = port(), port()
-            m, mlog = start("master", [master, "--port", mp, "--lease-seconds", "3", "--relay"])
-            wait(lambda: "listening on" in mlog.read_text())
+            mp, gp, relay_port = port(), port(), port()
+            # Relay on its own port for the whole run: every relayed scenario
+            # below then has to follow the DM_REDIRECT the master answers a
+            # control-port attach with, which is the only automated coverage of
+            # that engine path (the launcher test is interactive-only).
+            m, mlog = start("master", [master, "--port", mp, "--lease-seconds", "3", "--relay",
+                                       "--relay-port", relay_port])
+            wait(lambda: "relay listening on" in mlog.read_text())
 
             def rows():
                 with socket.create_connection(("127.0.0.1", mp), timeout=4) as sock:
@@ -94,6 +99,10 @@ def main():
             assert guest.wait(20)==0,glog.read_text()
             assert 'host paired through master' in hlog.read_text()
             assert 'guest paired through master' in glog.read_text()
+            # Both sides must have been redirected before pairing: without the
+            # redirect the host attaches on the control port and never pairs.
+            assert f'master moved relay to port {relay_port}' in hlog.read_text(),hlog.read_text()
+            assert f'master moved relay to port {relay_port}' in glog.read_text(),glog.read_text()
             assert 'connected as player 1' in hlog.read_text() and 'connected as player 2' in glog.read_text()
             assert not rows()
             assert (root/'relayed-host/trace.txt').read_bytes()==(root/'relayed-guest/trace.txt').read_bytes()

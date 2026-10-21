@@ -649,8 +649,11 @@ partition может породить две отдельные локальны
 
 Добавлен opt-in bounded relay как резерв прямого подключения, startup HUD-font
 экран ожидания и 120s launcher wait; master-relay / master-publish / UI tests
-проверяют недоступный direct → relay, traces и survivor. Remote run/две машины
-для этой ревизии ещё не подтверждены, Internet-hardening/TLS/auth отсутствуют.
+проверяют недоступный direct → relay, traces и survivor. Relay можно вынести на
+отдельный порт (`--relay-port`); клиент узнаёт порт из редиректа, поэтому host и
+guest не требуют настройки, а формат строки листинга не меняется. Remote run/две
+машины для этой ревизии ещё не подтверждены, Internet-hardening/TLS/auth
+отсутствуют.
 Локально: 33/33 MSVC SDL, 30/30 MinGW headless, 32/32 MSVC headless ASan;
 state baselines не менялись. Full SDL rerun зелёный после ожидания handshake в
 UI test (startup-окно теперь появляется раньше завершения подключения).

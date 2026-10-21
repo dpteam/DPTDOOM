@@ -231,11 +231,13 @@ def main():
             # Host/join through real page buttons; no engine CLI bypass.
             port = free_port()
             master_port = free_port()
+            relay_port = free_port()
             master_log = (root / "master.stdout.log").open("wb")
             master_config=root/'relay-master.conf'
             master_config.write_text('address-map=127.0.0.1/32=203.0.113.9\n')
             master = subprocess.Popen([str(exe.parent / "dptdoom-master.exe"), "--port", str(master_port),
-                                       "--relay", "--config",str(master_config),"--log", str(root / "master.events.log")], cwd=root, stdout=master_log, stderr=master_log)
+                                       "--relay", "--relay-port", str(relay_port),
+                                       "--config",str(master_config),"--log", str(root / "master.events.log")], cwd=root, stdout=master_log, stderr=master_log)
             p2, c2, storage2 = start(root / "custom data")
             set_fields(c, 1, 2, port)
             c.js("$('extra').checked=true;$('pass').checked=true;send('preview')")
@@ -280,6 +282,10 @@ def main():
             assert not any("desync" in text.lower() for text in logs), logs
             assert any('host paired through master' in text for text in logs),logs
             assert any('guest paired through master' in text for text in logs),logs
+            # The relay endpoint is the control endpoint; the master redirects
+            # the attach to its separated port and the engine follows it, so the
+            # guest needs no local setting for it. Driven through the real page.
+            assert 'reason=relay-redirected-to-separate-port' in (root/'master.events.log').read_text()
             assert any('Launcher master DNS:' in text and 'localhost:' in text and 'Master diagnostic v2:' in text for text in logs)
             network_logs = [f.read_text() for d in (storage, storage2) for f in d.glob('launcher-network-*.log')]
             assert any('dns_error=0' in text and 'resolved_IPv4=127.0.0.1' in text and 'op=LIST' in text for text in network_logs)

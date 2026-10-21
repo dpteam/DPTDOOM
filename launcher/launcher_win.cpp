@@ -400,6 +400,10 @@ static void Message(const wchar_t *text)
                 static const wchar_t hex[]=L"0123456789abcdef";
                 for(unsigned i=0;i<16;++i){relaySession+=hex[row[i]>>4];relaySession+=hex[row[i]&15];}
                 std::string endpoint(masterEndpoint.begin(),masterEndpoint.end());char host[254];unsigned port;
+                // The relay endpoint is the master endpoint. If the operator
+                // split the relay onto its own port, the master answers the
+                // attach with a redirect and the engine follows it, so nothing
+                // has to be configured or advertised here.
                 if(MC_Endpoint(endpoint.c_str(),host,&port))relayMaster=std::wstring(resolvedMaster.begin(),resolvedMaster.end())+L":"+std::to_wstring(port);
             }
             profile.nomonsters=(info[127]&4)!=0;profile.fast=(info[127]&8)!=0;profile.respawn=(info[127]&16)!=0;

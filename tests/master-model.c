@@ -32,6 +32,15 @@ int main(void)
     REQUIRE(DM_List(&directory,2000,list)==4+DM_ROW && DM_Get32(list)==1);
     REQUIRE(!memcmp(list+4,auth,16) && !memcmp(list+20,host,4) && DM_Get32(list+24)==59);
     REQUIRE(!memcmp(list+28,info,DM_INFO));
+    // The flags word at row offset 156 exists only for bit0 (relay available).
+    // Nothing else may be packed in there: clients from before the relay exist
+    // reject any other bit, so the row has to stay byte-identical.
+    REQUIRE(DM_Get32(list+4+156)==0);
+    directory.entries[0].relay_available=1;
+    REQUIRE(DM_List(&directory,2000,list)==4+DM_ROW);
+    REQUIRE(DM_Get32(list+4+156)==DM_RELAY_AVAILABLE);
+    directory.entries[0].relay_available=0;
+    REQUIRE(DM_List(&directory,2000,list)==4+DM_ROW && DM_Get32(list+4+156)==0);
     REQUIRE(DM_Renew(&directory,other,auth,2000,0,reply)==DM_UNAUTHORIZED);
     auth[20]^=1; REQUIRE(DM_Renew(&directory,host,auth,2000,1,reply)==DM_UNAUTHORIZED); auth[20]^=1;
     REQUIRE(DM_Renew(&directory,host,auth,40000,0,reply)==DM_OK);

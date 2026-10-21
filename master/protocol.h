@@ -17,7 +17,14 @@
 #define DM_GAME_PROTOCOL 2
 enum { DM_LIST=1, DM_REGISTER, DM_HEARTBEAT, DM_REMOVE, DM_RELAY_HOST, DM_RELAY_JOIN };
 #define DM_RELAY_AVAILABLE 1u
-enum { DM_OK=0, DM_BAD_REQUEST, DM_UNAUTHORIZED, DM_CONFLICT, DM_CAPACITY };
+// Status values. DM_REDIRECT is an addition, not a change: a relay operation
+// sent to the control port of a master whose operator split the relay onto its
+// own port is answered with DM_REDIRECT and a 2-byte body carrying the port to
+// use, so the client learns the endpoint at attach time and needs no listing
+// field, no local setting and no row-format change. Clients from before this
+// feature treat the unknown status as a plain failure, which is honest.
+#define DM_REDIRECT_BODY 2
+enum { DM_OK=0, DM_BAD_REQUEST, DM_UNAUTHORIZED, DM_CONFLICT, DM_CAPACITY, DM_REDIRECT };
 
 static inline uint16_t DM_Get16(const unsigned char *p)
 { return (uint16_t)((uint16_t)p[0] << 8 | p[1]); }

@@ -53,19 +53,45 @@ static unsigned int master_attempt;
 static dm_client_query_t relay_query;
 static boolean relay_initialized,relay_pending,relay_requested;
 static uint32_t relay_retry;
+// Port learned from a DM_REDIRECT reply when the master serves relay on its own
+// port. 0 means "same port as the control endpoint", which is the default.
+static unsigned int relay_host_port;
+
+// The master answers a relay attach with DM_REDIRECT plus the port to use when
+// its operator split the relay off the control port. Following it is bounded:
+// a master that redirects twice is a misconfiguration, not something to loop on.
+static boolean RelayRedirectPort(const dm_client_query_t *query, unsigned int *port)
+{
+    if(query->status!=DM_REDIRECT)return false;
+    // Length is a 32-bit header field; reading its high half would always be 0.
+    if(DM_Get32(query->response+8)!=DM_REDIRECT_BODY)return false;
+    *port=(unsigned int)DM_Get16(query->response+DM_HEADER);
+    return *port!=0;
+}
 
 static void RelayHostPoll(void)
 {
     uint32_t now=DG_GetTicksMs();int result;
+    unsigned int port;
     if(!relay_requested||!master_has_lease)return;
     if(!relay_pending && (int32_t)(now-relay_retry)>=0)
     {
-        MC_Begin(&relay_query,master_ip,master_port,DM_RELAY_HOST,master_auth,DM_AUTH,now);
+        MC_Begin(&relay_query,master_ip,relay_host_port?relay_host_port:master_port,DM_RELAY_HOST,master_auth,DM_AUTH,now);
         relay_query.deadline=UINT64_MAX;relay_pending=true;
         puts("Relay: attaching outgoing host channel to master (no game-port forwarding needed for relay)");fflush(stdout);
     }
     if(!relay_pending)return;
     result=MC_Poll(&relay_query,now);
+    if(result>0 && RelayRedirectPort(&relay_query,&port))
+    {
+        if(!relay_host_port)
+        {
+            relay_host_port=port;
+            printf("Relay: master moved relay to port %u; reconnecting there\n",port);fflush(stdout);
+            MC_Close(&relay_query);relay_pending=false;relay_retry=now;
+            return;
+        }
+    }
     if(result<0|| (result>0&&relay_query.status))
     {
         char diagnostic[1024];MC_Diagnostic(&relay_query,diagnostic,sizeof(diagnostic));printf("Relay: host attach failed %s\n",diagnostic);fflush(stdout);
@@ -531,11 +557,24 @@ relay_fallback:
         printf("Relay: direct unavailable; connecting outgoing guest channel to %s (session id omitted)\n",relay_master);fflush(stdout);
         MC_Begin(&relay_query,relay_ip,relay_port,DM_RELAY_JOIN,relay_id,16,DG_GetTicksMs());
         start=DG_GetTicksMs();relay_query.deadline=(uint64_t)start+timeout_ms;
-        for(;;)
+        for(int redirects=0;;)
         {
             int result=MC_Poll(&relay_query,DG_GetTicksMs());
             if(result)
             {
+                unsigned int moved;
+                // Same redirect as the host path: the master may serve relay on
+                // its own port and tells us where. Followed at most once, so a
+                // master that keeps redirecting fails instead of looping.
+                if(result>0&&redirects<1&&RelayRedirectPort(&relay_query,&moved)&&moved!=relay_port)
+                {
+                    ++redirects;
+                    printf("Relay: master moved relay to port %u; reconnecting there\n",moved);fflush(stdout);
+                    MC_Close(&relay_query);relay_port=moved;
+                    MC_Begin(&relay_query,relay_ip,relay_port,DM_RELAY_JOIN,relay_id,16,DG_GetTicksMs());
+                    relay_query.deadline=(uint64_t)start+timeout_ms;
+                    continue;
+                }
                 if(result<0||relay_query.status){char diagnostic[1024];MC_Diagnostic(&relay_query,diagnostic,sizeof(diagnostic));I_Error("Relay join failed: %s",diagnostic);}
                 connection=(SOCKET)MC_TakeSocket(&relay_query);break;
             }

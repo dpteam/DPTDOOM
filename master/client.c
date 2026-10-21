@@ -37,7 +37,8 @@ const char *MC_StatusName(unsigned int status)
     switch(status) { case DM_OK:return "OK";case DM_BAD_REQUEST:return "BAD_REQUEST(metadata/protocol)";
     case DM_UNAUTHORIZED:return "UNAUTHORIZED(expired/wrong-token/source-IP)";
     case DM_CONFLICT:return "CONFLICT(endpoint-already-listed/id-collision)";
-    case DM_CAPACITY:return "CAPACITY(global-or-per-IP)";default:return "UNKNOWN"; }
+    case DM_CAPACITY:return "CAPACITY(global-or-per-IP)";
+    case DM_REDIRECT:return "REDIRECT(relay-is-on-a-separate-port)";default:return "UNKNOWN"; }
 }
 const char *MC_OperationName(unsigned int op)
 {
@@ -229,8 +230,17 @@ int MC_Poll(dm_client_query_t *q,uint64_t now)
         if(memcmp(h,"DPTM",4))return Fail(q,"reply-magic-not-DPTM(wrong-service/proxy)",0);
         if(DM_Get16(h+4)!=DM_VERSION)return Fail(q,"reply-directory-version",0);
         if(DM_Get16(h+6)!=q->op)return Fail(q,"reply-operation",0);
-        if(DM_Get16(h+14)||q->status>DM_CAPACITY)return Fail(q,"reply-reserved/status",0);
-        if(length>DM_MAX_BODY || (q->status&&length))return Fail(q,"reply-length",0);
+        if(DM_Get16(h+14)||q->status>DM_REDIRECT)return Fail(q,"reply-reserved/status",0);
+        if(length>DM_MAX_BODY)return Fail(q,"reply-length",0);
+        // A redirect is the one non-OK status that legitimately carries a body:
+        // the port to use instead. Every other rejection must be empty, so a
+        // peer cannot smuggle data alongside an error.
+        if(q->status==DM_REDIRECT)
+        {
+            if(length!=DM_REDIRECT_BODY)return Fail(q,"reply-redirect-length",0);
+            q->wanted=DM_HEADER+length;return 0;
+        }
+        if(q->status&&length)return Fail(q,"reply-length",0);
         if(q->status)return Finish(q,1);
         if(q->op==DM_RELAY_HOST||q->op==DM_RELAY_JOIN)
         {if(length)return Fail(q,"relay-reply-length",0);return Finish(q,1);}
