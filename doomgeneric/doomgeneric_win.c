@@ -16,6 +16,24 @@ static BITMAPINFO s_Bmi = { { sizeof(BITMAPINFOHEADER), DOOMGENERIC_RESX, -DOOMG
 static HWND s_Hwnd = 0;
 static HDC s_Hdc = 0;
 
+// Mouse state, mirroring the SDL backend so both behave the same way.
+//
+// The Win32 message loop has no relative-motion mode, so capture is implemented
+// by confining the cursor to the client area and re-centring it, then reporting
+// the offset from that centre. Accumulation happens in the message handler and
+// is drained by DG_GetMouse, which reports only motion or a button change - the
+// steady state of a held button must not be reported repeatedly or the engine's
+// drain loop would never end.
+static int s_MouseDx = 0;
+static int s_MouseDy = 0;
+static unsigned int s_MouseButtons = 0;
+static int s_MouseCaptured = 0;
+static int s_MouseDirty = 0;
+// Client-relative centre, for comparing against WM_MOUSEMOVE coordinates, and
+// the same point in screen space, which is what SetCursorPos expects.
+static POINT s_MouseCentre;
+static POINT s_MouseCentreScreen;
+
 
 #define KEYQUEUE_SIZE 16
 
@@ -112,6 +130,51 @@ static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 		break;
 	case WM_KEYUP:
 		addKeyToQueue(0, (unsigned char)wParam);
+		break;
+	case WM_MOUSEMOVE:
+		if (s_MouseCaptured)
+		{
+			int x = (short)LOWORD(lParam);
+			int y = (short)HIWORD(lParam);
+			int dx = x - s_MouseCentre.x;
+			int dy = y - s_MouseCentre.y;
+
+			if (dx || dy)
+			{
+				s_MouseDx += dx;
+				s_MouseDy += dy;
+				s_MouseDirty = 1;
+				SetCursorPos(s_MouseCentreScreen.x, s_MouseCentreScreen.y);
+			}
+		}
+		break;
+	case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+	case WM_RBUTTONDOWN: case WM_RBUTTONUP:
+	case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+	{
+		unsigned int bit;
+		unsigned int before = s_MouseButtons;
+
+		if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP) bit = 1u << 0;
+		else if (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP) bit = 1u << 1;
+		else bit = 1u << 2;
+
+		if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN)
+			s_MouseButtons |= bit;
+		else
+			s_MouseButtons &= ~bit;
+
+		if (s_MouseButtons != before)
+			s_MouseDirty = 1;
+		break;
+	}
+	case WM_KILLFOCUS:
+		// A button released while unfocused would otherwise stay stuck.
+		if (s_MouseButtons)
+		{
+			s_MouseButtons = 0;
+			s_MouseDirty = 1;
+		}
 		break;
 	default:
 		return DefWindowProcA(hwnd, msg, wParam, lParam);
@@ -241,17 +304,51 @@ int main(int argc, char **argv)
     return 0;
 }
 
-// This backend does not deliver mouse input yet. The stubs keep the engine's
-// mouse path well defined (no motion, no buttons) instead of a missing symbol.
+// Mouse input. Capture confines the cursor to the client area and parks it in
+// the centre, so the game sees relative motion without a visible pointer.
 int DG_GetMouse(int *dx, int *dy, unsigned int *buttons)
 {
-    (void)dx;
-    (void)dy;
-    (void)buttons;
-    return 0;
+    if (!s_MouseDirty)
+        return 0;
+    if (dx) *dx = s_MouseDx;
+    if (dy) *dy = s_MouseDy;
+    if (buttons) *buttons = s_MouseButtons;
+    s_MouseDx = s_MouseDy = 0;
+    s_MouseDirty = 0;
+    return 1;
 }
 
 void DG_SetMouseCapture(int capture)
 {
-    (void)capture;
+    RECT client;
+
+    capture = capture != 0;
+    if (capture == s_MouseCaptured)
+        return;
+    s_MouseCaptured = capture;
+
+    if (capture)
+    {
+        if (!GetClientRect(s_Hwnd, &client))
+            return;
+        // Client coordinates, not screen: WM_MOUSEMOVE reports client-relative
+        // positions, so the centre has to be in the same space.
+        s_MouseCentre.x = (client.right - client.left) / 2;
+        s_MouseCentre.y = (client.bottom - client.top) / 2;
+        s_MouseCentreScreen = s_MouseCentre;
+        ClientToScreen(s_Hwnd, &s_MouseCentreScreen);
+        SetCapture(s_Hwnd);
+        SetCursorPos(s_MouseCentreScreen.x, s_MouseCentreScreen.y);
+    }
+    else
+    {
+        ReleaseCapture();
+    }
+
+    // Drop motion accumulated while uncaptured so the view does not jump, and
+    // force a button re-sync so a button held across the transition cannot stay
+    // latched in the engine.
+    s_MouseDx = s_MouseDy = 0;
+    s_MouseButtons = 0;
+    s_MouseDirty = 1;
 }
