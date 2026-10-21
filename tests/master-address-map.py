@@ -240,6 +240,57 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
     state,text=run_with('allow-empty','allowlist=allow-empty.txt\naccess-mode=allowlist\n',
                         {'allow-empty.txt':'# empty\n'})
     assert state.startswith('exit '),(state,text)
+
+    # Temporary ban: expires while the master runs, without touching the file.
+    def check_expiring_ban():
+        import datetime
+        bans=root/'ban-temp.txt'
+        conf=root/'ban-temp.conf'
+        conf.write_text('banlist=%s\n'%bans)
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+        logpath=root/'ban-temp.log'
+
+        def ok():
+            try:
+                with socket.create_connection(('127.0.0.1',port),timeout=3) as s:
+                    s.sendall(wire.packet(1,b''))
+                    wire.reply(s,1)
+                    return True
+            except OSError:
+                return False
+
+        def utc(offset):
+            return (datetime.datetime.now(datetime.timezone.utc)
+                    + datetime.timedelta(seconds=offset)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Expires soon: banned now, allowed once the deadline passes.
+        bans.write_text('127.0.0.1 until %s\n' % utc(4))
+        with logpath.open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(port),'--config',str(conf),
+                                      '--log',str(root/'ban-temp-events.log')],
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'listening on' not in logpath.read_bytes():
+                    assert process.poll() is None, logpath.read_bytes()
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                assert not ok(), 'ban-temp: a rule with a future deadline must ban'
+                # Wait past the deadline; no file edit, no reload.
+                end=time.monotonic()+12
+                while time.monotonic()<end and not ok():
+                    time.sleep(.2)
+                assert ok(), 'ban-temp: ban did not expire on its own'
+            finally:
+                process.terminate();process.wait(10)
+
+        # A deadline in the past must never ban, and must not be a parse error.
+        bans.write_text('127.0.0.1 until 2020-01-01T00:00:00Z\n')
+        state,text=run_with('ban-past','banlist=ban-past.txt\n',{'ban-past.txt':'127.0.0.1 until 2020-01-01T00:00:00Z\n'})
+        assert state=='connected',(state,text)
+
+    check_expiring_ban()
     # bind= in the config persists the operator's choice; loopback stays the
     # default, and an explicit --bind must still win over the config.
     for expected,extra in (('0.0.0.0',[]),('127.0.0.1',['--bind','127.0.0.1'])):

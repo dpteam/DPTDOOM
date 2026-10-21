@@ -36,6 +36,7 @@ typedef int SOCKET;
 #include <stdlib.h>
 #include <limits.h>
 #include <signal.h>
+#include <time.h>
 
 #define DM_CLIENTS 32
 #define DM_IP_CLIENTS 8
@@ -95,6 +96,16 @@ static uint64_t Now(void)
     if(clock_gettime(CLOCK_MONOTONIC,&ts)) { perror("clock_gettime"); exit(1); }
     return (uint64_t)ts.tv_sec*1000+(uint64_t)ts.tv_nsec/1000000;
 #endif
+}
+
+// Wall-clock Unix seconds, used only for ban expiry. Deliberately separate from
+// Now(), which is monotonic milliseconds since boot and must not be compared
+// against file timestamps. A backwards clock step can extend a temporary ban,
+// which is the safe direction to fail.
+static uint64_t WallNow(void)
+{
+    time_t wall=time(NULL);
+    return wall>0 ? (uint64_t)wall : 0;
 }
 static int Nonblocking(SOCKET socket)
 {
@@ -280,7 +291,7 @@ static void Accept(SOCKET listener, uint64_t now)
         // Checked before anything else is done with the connection, and by
         // source address only: the advertised/listing address is peer-supplied
         // and must never be able to lift a ban.
-        if(DM_IsBanned(&directory,host)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=banned-source"); DM_Close(socket); continue; }
+        if(DM_IsBanned(&directory,host,WallNow())) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=banned-source"); DM_Close(socket); continue; }
         // Bans are checked first on purpose: denying must beat permitting, so a
         // source that is both banned and allowed stays banned.
         if(directory.allowlist_only && !DM_IsAllowed(&directory,host))
@@ -379,6 +390,7 @@ static const char *ConfigTemplate =
 "# Lines starting with # are comments; blank lines are ignored.\n"
 "# Matching is against the TCP source address, never the advertised address,\n"
 "# so a peer cannot escape a ban by advertising something else.\n"
+"# Optional expiry, UTC only: 203.0.113.7 until 2026-12-31T23:59:59Z\n"
 "# A malformed rule stops startup instead of loading a partial list.\n"
 "# banlist=banlist.txt\n"
 "\n"
@@ -425,6 +437,7 @@ static char allow_path[512];
 static long long ban_file_stamp;
 static long long allow_file_stamp;
 static uint64_t ban_next_check;
+static uint64_t ban_prune_next;
 
 static int FileStamp(const char *path, long long *stamp)
 {
@@ -556,6 +569,23 @@ static void ReloadRulesIfChanged(uint64_t now)
             // Same reasoning as the ban list, and it matters more here: a
             // truncated allow list would lock out everyone it no longer lists.
             ML_Message("Master: allow list reload failed; keeping the previous list");
+        }
+    }
+
+    // Temporary bans expire on their own. Pruning keeps the table from filling
+    // with dead rules, which would eventually reject new ones at the cap.
+    if(now>=ban_prune_next)
+    {
+        unsigned int removed;
+        ban_prune_next=now+60000;
+        removed=DM_PruneBans(&directory,WallNow());
+        if(removed)
+        {
+            char message[160];
+            snprintf(message,sizeof(message),
+                     "Master: %u expired ban rule(s) removed (%u still active)",
+                     removed,directory.ban_count);
+            ML_Message(message);
         }
     }
 }

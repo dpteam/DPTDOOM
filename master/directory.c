@@ -57,6 +57,56 @@ static int AddMap(dm_directory_t *d,const char *text,int dynamic)
 }
 int DM_AddAddressMap(dm_directory_t *d,const char *text){return AddMap(d,text,0);}
 int DM_AddHairpinSubnet(dm_directory_t *d,const char *text){return AddMap(d,text,1);}
+// Days since 1970-01-01 for a civil date. Straight from Howard Hinnant's
+// algorithm: exact for every year we accept, no libc time zone or locale
+// dependency, so the ban file means the same thing on every host.
+static int64_t DaysFromCivil(int year,unsigned int month,unsigned int day)
+{
+    int64_t y=(int64_t)year;
+    unsigned int m=month;
+    y-=m<=2;
+    {
+        int64_t era=(y>=0?y:y-399)/400;
+        unsigned int yoe=(unsigned int)(y-era*400);
+        unsigned int doy=(153*(m+(m>2?-3:9))+2)/5+day-1;
+        unsigned int doe=yoe*365+yoe/4-yoe/100+doy;
+        return era*146097+(int64_t)doe-719468;
+    }
+}
+static int Two(const char **p)
+{
+    if((*p)[0]<'0' || (*p)[0]>'9' || (*p)[1]<'0' || (*p)[1]>'9')return -1;
+    { int v=((*p)[0]-'0')*10+((*p)[1]-'0'); *p+=2; return v; }
+}
+// Parse "YYYY-MM-DDTHH:MM:SSZ" (UTC only, trailing Z required). Rejects
+// anything else rather than guessing a local time zone.
+static int ParseUtc(const char *text,uint64_t *out)
+{
+    const char *p=text;
+    int year,month,day,hour,minute,second;
+    int64_t days;
+
+    if(strlen(text)!=20)return 0;
+    // Four-digit year, then the two-digit fields.
+    if(p[0]<'0'||p[0]>'9'||p[1]<'0'||p[1]>'9'||p[2]<'0'||p[2]>'9'||p[3]<'0'||p[3]>'9')return 0;
+    year=(p[0]-'0')*1000+(p[1]-'0')*100+(p[2]-'0')*10+(p[3]-'0');
+    p+=4;
+    if(year<1970)return 0;   // before the epoch would overflow the sign
+    if(*p++!='-')return 0;
+    month=Two(&p); if(month<1||month>12)return 0; if(*p++!='-')return 0;
+    day=Two(&p); if(day<1||day>31)return 0;
+    if(*p!='T' && *p!=' ')return 0;
+    ++p;
+    hour=Two(&p); if(hour<0||hour>23)return 0; if(*p++!=':')return 0;
+    minute=Two(&p); if(minute<0||minute>59)return 0; if(*p++!=':')return 0;
+    second=Two(&p); if(second<0||second>60)return 0;
+    if(*p!='Z')return 0;
+
+    days=DaysFromCivil(year,(unsigned int)month,(unsigned int)day);
+    *out=(uint64_t)(days*86400+(int64_t)hour*3600+(int64_t)minute*60+second);
+    return 1;
+}
+
 int DM_ParseRule(dm_ban_t *rules,unsigned int *count,const char *text)
 {
     dm_ban_t rule;
@@ -78,14 +128,21 @@ int DM_ParseRule(dm_ban_t *rules,unsigned int *count,const char *text)
         // avoids the trap of a "single IP" rule silently covering a range.
         rule.prefix=32;
     }
-    if(*p)return 0;
+    // Optional " until <ISO-8601 UTC>" for a temporary rule.
+    if(*p)
+    {
+        if(*p++!=' ' || strncmp(p,"until ",6))return 0;
+        p+=6;
+        if(!ParseUtc(p,&rule.expires))return 0;
+    }
     mask=PrefixMask(rule.prefix);network=DM_Get32(rule.network);
     // Reject non-canonical CIDR rather than widening it: 10.0.0.5/24 would
     // otherwise quietly cover 10.0.0.0/24, which is a much larger blast radius
     // than the operator wrote.
     if((network&mask)!=network)return 0;
     for(i=0;i<*count;++i)
-        if(rules[i].prefix==rule.prefix && !memcmp(rules[i].network,rule.network,4))return 0;
+        if(rules[i].prefix==rule.prefix && !memcmp(rules[i].network,rule.network,4)
+           && rules[i].expires==rule.expires)return 0;
     rules[(*count)++]=rule;return 1;
 }
 static int Matches(const dm_ban_t *rules,unsigned int count,const unsigned char source[4])
@@ -97,8 +154,30 @@ static int Matches(const dm_ban_t *rules,unsigned int count,const unsigned char 
 }
 int DM_AddBan(dm_directory_t *d,const char *text){return DM_ParseRule(d->bans,&d->ban_count,text);}
 void DM_ClearBans(dm_directory_t *d){d->ban_count=0;}
-int DM_IsBanned(const dm_directory_t *d,const unsigned char source[4])
-{ return Matches(d->bans,d->ban_count,source); }
+int DM_IsBanned(const dm_directory_t *d,const unsigned char source[4],uint64_t now)
+{
+    unsigned int i;
+    for(i=0;i<d->ban_count;++i)
+    {
+        const dm_ban_t *rule=&d->bans[i];
+        // An expired temporary ban is ignored even before pruning runs, so a
+        // stale rule can never keep blocking after its time.
+        if(rule->expires && now>=rule->expires)continue;
+        if((DM_Get32(source)&PrefixMask(rule->prefix))==DM_Get32(rule->network))return 1;
+    }
+    return 0;
+}
+unsigned int DM_PruneBans(dm_directory_t *d,uint64_t now)
+{
+    unsigned int i,kept=0,removed=0;
+    for(i=0;i<d->ban_count;++i)
+    {
+        if(d->bans[i].expires && now>=d->bans[i].expires) { ++removed; continue; }
+        d->bans[kept++]=d->bans[i];
+    }
+    d->ban_count=kept;
+    return removed;
+}
 int DM_AddAllowed(dm_directory_t *d,const char *text){return DM_ParseRule(d->allowed,&d->allowed_count,text);}
 void DM_ClearAllowed(dm_directory_t *d){d->allowed_count=0;}
 int DM_IsAllowed(const dm_directory_t *d,const unsigned char source[4])

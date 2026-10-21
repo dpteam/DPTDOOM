@@ -68,16 +68,16 @@ int main(void)
         unsigned char subnet_other[4]={192,168,11,42};
 
         memset(&bans,0,sizeof(bans));
-        REQUIRE(!DM_IsBanned(&bans,blocked));           // empty list bans nothing
+        REQUIRE(!DM_IsBanned(&bans,blocked,0));           // empty list bans nothing
 
         REQUIRE(DM_AddBan(&bans,"203.0.113.7"));        // bare address is /32
-        REQUIRE(DM_IsBanned(&bans,blocked));
-        REQUIRE(!DM_IsBanned(&bans,allowed));
-        REQUIRE(!DM_IsBanned(&bans,subnet));            // no accidental widening
+        REQUIRE(DM_IsBanned(&bans,blocked,0));
+        REQUIRE(!DM_IsBanned(&bans,allowed,0));
+        REQUIRE(!DM_IsBanned(&bans,subnet,0));            // no accidental widening
 
         REQUIRE(DM_AddBan(&bans,"192.168.10.0/24"));
-        REQUIRE(DM_IsBanned(&bans,subnet));
-        REQUIRE(!DM_IsBanned(&bans,subnet_other));
+        REQUIRE(DM_IsBanned(&bans,subnet,0));
+        REQUIRE(!DM_IsBanned(&bans,subnet_other,0));
 
         // Rejections must be errors, not silent acceptance.
         REQUIRE(!DM_AddBan(&bans,"203.0.113.7"));       // exact duplicate
@@ -108,7 +108,7 @@ int main(void)
         // Clearing is how a reload removes a rule that was deleted from the file.
         DM_ClearBans(&bans);
         REQUIRE(bans.ban_count==0);
-        REQUIRE(!DM_IsBanned(&bans,blocked));
+        REQUIRE(!DM_IsBanned(&bans,blocked,0));
 
         // Allow list: same grammar and matching, but a separate set, and it is
         // only consulted by the caller when allowlist_only is set.
@@ -121,12 +121,58 @@ int main(void)
         REQUIRE(!DM_AddAllowed(&bans,"192.168.10.5/24")); // non-canonical
         REQUIRE(bans.allowed_count==1);
         // The two lists are independent: allowing does not ban, banning does not allow.
-        REQUIRE(!DM_IsBanned(&bans,blocked));
+        REQUIRE(!DM_IsBanned(&bans,blocked,0));
         REQUIRE(DM_AddBan(&bans,"203.0.113.7"));
-        REQUIRE(DM_IsBanned(&bans,blocked) && DM_IsAllowed(&bans,blocked));
+        REQUIRE(DM_IsBanned(&bans,blocked,0) && DM_IsAllowed(&bans,blocked));
         DM_ClearAllowed(&bans);
         REQUIRE(!DM_IsAllowed(&bans,blocked));
-        REQUIRE(DM_IsBanned(&bans,blocked));        // clearing one list leaves the other
+        REQUIRE(DM_IsBanned(&bans,blocked,0));        // clearing one list leaves the other
+    }
+
+    // Temporary bans: "until <ISO-8601 UTC>" stops applying at that instant
+    // without needing the file to be touched again.
+    {
+        dm_directory_t temp;
+        unsigned char blocked[4]={203,0,113,7};
+        uint64_t deadline=0;
+
+        memset(&temp,0,sizeof(temp));
+        REQUIRE(DM_AddBan(&temp,"203.0.113.7 until 2030-01-01T00:00:00Z"));
+        REQUIRE(temp.bans[0].expires!=0);
+        // Before the deadline the ban applies.
+        REQUIRE(DM_IsBanned(&temp,blocked,temp.bans[0].expires-1));
+        // At and after the deadline it does not, even before pruning runs.
+        REQUIRE(!DM_IsBanned(&temp,blocked,temp.bans[0].expires));
+        REQUIRE(!DM_IsBanned(&temp,blocked,temp.bans[0].expires+1));
+
+        // Pruning removes it, so the table cannot fill up with dead rules.
+        REQUIRE(DM_PruneBans(&temp,temp.bans[0].expires-1)==0);
+        REQUIRE(temp.ban_count==1);
+        REQUIRE(DM_PruneBans(&temp,temp.bans[0].expires)==1);
+        REQUIRE(temp.ban_count==0);
+
+        // A permanent rule has no expiry and is never pruned.
+        memset(&temp,0,sizeof(temp));
+        REQUIRE(DM_AddBan(&temp,"203.0.113.7"));
+        REQUIRE(temp.bans[0].expires==0);
+        REQUIRE(DM_IsBanned(&temp,blocked,0xffffffffu));
+        REQUIRE(DM_PruneBans(&temp,0xffffffffu)==0);
+
+        // Malformed expiry must be rejected, not silently treated as permanent.
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 until 2030-01-01"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 until 2030-01-01T00:00:00"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 until 2030-13-01T00:00:00Z"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 until 2030-01-32T00:00:00Z"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 until 2030-01-01T25:00:00Z"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 until 2030-01-01T00:00:00+02:00"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 until"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 untily 2030-01-01T00:00:00Z"));
+        REQUIRE(!DM_AddBan(&temp,"203.0.113.8 2030-01-01T00:00:00Z"));
+        // The same address with a different deadline is a different rule.
+        REQUIRE(DM_AddBan(&temp,"203.0.113.8 until 2030-01-01T00:00:00Z"));
+        REQUIRE(DM_AddBan(&temp,"203.0.113.8 until 2031-01-01T00:00:00Z"));
+        REQUIRE(temp.ban_count==3);
+        (void)deadline;
     }
 
     puts("Master model: schema, bounds, lease/expiry, source/token auth, capacity, header validation and ban rules OK");

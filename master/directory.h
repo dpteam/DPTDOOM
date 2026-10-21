@@ -30,6 +30,10 @@ typedef struct
 {
     unsigned char network[4];
     unsigned int prefix;
+    // Expiry as Unix seconds; 0 means permanent. Checked at match time and
+    // pruned on reload/periodically, so an expired rule stops applying even if
+    // the file is never touched again.
+    uint64_t expires;
 } dm_ban_t;
 typedef struct
 {
@@ -60,8 +64,12 @@ int DM_AddBan(dm_directory_t *directory, const char *text);
 // Clears every rule, used when reloading the file so a removed line really
 // removes the ban.
 void DM_ClearBans(dm_directory_t *directory);
-// True when the TCP source address matches any ban rule.
-int DM_IsBanned(const dm_directory_t *directory, const unsigned char source[4]);
+// True when the TCP source address matches a ban rule that has not expired.
+// `now` is Unix seconds; 0 means "no expiry has passed yet", which keeps the
+// permanent-only callers and tests unchanged.
+int DM_IsBanned(const dm_directory_t *directory, const unsigned char source[4], uint64_t now);
+// Drops expired ban rules. Returns how many were removed.
+unsigned int DM_PruneBans(dm_directory_t *directory, uint64_t now);
 
 // Allow list: same grammar and the same TCP-source-only matching. When
 // allowlist_only is set, a source that is not listed is refused; bans still win
