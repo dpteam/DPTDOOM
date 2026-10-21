@@ -144,8 +144,9 @@ ctest --preset windows-headless
   конфиг. При старте на loopback печатается предупреждение с подсказкой, а
   некорректный адрес — ошибка запуска, не тихий откат на loopback.
   `banlist=` — бан по **TCP source** (не по advertised адресу), IPv4 или CIDR,
-  лимит 64 правила, некорректное правило останавливает запуск; перечитывания
-  на лету нет. См. `docs/MASTER.md`.
+  лимит 64 правила, некорректное правило останавливает запуск; файл
+  перечитывается раз в секунду при изменении (mtime+размер), при ошибке разбора
+  прежний список сохраняется. См. `docs/MASTER.md`.
 - Hairpin/SNAT: optional master --config с address-map=private-CIDR=public-IPv4,
   до 8 canonical nonoverlapping RFC1918/loopback ranges. По умолчанию OFF;
   actual source сохраняется для auth/limits, list IP отдельно, game port прежний.

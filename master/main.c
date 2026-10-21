@@ -7,12 +7,14 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <bcrypt.h>
+#include <sys/stat.h>
 #define DM_Close closesocket
 #else
 #define _POSIX_C_SOURCE 200809L
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -291,6 +293,8 @@ static void Accept(SOCKET listener, uint64_t now)
         ClientEvent(&clients[i],ML_CONNECT,"TCP-accepted-awaiting-DPTM",0,0,now);
     }
 }
+static void ReloadBansIfChanged(uint64_t now);
+
 static int Run(SOCKET listener)
 {
     while(!stopping)
@@ -301,6 +305,7 @@ static int Run(SOCKET listener)
         unsigned int i;
         uint64_t now=Now();
         PA_Tick(&public_address,&directory,now);
+        ReloadBansIfChanged(now);
         Prune(now); ML_Flush(now,0);
         FD_ZERO(&reads); FD_ZERO(&writes); FD_SET(listener,&reads);
         for(i=0;i<DM_CLIENTS;++i)
@@ -402,6 +407,23 @@ static int WriteConfigTemplate(const char *path)
 // enforcing half a list (which could ban the wrong people).
 static char ban_path[512];
 
+// Change detection for the runtime reload. mtime alone is enough: the file is
+// tiny and rewritten wholesale, and a reload is cheap.
+static long long ban_file_stamp;
+static uint64_t ban_next_check;
+
+static int BanFileStamp(long long *stamp)
+{
+    struct stat info;
+    if(!ban_path[0]) return 0;
+    if(stat(ban_path,&info)!=0) { *stamp=0; return 1; } // missing is a valid state
+    // mtime alone has one-second resolution, so a quick edit-save could look
+    // unchanged. Mixing in the size makes that far less likely for a file that
+    // is rewritten wholesale.
+    *stamp=(long long)info.st_mtime*1000000LL+(long long)info.st_size;
+    return 1;
+}
+
 static int LoadBans(const char *path, int announce)
 {
     FILE *file=fopen(path,"rb");
@@ -443,6 +465,9 @@ static int LoadBans(const char *path, int announce)
 
     memcpy(directory.bans,scratch.bans,sizeof(scratch.bans));
     directory.ban_count=scratch.ban_count;
+    // Record the stamp only after a successful commit, so a failed reload is
+    // retried on the next check instead of being silently considered applied.
+    BanFileStamp(&ban_file_stamp);
     if(announce)
     {
         char message[160];
@@ -450,6 +475,32 @@ static int LoadBans(const char *path, int announce)
         ML_Message(message);
     }
     return 1;
+}
+
+// Called from the main loop. Cheap enough to poll once a second.
+static void ReloadBansIfChanged(uint64_t now)
+{
+    long long stamp;
+
+    if(!ban_path[0] || now<ban_next_check) return;
+    ban_next_check=now+1000;
+    if(!BanFileStamp(&stamp) || stamp==ban_file_stamp) return;
+
+    if(LoadBans(ban_path,0))
+    {
+        char message[192];
+        snprintf(message,sizeof(message),
+                 "Master: ban list changed on disk, reloaded (%u rule(s) active)",
+                 directory.ban_count);
+        ML_Message(message);
+    }
+    else
+    {
+        // The previous list stays in force. Reloading into a scratch copy is
+        // what makes this safe: a half-written file cannot weaken or widen the
+        // current bans.
+        ML_Message("Master: ban list reload failed; keeping the previous list");
+    }
 }
 
 static int LoadConfig(const char *path, const char **host, int host_from_cli)

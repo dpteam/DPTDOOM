@@ -117,6 +117,70 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
                           cwd=root,capture_output=True,text=True,timeout=10)
     assert result.returncode!=0,result
     assert 'invalid ban rule' in result.stderr,result
+
+    # Runtime reload: editing the file takes effect without a restart, and a
+    # malformed edit keeps the previous list instead of weakening it.
+    def check_live_reload():
+        bans=root/'ban-live.txt'
+        bans.write_text('# empty\n')
+        conf=root/'ban-live.conf'
+        conf.write_text('banlist=%s\n'%bans)
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+        logpath=root/'ban-live.log'
+
+        def live_ok():
+            try:
+                with socket.create_connection(('127.0.0.1',port),timeout=3) as s:
+                    s.sendall(wire.packet(1,b''))
+                    wire.reply(s,1)
+                    return True
+            except OSError:
+                return False
+
+        def wait_until(predicate, timeout=5.0):
+            # Poll instead of sleeping a fixed interval: the master checks the
+            # file once a second, so this returns as soon as the change lands
+            # rather than always paying the worst case.
+            deadline=time.monotonic()+timeout
+            while time.monotonic()<deadline:
+                if predicate():
+                    return True
+                time.sleep(.1)
+            return predicate()
+
+        with logpath.open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(port),'--config',str(conf),
+                                      '--log',str(root/'ban-live-events.log')],
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'listening on' not in logpath.read_bytes():
+                    assert process.poll() is None, logpath.read_bytes()
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                assert live_ok(), 'ban-live: should connect before any ban'
+
+                bans.write_text('127.0.0.1\n')
+                assert wait_until(lambda: not live_ok()), \
+                    'ban-live: ban added on disk was not applied'
+
+                bans.write_text('# cleared\n')
+                assert wait_until(live_ok), \
+                    'ban-live: removed ban was not lifted'
+
+                # Re-ban, then break the file: the previous list must stay.
+                bans.write_text('127.0.0.1\n')
+                assert wait_until(lambda: not live_ok()), \
+                    'ban-live: re-ban not applied'
+                bans.write_text('127.0.0.1\nnot-an-ip\n')
+                assert wait_until(lambda: b'keeping the previous list' in logpath.read_bytes()), \
+                    'ban-live: malformed reload was not reported'
+                assert not live_ok(), 'ban-live: bad edit must keep the previous list'
+            finally:
+                process.terminate();process.wait(10)
+
+    check_live_reload()
     # bind= in the config persists the operator's choice; loopback stays the
     # default, and an explicit --bind must still win over the config.
     for expected,extra in (('0.0.0.0',[]),('127.0.0.1',['--bind','127.0.0.1'])):
