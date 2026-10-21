@@ -57,6 +57,60 @@ int main(void)
         REQUIRE(DM_RequestLength(copy)<0);
     }
     for(j=0;j<65536;++j) { DM_Header(header,j,0xffffffffu,0); REQUIRE(DM_RequestLength(header)<0); }
-    puts("Master model: schema, bounds, lease/expiry, source/token auth, capacity and header validation OK");
+
+    // Ban rules. Matching is by TCP source only; a peer-supplied advertised
+    // address must never be able to lift a ban.
+    {
+        dm_directory_t bans;
+        unsigned char blocked[4]={203,0,113,7};
+        unsigned char allowed[4]={198,51,100,7};
+        unsigned char subnet[4]={192,168,10,42};
+        unsigned char subnet_other[4]={192,168,11,42};
+
+        memset(&bans,0,sizeof(bans));
+        REQUIRE(!DM_IsBanned(&bans,blocked));           // empty list bans nothing
+
+        REQUIRE(DM_AddBan(&bans,"203.0.113.7"));        // bare address is /32
+        REQUIRE(DM_IsBanned(&bans,blocked));
+        REQUIRE(!DM_IsBanned(&bans,allowed));
+        REQUIRE(!DM_IsBanned(&bans,subnet));            // no accidental widening
+
+        REQUIRE(DM_AddBan(&bans,"192.168.10.0/24"));
+        REQUIRE(DM_IsBanned(&bans,subnet));
+        REQUIRE(!DM_IsBanned(&bans,subnet_other));
+
+        // Rejections must be errors, not silent acceptance.
+        REQUIRE(!DM_AddBan(&bans,"203.0.113.7"));       // exact duplicate
+        REQUIRE(!DM_AddBan(&bans,"192.168.10.5/24"));   // non-canonical CIDR
+        REQUIRE(!DM_AddBan(&bans,"203.0.113.0/33"));    // prefix out of range
+        REQUIRE(!DM_AddBan(&bans,"203.0.113"));         // malformed
+        REQUIRE(!DM_AddBan(&bans,"203.0.113.0/"));      // missing prefix
+        REQUIRE(!DM_AddBan(&bans,""));                  // empty
+        REQUIRE(!DM_AddBan(&bans,"::1"));               // not IPv4
+        REQUIRE(!DM_AddBan(&bans,"203.0.113.7 extra")); // trailing junk
+        REQUIRE(bans.ban_count==2);
+
+        // A full table is a hard limit, not an unbounded allocation.
+        {
+            dm_directory_t full;
+            char rule[32];
+            unsigned int k;
+            memset(&full,0,sizeof(full));
+            for(k=0;k<DM_MAX_BANS;++k)
+            {
+                snprintf(rule,sizeof(rule),"10.0.%u.0/24",k);
+                REQUIRE(DM_AddBan(&full,rule));
+            }
+            snprintf(rule,sizeof(rule),"10.1.0.0/24");
+            REQUIRE(!DM_AddBan(&full,rule));
+        }
+
+        // Clearing is how a reload removes a rule that was deleted from the file.
+        DM_ClearBans(&bans);
+        REQUIRE(bans.ban_count==0);
+        REQUIRE(!DM_IsBanned(&bans,blocked));
+    }
+
+    puts("Master model: schema, bounds, lease/expiry, source/token auth, capacity, header validation and ban rules OK");
     return 0;
 }

@@ -275,6 +275,10 @@ static void Accept(SOCKET listener, uint64_t now)
         if(socket>=FD_SETSIZE) { DM_Close(socket); continue; }
 #endif
         if(!Rate(host,now)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=connection-rate-limit"); DM_Close(socket); continue; }
+        // Checked before anything else is done with the connection, and by
+        // source address only: the advertised/listing address is peer-supplied
+        // and must never be able to lift a ban.
+        if(DM_IsBanned(&directory,host)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=banned-source"); DM_Close(socket); continue; }
         if(!Nonblocking(socket)) { ML_Event(ML_IO,host,0,now); DM_Close(socket); continue; }
         for(i=0;i<DM_CLIENTS;++i)
             if(clients[i].socket!=INVALID_SOCKET && !memcmp(clients[i].host,host,4))++ip_clients;
@@ -362,6 +366,13 @@ static const char *ConfigTemplate =
 "# Up to 8 non-overlapping ranges. No game-port rewriting, no NAT traversal.\n"
 "# address-map=192.168.50.0/24=203.0.113.10\n"
 "\n"
+"# Ban list file. One rule per line: an IPv4 address, or IPv4/prefix (CIDR).\n"
+"# Lines starting with # are comments; blank lines are ignored.\n"
+"# Matching is against the TCP source address, never the advertised address,\n"
+"# so a peer cannot escape a ban by advertising something else.\n"
+"# A malformed rule stops startup instead of loading a partial list.\n"
+"# banlist=banlist.txt\n"
+"\n"
 "# How the master learns its own public address: off | manual | dns | api.\n"
 "#   off     - advertise the observed source address (default)\n"
 "#   manual  - use public-ip\n"
@@ -384,6 +395,61 @@ static int WriteConfigTemplate(const char *path)
     if(!file)return 0;
     if(fputs(ConfigTemplate,file)==EOF){fclose(file);return 0;}
     return fclose(file)==0;
+}
+
+// Ban list, reloaded from disk. Parsed into a scratch directory first and only
+// committed when the whole file is valid, so a typo cannot leave the server
+// enforcing half a list (which could ban the wrong people).
+static char ban_path[512];
+
+static int LoadBans(const char *path, int announce)
+{
+    FILE *file=fopen(path,"rb");
+    char line[256];unsigned int number=0,accepted=0;
+    dm_directory_t scratch;
+
+    if(!file)
+    {
+        // No ban file is a normal state: nothing is banned.
+        if(announce) ML_Message("Master: no ban list found; nothing is banned");
+        return 1;
+    }
+
+    memcpy(&scratch,&directory,sizeof(scratch));
+    DM_ClearBans(&scratch);
+
+    while(fgets(line,sizeof(line),file))
+    {
+        char *start=line,*end;size_t length=strlen(line);++number;
+        if(length==sizeof(line)-1 && line[length-1]!='\n')
+        {
+            fprintf(stderr,"Master: ban list line %u is too long\n",number);
+            fclose(file);return 0;
+        }
+        while(*start==' '||*start=='\t')++start;
+        end=start+strlen(start);while(end>start && isspace((unsigned char)end[-1]))*--end=0;
+        if(!*start || *start=='#')continue;
+        if(!DM_AddBan(&scratch,start))
+        {
+            // Fail the whole reload instead of applying the valid prefix: a
+            // partially loaded ban list is worse than the previous one.
+            fprintf(stderr,"Master: invalid ban rule on line %u: %s\n",number,start);
+            fclose(file);return 0;
+        }
+        ++accepted;
+    }
+    if(ferror(file)){fclose(file);fprintf(stderr,"Master: ban list read failed\n");return 0;}
+    fclose(file);
+
+    memcpy(directory.bans,scratch.bans,sizeof(scratch.bans));
+    directory.ban_count=scratch.ban_count;
+    if(announce)
+    {
+        char message[160];
+        snprintf(message,sizeof(message),"Master: %u ban rule(s) loaded from %s",accepted,path);
+        ML_Message(message);
+    }
+    return 1;
 }
 
 static int LoadConfig(const char *path, const char **host, int host_from_cli)
@@ -413,6 +479,14 @@ static int LoadConfig(const char *path, const char **host, int host_from_cli)
         if(!*start || *start=='#')continue;
         if(!strncmp(start,"address-map=",12))
         {if(!DM_AddAddressMap(&directory,start+12))goto invalid;}
+        else if(!strncmp(start,"banlist=",8))
+        {
+            // Relative to the config file's directory is friendlier, but the
+            // master has no path helper here; keep it literal and document that
+            // it is relative to the working directory or absolute.
+            if(strlen(start+8)>=sizeof(ban_path))goto invalid;
+            strcpy(ban_path,start+8);
+        }
         else if(!strncmp(start,"bind=",5))
         {
             // Loopback is the safe default, so making the master reachable has
@@ -431,7 +505,7 @@ static int LoadConfig(const char *path, const char **host, int host_from_cli)
     if(ferror(file)){fclose(file);fputs("Master: config read failed\n",stderr);return 0;}
     fclose(file);return 1;
 invalid:
-    fprintf(stderr,"Master: invalid config line %u (bind/address-map/public-address-mode/public-host/public-ip/public-api/hairpin-subnet/public-refresh-seconds; see docs/MASTER.md)\n",number);
+    fprintf(stderr,"Master: invalid config line %u (bind/banlist/address-map/public-address-mode/public-host/public-ip/public-api/hairpin-subnet/public-refresh-seconds; see docs/MASTER.md)\n",number);
     fclose(file);return 0;
 }
 #ifdef _WIN32
@@ -475,6 +549,7 @@ int main(int argc, char **argv)
         else goto usage;
     }
     if(config_path && !LoadConfig(config_path,&host,host_from_cli))return 2;
+    if(ban_path[0] && !LoadBans(ban_path,1))return 2;
     if(!config_path)
         ML_Message("Master: no --config given; pass --config dptdoom-master.conf to get a commented template you can edit (it is created if missing)");
     if(!PA_Prepare(&public_address,&directory)){fputs("Master: invalid public address mode/config combination or subnet overlap\n",stderr);return 2;}

@@ -143,6 +143,9 @@ ctest --preset windows-headless
   LAN/Internet нужен `--bind 0.0.0.0` либо `bind=` в `--config`; CLI перекрывает
   конфиг. При старте на loopback печатается предупреждение с подсказкой, а
   некорректный адрес — ошибка запуска, не тихий откат на loopback.
+  `banlist=` — бан по **TCP source** (не по advertised адресу), IPv4 или CIDR,
+  лимит 64 правила, некорректное правило останавливает запуск; перечитывания
+  на лету нет. См. `docs/MASTER.md`.
 - Hairpin/SNAT: optional master --config с address-map=private-CIDR=public-IPv4,
   до 8 canonical nonoverlapping RFC1918/loopback ranges. По умолчанию OFF;
   actual source сохраняется для auth/limits, list IP отдельно, game port прежний.

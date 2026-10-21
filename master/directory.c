@@ -57,6 +57,45 @@ static int AddMap(dm_directory_t *d,const char *text,int dynamic)
 }
 int DM_AddAddressMap(dm_directory_t *d,const char *text){return AddMap(d,text,0);}
 int DM_AddHairpinSubnet(dm_directory_t *d,const char *text){return AddMap(d,text,1);}
+int DM_AddBan(dm_directory_t *d,const char *text)
+{
+    dm_ban_t rule;
+    const char *p=text;
+    uint32_t network,mask;
+    unsigned int i,digits=0;
+    memset(&rule,0,sizeof(rule));
+    if(d->ban_count>=DM_MAX_BANS || !IPv4(&p,rule.network))return 0;
+    if(*p=='/')
+    {
+        ++p;
+        while(*p>='0' && *p<='9')
+        {rule.prefix=rule.prefix*10+(unsigned int)(*p++-'0');if(++digits>2 || rule.prefix>32)return 0;}
+        if(!digits)return 0;
+    }
+    else
+    {
+        // A bare address means exactly that host. Being explicit about /32
+        // avoids the trap of a "single IP" ban silently covering a range.
+        rule.prefix=32;
+    }
+    if(*p)return 0;
+    mask=PrefixMask(rule.prefix);network=DM_Get32(rule.network);
+    // Reject non-canonical CIDR rather than widening it: 10.0.0.5/24 would
+    // otherwise quietly ban 10.0.0.0/24, which is a much larger blast radius
+    // than the operator wrote.
+    if((network&mask)!=network)return 0;
+    for(i=0;i<d->ban_count;++i)
+        if(d->bans[i].prefix==rule.prefix && !memcmp(d->bans[i].network,rule.network,4))return 0;
+    d->bans[d->ban_count++]=rule;return 1;
+}
+void DM_ClearBans(dm_directory_t *d){d->ban_count=0;}
+int DM_IsBanned(const dm_directory_t *d,const unsigned char source[4])
+{
+    unsigned int i;
+    for(i=0;i<d->ban_count;++i)
+        if((DM_Get32(source)&PrefixMask(d->bans[i].prefix))==DM_Get32(d->bans[i].network))return 1;
+    return 0;
+}
 int DM_MappingReady(const dm_directory_t *d,const unsigned char source[4])
 {
     unsigned int i;

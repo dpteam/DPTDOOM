@@ -61,6 +61,62 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
     missing=root/'nosuchdir'/'x.conf'
     result=subprocess.run([exe,'--config',str(missing)],cwd=root,capture_output=True,timeout=10)
     assert result.returncode!=0,result
+
+    # Ban list: loaded from disk, applied to the TCP source address, and a
+    # malformed rule fails startup instead of loading a partial list.
+    def with_bans(name, body):
+        bans=root/(name+'.txt')
+        if body is not None:
+            bans.write_text(body)
+        conf=root/(name+'.conf')
+        conf.write_text('banlist=%s\n'%bans)
+        return conf
+
+    def try_connect(conf, name):
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+        logpath=root/(name+'.log')
+        with logpath.open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(port),'--config',str(conf),
+                                      '--log',str(root/(name+'-events.log'))],
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'listening on' not in logpath.read_bytes():
+                    assert process.poll() is None, logpath.read_bytes()
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                rejected=False
+                try:
+                    with socket.create_connection(('127.0.0.1',port),timeout=3) as s:
+                        s.sendall(wire.packet(1,b''))
+                        wire.reply(s,1)
+                except OSError:
+                    rejected=True
+                return rejected, logpath.read_bytes()
+            finally:
+                process.terminate();process.wait(10)
+
+    # No ban file: nothing banned.
+    rejected,text=try_connect(with_bans('ban-none',None),'ban-none')
+    assert not rejected,text
+    # Comment-only file: nothing banned.
+    rejected,text=try_connect(with_bans('ban-empty','# nothing\n\n'),'ban-empty')
+    assert not rejected,text
+    # A rule that does not match the client must not block it.
+    rejected,text=try_connect(with_bans('ban-other','198.51.100.1\n'),'ban-other')
+    assert not rejected,text
+    # Banning loopback blocks a loopback client, and the reason is logged.
+    rejected,text=try_connect(with_bans('ban-self','# block local\n127.0.0.1\n'),'ban-self')
+    assert rejected,text
+    assert b'banned-source' in text,text
+
+    # Malformed rule: whole reload fails, no partial list is applied.
+    bad=with_bans('ban-bad','127.0.0.1\nnot-an-ip\n')
+    result=subprocess.run([exe,'--port','25177','--config',str(bad)],
+                          cwd=root,capture_output=True,text=True,timeout=10)
+    assert result.returncode!=0,result
+    assert 'invalid ban rule' in result.stderr,result
     # bind= in the config persists the operator's choice; loopback stays the
     # default, and an explicit --bind must still win over the config.
     for expected,extra in (('0.0.0.0',[]),('127.0.0.1',['--bind','127.0.0.1'])):

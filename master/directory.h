@@ -18,17 +18,41 @@ typedef struct
     unsigned int prefix;
     int dynamic, enabled;
 } dm_address_map_t;
+
+// Ban rules, matched against the TCP source address only.
+//
+// Deliberately NOT matched against the advertised/listing address: a peer
+// supplies that, so banning by it would let anyone escape a ban by advertising
+// a different IP, and would also punish an innocent third party whose address
+// was advertised. Source is what the kernel tells us and what auth/limits use.
+#define DM_MAX_BANS 64
+typedef struct
+{
+    unsigned char network[4];
+    unsigned int prefix;
+} dm_ban_t;
 typedef struct
 {
     dm_entry_t entries[DM_MAX_SERVERS];
     unsigned int lease_seconds;
     dm_address_map_t address_maps[DM_MAX_ADDRESS_MAPS];
     unsigned int address_map_count;
+    dm_ban_t bans[DM_MAX_BANS];
+    unsigned int ban_count;
 } dm_directory_t;
 // Explicit operator policy, never metadata supplied by a registering peer.
 // Syntax: private-or-loopback-IPv4/canonical-prefix=public-IPv4.
 int DM_AddAddressMap(dm_directory_t *directory, const char *text);
 int DM_AddHairpinSubnet(dm_directory_t *directory, const char *cidr);
+// Ban rule syntax: IPv4 or canonical IPv4/prefix. A host address means /32.
+// Returns 0 on malformed input, overflow or an exact duplicate; callers treat
+// that as a config error rather than silently ignoring half a ban list.
+int DM_AddBan(dm_directory_t *directory, const char *text);
+// Clears every rule, used when reloading the file so a removed line really
+// removes the ban.
+void DM_ClearBans(dm_directory_t *directory);
+// True when the TCP source address matches any ban rule.
+int DM_IsBanned(const dm_directory_t *directory, const unsigned char source[4]);
 void DM_AdvertisedAddress(const dm_directory_t *directory, const unsigned char source[4], unsigned char output[4]);
 int DM_PublicIPv4(const unsigned char ip[4]);
 int DM_MappingReady(const dm_directory_t *directory, const unsigned char source[4]);
