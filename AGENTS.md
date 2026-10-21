@@ -180,8 +180,9 @@ ctest --preset windows-headless
   фокуса). Управление по умолчанию — WASD + мышь, стрелки тоже поворачивают;
   старый конфиг мигрируется один раз (`dpt_input_version`), не трогая
   изменённые игроком бинды. Меню Options рисуется мелким шрифтом HUD.
-  Win32-бэкенд мышь пока не получает (стабы `DG_GetMouse`); геймпад и OPL не
-  реализованы.
+  Геймпад работает в SDL-бэкенде (по умолчанию выключен, включается в
+  Options → CONTROLS → GAMEPAD). Win32-бэкенд не получает ни мышь, ни геймпад
+  (стабы `DG_GetMouse`/`I_UpdateJoystick`); OPL не реализован.
 - DECORATE, PK3 и загрузка вложенных WAD пока не реализованы.
 - Boom/MBF maps: реализован sky transfer (linedef 271/272, per-sector
   `sector->sky` вне savegame, visplane учитывает текстуру), весь диапазон

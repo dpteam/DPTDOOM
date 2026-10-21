@@ -38,6 +38,7 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "doomkeys.h"
 
 #include "doomgeneric.h"
+#include "i_joystick.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -310,6 +311,12 @@ void I_StartTic (void)
 {
 	I_ApplyMouseCapture();
 	I_GetEvent();
+	// After I_GetEvent, so SDL has just pumped its event queue and the joystick
+	// axis state is fresh. Events posted here are still processed in this tic
+	// (BuildNewTic calls ProcessEvents right after I_StartTic). This call used
+	// to be missing entirely, which is why a connected controller produced no
+	// input at all.
+	I_UpdateJoystick();
 }
 
 void I_UpdateNoBlit (void)

@@ -1717,6 +1717,15 @@ void D_DoomMain (void)
     I_CheckIsScreensaver();
     I_InitTimer();
     I_InitJoystick();
+    // A connected gamepad that is switched off would otherwise look like "this
+    // port has no gamepad support". Say where the switch is, once, at startup.
+    if (!usejoystick && I_JoystickCount() > 0)
+    {
+        DEH_printf("I_Init: %i gamepad(s) detected but disabled; "
+                   "enable with Options > Controls > GAMEPAD "
+                   "(or use_joystick 1 in the config)\n",
+                   I_JoystickCount());
+    }
     I_InitSound(true);
     I_InitMusic();
 

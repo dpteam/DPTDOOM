@@ -66,5 +66,18 @@ void I_UpdateJoystick(void);
 
 void I_BindJoystickVariables(void);
 
+// Whether joystick input is enabled (the use_joystick config key). Exposed so
+// the menu can toggle it and save it with the rest of the settings.
+extern int usejoystick;
+
+// Number of joysticks SDL reports, without opening any of them. Used for a
+// startup hint when a gamepad is present but disabled, so the feature is
+// discoverable instead of silently doing nothing.
+int I_JoystickCount(void);
+
+// Enables or disables joystick input at runtime, opening or closing the device
+// immediately. Used by the menu toggle.
+void I_SetJoystickEnabled(int enabled);
+
 #endif /* #ifndef __I_JOYSTICK__ */
 

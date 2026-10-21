@@ -549,6 +549,17 @@ if(BUILD_TESTING)
         add_test(NAME sdl-input COMMAND sdl-input-test)
         set_tests_properties(sdl-input PROPERTIES ENVIRONMENT
             "SDL_VIDEODRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 10)
+        add_executable(sdl-joystick-test tests/sdl-joystick.c
+            doomgeneric/i_joystick.c doomgeneric/d_event.c)
+        target_include_directories(sdl-joystick-test PRIVATE doomgeneric)
+        target_compile_definitions(sdl-joystick-test PRIVATE SDL_MAIN_HANDLED DPTDOOM_SDL)
+        target_link_libraries(sdl-joystick-test PRIVATE SDL2::SDL2)
+        if(WIN32)
+            add_custom_command(TARGET sdl-joystick-test POST_BUILD COMMAND ${CMAKE_COMMAND} -E
+                copy_if_different $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:sdl-joystick-test>)
+        endif()
+        add_test(NAME sdl-joystick COMMAND sdl-joystick-test)
+        set_tests_properties(sdl-joystick PROPERTIES TIMEOUT 20)
         if(DPTDOOM_SOUND)
             add_executable(sdl-audio-test tests/sdl-audio.c doomgeneric/i_sound.c
                 doomgeneric/i_sdlsound.c doomgeneric/i_sdlmusic.c

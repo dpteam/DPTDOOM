@@ -34,6 +34,7 @@
 #include "i_system.h"
 #include "i_timer.h"
 #include "i_video.h"
+#include "i_joystick.h"
 #include "m_misc.h"
 #include "v_video.h"
 #include "w_wad.h"
@@ -195,6 +196,7 @@ void M_ChangeMouseFlip(int choice);
 void M_ChangeCrosshair(int choice);
 void M_ChangeAutoRun(int choice);
 void M_ChangePitch(int choice);
+void M_ChangeGamepad(int choice);
 void M_Controls(int choice);
 void M_DrawControls(void);
 void M_SfxVol(int choice);
@@ -364,6 +366,7 @@ enum
     ctl_crosshair,
     ctl_pitch,
     ctl_autorun,
+    ctl_gamepad,
     ctl_end
 } controls_e;
 
@@ -405,7 +408,8 @@ menuitem_t ControlsMenu[]=
     {1,"",	M_ChangeMouseGrab,'r'},
     {1,"",	M_ChangeCrosshair,'h'},
     {1,"",	M_ChangePitch,'p'},
-    {1,"",	M_ChangeAutoRun,'u'}
+    {1,"",	M_ChangeAutoRun,'u'},
+    {1,"",	M_ChangeGamepad,'j'}
 };
 
 // The menu code indexes menuitems[] up to numitems (opt_end). If the enum and
@@ -1104,7 +1108,8 @@ static const char *controlsLabels[ctl_end] = {
     "GRAB MOUSE",
     "CROSSHAIR",
     "LOOK UP/DN",
-    "AUTO RUN"
+    "AUTO RUN",
+    "GAMEPAD"
 };
 
 // Compact text bar, e.g. [#####.....] for 5 of 10. Small and unambiguous
@@ -1232,6 +1237,15 @@ void M_DrawControls(void)
 
           case ctl_autorun:
             M_WriteText(vx, liney, auto_run ? "ON" : "OFF");
+            break;
+
+          case ctl_gamepad:
+            // Show OFF when no device is present even if the setting is on:
+            // "ON" with nothing plugged in would look broken.
+            if (usejoystick)
+                M_WriteText(vx, liney, I_JoystickCount() > 0 ? "ON" : "NONE");
+            else
+                M_WriteText(vx, liney, "OFF");
             break;
 
           default:
@@ -1499,6 +1513,14 @@ void M_ChangeAutoRun(int choice)
 {
     (void) choice;
     auto_run = !auto_run;
+}
+
+void M_ChangeGamepad(int choice)
+{
+    (void) choice;
+    // Opening/closing the device happens inside, so the switch takes effect
+    // immediately instead of on the next start.
+    I_SetJoystickEnabled(!usejoystick);
 }
 
 void M_ChangePitch(int choice)
