@@ -1913,3 +1913,121 @@ void P_SpawnSpecials (void)
     // UNUSED: no horizonal sliders.
     //	P_InitSlidingDoorFrames();
 }
+
+
+//
+// P_FindNextHighestCeiling
+//
+// Smallest surrounding ceiling height strictly above `currentheight`, or
+// `currentheight` when there is none. BOOM's "next neighbour ceiling" target
+// depends on this, and it is the mirror of P_FindNextLowestFloor.
+//
+fixed_t
+P_FindNextHighestCeiling
+( sector_t* sec,
+  int       currentheight )
+{
+    fixed_t     height = currentheight;
+    int         found = 0;
+    int         i;
+    line_t*     check;
+    sector_t*   other;
+
+    for (i = 0; i < sec->linecount; i++)
+    {
+        check = sec->lines[i];
+        other = getNextSector(check, sec);
+
+        if (!other)
+            continue;
+
+        if (other->ceilingheight > currentheight
+            && (!found || other->ceilingheight < height))
+        {
+            height = other->ceilingheight;
+            found = 1;
+        }
+    }
+    return height;
+}
+
+//
+// P_FindNextLowestCeiling
+//
+fixed_t
+P_FindNextLowestCeiling
+( sector_t* sec,
+  int       currentheight )
+{
+    fixed_t     height = currentheight;
+    int         found = 0;
+    int         i;
+    line_t*     check;
+    sector_t*   other;
+
+    for (i = 0; i < sec->linecount; i++)
+    {
+        check = sec->lines[i];
+        other = getNextSector(check, sec);
+
+        if (!other)
+            continue;
+
+        if (other->ceilingheight < currentheight
+            && (!found || other->ceilingheight > height))
+        {
+            height = other->ceilingheight;
+            found = 1;
+        }
+    }
+    return height;
+}
+
+//
+// P_FindShortestTextureAround / P_FindShortestUpperAround
+//
+// Shortest lower (respectively upper) texture among the two-sided lines that
+// bound the sector, in fixed point. BOOM returns 32000<<FRACBITS when there is
+// none - not INT_MAX - so that a target height derived from it cannot overflow
+// when added to a sector height. Only two-sided lines count: a one-sided line's
+// "textures" are not openings.
+//
+static fixed_t ShortestTextureAround(int secnum, int upper)
+{
+    fixed_t minsize = 32000 << FRACBITS;
+    sector_t* sec;
+    int i;
+
+    if (secnum < 0 || secnum >= numsectors)
+        return minsize;
+
+    sec = &sectors[secnum];
+    for (i = 0; i < sec->linecount; i++)
+    {
+        int side;
+
+        if (!twoSided(secnum, i))
+            continue;
+
+        for (side = 0; side < 2; side++)
+        {
+            side_t* sidedef = getSide(secnum, i, side);
+            short texture = upper ? sidedef->toptexture : sidedef->bottomtexture;
+
+            // Index 0 is "no texture", a placeholder rather than a real height.
+            if (texture > 0 && textureheight[texture] < minsize)
+                minsize = textureheight[texture];
+        }
+    }
+    return minsize;
+}
+
+fixed_t P_FindShortestTextureAround(int secnum)
+{
+    return ShortestTextureAround(secnum, 0);
+}
+
+fixed_t P_FindShortestUpperAround(int secnum)
+{
+    return ShortestTextureAround(secnum, 1);
+}

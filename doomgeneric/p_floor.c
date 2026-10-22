@@ -473,6 +473,7 @@ GenFloorOnSector
 	env.next_highest_floor = P_FindNextHighestFloor(sec, sec->floorheight);
 	env.lowest_ceiling = P_FindLowestCeilingSurrounding(sec);
 	env.ceiling = sec->ceilingheight;
+	env.shortest_lower = P_FindShortestTextureAround((int)(sec - sectors));
 	floor->floordestheight = DPT_GenFloorDest(gen, &env);
     }
 

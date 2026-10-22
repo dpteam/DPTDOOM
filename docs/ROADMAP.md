@@ -576,18 +576,22 @@ partition может породить две отдельные локальны
   generalized floor/ceiling/lift/stairs/crusher на тот момент оставались
   неподдерживаемыми; все они добавлены отдельными шагами ниже. Реальная
   анимация — ручная проверка.
-- [x] Boom generalized **floors** (`0x6000..0x7fff`), поддерживаемое подмножество:
-  вниз HnF/LnF, вверх NnF/LnC (+crush), скорости 1x..8x `FLOORSPEED`,
-  W1/WR/S1/SR/G1/GR. Декодер `dpt_genfloor.c` покрыт data-free тестом
-  `genfloor` на все 2048 комбинаций полей и правила supported-подмножества.
-  Цели C/sT, абсолютные высоты и `change != 0` остаются неподдерживаемыми и
-  попадают в отчёт. Реальная анимация — вручную.
-- [x] Boom generalized **ceilings** (`0x4000..0x5fff`), подмножество: вверх HnC,
-  вниз F (±crush), скорости 1x..8x `CEILSPEED`, W1/WR/S1/SR/G1/GR. Декодер
-  `dpt_genceiling.c` покрыт data-free тестом `genceiling` на 2048 комбинаций,
-  включая порядок ceiling-целей (отличается от floors). LnC/NnC/HnF/sT,
-  абсолютные высоты и `change != 0` остаются неподдерживаемыми. Реальная
-  анимация — вручную.
+- [x] Boom generalized **floors** (`0x6000..0x7fff`): **все цели**, включая
+  `sT` и относительные 24/32, в обоих направлениях; скорости 1x..8x
+  `FLOORSPEED`, все восемь триггеров. Назначение считает чистая
+  `DPT_GenFloorDest`, движок только собирает высоты соседей. Декодер
+  `dpt_genfloor.c` покрыт data-free тестом `genfloor` на все 2048 комбинаций
+  полей, правила поддержки и высоты назначения. Не поддержаны только
+  `change != 0` и crush-при-опускании. Реальная анимация — вручную.
+- [x] Boom generalized **ceilings** (`0x4000..0x5fff`): **все цели**, включая
+  `NnC` и `sT`, в обоих направлениях; скорости 1x..8x `CEILSPEED`, все восемь
+  триггеров. Для этого добавлены `P_FindNextHighestCeiling`,
+  `P_FindNextLowestCeiling`, `P_FindShortestTextureAround` и
+  `P_FindShortestUpperAround` (последние возвращают `32000<<FRACBITS`, как BOOM,
+  а не `INT_MAX` — иначе высота переполнилась бы). Декодер `dpt_genceiling.c`
+  покрыт data-free тестом `genceiling` на 2048 комбинаций, включая порядок
+  ceiling-целей (отличается от floors). Не поддержаны только `change != 0` и
+  crush-при-подъёме. Реальная анимация — вручную.
 - [x] Boom generalized **crushers** (`0x2f80..0x2fff`): trigger/speed/monster/
   silent, скорости 1x..8x `CEILSPEED`, `silent` → `silentCrushAndRaise`.
   Добавлено `ceiling_t.basespeed`, чтобы `T_MoveCeiling` не сбрасывал

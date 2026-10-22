@@ -79,31 +79,33 @@ int main(void)
     REQUIRE(DPT_GenCeilingDecode(0x4000 | (6 << 7), &ceiling));
     REQUIRE(ceiling.relative_height == 24 && ceiling.target == 0);
 
-    // Supported subset: every target that resolves to a height this engine can
-    // compute, in both directions; crush only while lowering. Push triggers act
-    // on the sector behind the line. Reported: texture/model change and the
-    // "next neighbour ceiling" target, which needs a helper we do not have.
+    // Supported subset: every target, in both directions; crush only while
+    // lowering. Push triggers act on the sector behind the line. Reported: only a
+    // texture/model change, which needs model-sector logic.
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040));            // up HnC
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7)));          // down F
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x1000)); // down F crush
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | 0x0002));   // S1 up HnC
     REQUIRE(DPT_GenCeilingSupported(0x4000));                    // down HnC
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (1 << 7)));         // LnC
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | (2 << 7)));         // NnC
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (3 << 7)));         // HnF
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | (5 << 7)));         // sT
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (6 << 7)));         // by 24
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (6 << 7))); // up by 24
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (4 << 7))); // up F
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (2 << 7))); // up NnC
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (5 << 7))); // up by texture
 
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | (2 << 7)));         // NnC
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | (5 << 7)));         // sT
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0400));           // texture change
+    REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0800));           // texture + type
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0040 | 0x1000));  // crush while up
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0006)); // push trigger
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0007)); // push retrigger
     REQUIRE(!DPT_GenCeilingSupported(0x6000));                    // not a ceiling
 
-    // Exhaustive: texture/model change, the next-neighbour target and crush
-    // while raising are the only rejections.
+    // Exhaustive: a texture/model change and crush while raising are the only
+    // rejections.
     for (trigger = 0; trigger < 8; ++trigger)
     for (speed = 0; speed < 4; ++speed)
     for (up = 0; up < 2; ++up)
@@ -114,7 +116,7 @@ int main(void)
         int expected;
         special = 0x4000 | trigger | (speed << 3) | (up << 6) | (change << 10)
                 | (crush << 12) | (target_bits << 7);
-        expected = change == 0 && target_bits != 2 && target_bits != 5 && !(crush && up);
+        expected = change == 0 && !(crush && up);
         REQUIRE(DPT_GenCeilingSupported(special) == expected);
     }
 
@@ -137,6 +139,15 @@ int main(void)
         ceiling.target = DPT_CEILING_TARGET_FLOOR; ceiling.up = 0;
         REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.floor);
 
+        // "Next neighbour ceiling" follows the direction bit.
+        env.next_lowest_ceiling = 140 * FRACUNIT;
+        env.next_highest_ceiling = 260 * FRACUNIT;
+        ceiling.target = DPT_CEILING_TARGET_NNC;
+        ceiling.up = 1;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.next_highest_ceiling);
+        ceiling.up = 0;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.next_lowest_ceiling);
+
         ceiling.target = 0;
         ceiling.relative_height = 24;
         ceiling.up = 1;
@@ -146,6 +157,25 @@ int main(void)
         ceiling.relative_height = 32;
         ceiling.up = 1;
         REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.current + 32*FRACUNIT);
+
+        // The shortest-upper-texture target moves by that texture's height, in
+        // the direction of travel, clamped in whole units so it cannot wrap.
+        env.shortest_upper = 40 * FRACUNIT;
+        ceiling.target = DPT_CEILING_TARGET_TEXTURE;
+        ceiling.up = 1;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.current + 40*FRACUNIT);
+        ceiling.up = 0;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.current - 40*FRACUNIT);
+        {
+            dpt_ceiling_env_t high = env;
+            high.current = 32000 * FRACUNIT;
+            high.shortest_upper = 32000 * FRACUNIT;
+            ceiling.up = 1;
+            REQUIRE(DPT_GenCeilingDest(&ceiling, &high) == 32000 * FRACUNIT);
+            high.current = -32000 * FRACUNIT;
+            ceiling.up = 0;
+            REQUIRE(DPT_GenCeilingDest(&ceiling, &high) == -32000 * FRACUNIT);
+        }
 
         // No crush offset: BOOM's generalized ceiling stops at its target.
         ceiling.target = DPT_CEILING_TARGET_FLOOR;

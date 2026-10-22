@@ -65,11 +65,10 @@ boolean DPT_GenFloorSupported(int special)
     if (!DPT_GenFloorDecode(special, &floor))
         return false;
 
-    // Texture/sector-type changes need model-sector logic, and the "shortest
-    // texture" target needs a helper this engine does not have, so both are
-    // reported instead of approximated. Every remaining target is a height this
-    // engine can compute, and the floor thinker takes an explicit destination.
-    if (floor.change != 0 || floor.target == DPT_FLOOR_TARGET_TEXTURE)
+    // Texture/sector-type changes need model-sector logic and are reported.
+    // Every target that resolves to a height is supported: the two texture-based
+    // ones now have their helpers, so nothing in the target field is rejected.
+    if (floor.change != 0)
         return false;
 
     // Crushing only exists as a raising floor.
@@ -103,6 +102,23 @@ fixed_t DPT_GenFloorDest (const dpt_genfloor_t* gen, const dpt_floor_env_t* env)
 
       case DPT_FLOOR_TARGET_CEIL:
         return env->ceiling;
+
+      case DPT_FLOOR_TARGET_TEXTURE:
+        // Move by the shortest lower texture around the sector, in the
+        // direction of travel. BOOM does this in whole map units and clamps to
+        // +/-32000 so the height cannot wrap; the clamp is applied to the
+        // destination rather than to the offset so a sector already near the
+        // limit stays put instead of jumping.
+        {
+            int delta = env->shortest_lower >> FRACBITS;
+            int units = (env->current >> FRACBITS) + (gen->up ? delta : -delta);
+
+            if (units > 32000)
+                units = 32000;
+            else if (units < -32000)
+                units = -32000;
+            return units << FRACBITS;
+        }
 
       case 0:
         // Relative by 24 or 32 units from the current height.

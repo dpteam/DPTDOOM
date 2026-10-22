@@ -243,10 +243,13 @@ ctest --preset windows-headless
   применяется в `P_XYMovement` и `P_MovePlayer` только на секторах с битом
   `0x0100`. Известное сужение: берётся сектор, где объект стоит, а не все
   касаемые (нет touching-sector list) — записано в коде и MAPS.md.
-  Не реализованы и попадают в отчёт `Map compatibility:`: цель `sT` (floor и
-  ceiling), ceiling `NnC`, perpetual-лифт, texture/model `change`, crush в
-  бессмысленном направлении, push/pull sector specials (нужен pusher-thinker с
-  touching-sector list и учётом воды).
+  Не реализованы и попадают в отчёт `Map compatibility:`: texture/model `change`,
+  perpetual-лифт, crush в бессмысленном направлении, push/pull sector specials
+  (нужен pusher-thinker с touching-sector list и учётом воды). Все цели
+  floor/ceiling, включая `sT` и `NnC`, теперь поддержаны — для них добавлены
+  `P_FindNextHighestCeiling`/`P_FindNextLowestCeiling` и
+  `P_FindShortestTextureAround`/`P_FindShortestUpperAround` (последние
+  возвращают `32000<<FRACBITS`, как BOOM, чтобы высота не переполнилась).
   Не выдавать загрузку карты за совместимость. Детали/тесты — `docs/MAPS.md`,
   `map-sky` и data-free тесты.
 - DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Text + Weapon frames + Thing numeric/flags/states/sounds + Frame graph/visual/psprite** classic

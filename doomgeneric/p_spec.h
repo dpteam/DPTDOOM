@@ -86,6 +86,14 @@ fixed_t P_FindHighestFloorSurrounding(sector_t* sec);
 // Largest surrounding floor height strictly below `currentheight`, or
 // `currentheight` when there is none. BOOM's "next lowest floor".
 fixed_t P_FindNextLowestFloor(sector_t* sec, int currentheight);
+// The same pair for ceilings, needed by BOOM's "next neighbour ceiling" target.
+fixed_t P_FindNextHighestCeiling(sector_t* sec, int currentheight);
+fixed_t P_FindNextLowestCeiling(sector_t* sec, int currentheight);
+// Shortest lower/upper texture height among the two-sided lines bounding the
+// sector, in fixed point. 32000<<FRACBITS when there is none, matching BOOM's
+// overflow guard rather than INT_MAX.
+fixed_t P_FindShortestTextureAround(int secnum);
+fixed_t P_FindShortestUpperAround(int secnum);
 
 fixed_t
 P_FindNextHighestFloor

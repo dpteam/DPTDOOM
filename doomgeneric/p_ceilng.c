@@ -269,8 +269,11 @@ GenCeilingOnSector
 	env.current = sec->ceilingheight;
 	env.highest_ceiling = P_FindHighestCeilingSurrounding(sec);
 	env.lowest_ceiling = P_FindLowestCeilingSurrounding(sec);
+	env.next_lowest_ceiling = P_FindNextLowestCeiling(sec, sec->ceilingheight);
+	env.next_highest_ceiling = P_FindNextHighestCeiling(sec, sec->ceilingheight);
 	env.highest_floor = P_FindHighestFloorSurrounding(sec);
 	env.floor = sec->floorheight;
+	env.shortest_upper = P_FindShortestUpperAround((int)(sec - sectors));
 	if (gen->up)
 	{
 	    ceiling->type = raiseToHighest;

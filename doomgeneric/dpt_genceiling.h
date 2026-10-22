@@ -54,8 +54,11 @@ typedef struct
     fixed_t current;         // this sector's ceiling height
     fixed_t highest_ceiling; // highest surrounding ceiling
     fixed_t lowest_ceiling;  // lowest surrounding ceiling
+    fixed_t next_lowest_ceiling;  // highest surrounding ceiling below current
+    fixed_t next_highest_ceiling; // lowest surrounding ceiling above current
     fixed_t highest_floor;   // highest surrounding floor
     fixed_t floor;           // this sector's floor height
+    fixed_t shortest_upper;  // shortest upper texture around the sector
 } dpt_ceiling_env_t;
 
 // Destination height for a supported generalized ceiling, in 16.16 fixed point.

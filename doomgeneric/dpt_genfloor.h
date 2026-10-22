@@ -62,6 +62,7 @@ typedef struct
     fixed_t next_highest_floor; // lowest surrounding floor above current
     fixed_t lowest_ceiling;     // lowest surrounding ceiling
     fixed_t ceiling;            // this sector's ceiling height
+    fixed_t shortest_lower;     // shortest lower texture around the sector
 } dpt_floor_env_t;
 
 // Destination height for a supported generalized floor, in 16.16 fixed point.

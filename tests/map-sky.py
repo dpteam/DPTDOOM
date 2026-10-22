@@ -201,13 +201,15 @@ def main():
         supported = (
             # Boom generalized doors: all eight trigger classes.
             [0x3c00 + t for t in range(8)]
-            # Floors: every target that resolves to a height, both directions.
+            # Floors: every target, both directions, including the texture-based
+            # one and the relative 24/32 heights.
             + [0x6000, 0x6002, 0x6004, 0x6006, 0x6007,
-               0x6080, 0x6100, 0x6180, 0x6200, 0x6300, 0x6380,
+               0x6080, 0x6100, 0x6180, 0x6200, 0x6300, 0x6380, 0x6280,
                0x6040, 0x60c0, 0x6140, 0x61c0, 0x6240, 0x6340, 0x7140,
-               # Ceilings: the same, plus crush while lowering.
-               0x4000, 0x4080, 0x40c0, 0x4180, 0x4200, 0x4240, 0x4300, 0x4380,
-               0x4040, 0x4042, 0x4046, 0x5200,
+               # Ceilings: the same, plus next-neighbour, shortest upper texture
+               # and crush while lowering.
+               0x4000, 0x4080, 0x40c0, 0x4100, 0x4180, 0x4200, 0x4240, 0x4280,
+               0x4300, 0x4380, 0x4040, 0x4042, 0x4046, 0x4140, 0x4280, 0x5200,
                # Crushers, stairs, lifts (all three supported targets), locked
                # doors, including push (P1/PR) which acts on the sector behind
                # the line.
@@ -222,17 +224,15 @@ def main():
 
         # Unsupported: 142+ is the main Boom extended range; 78 and 85 are Boom
         # types placed inside the vanilla 1..141 range (vanilla never uses those
-        # numbers). The rest are generalized targets and combinations outside the
-        # supported subset: the shortest-texture targets, the next-neighbour
-        # ceiling, the perpetual lift, a texture change, and crush in the
-        # direction where it has no meaning.
+        # numbers). The rest are combinations outside the supported subset: a
+        # texture change, crush in the direction where it has no meaning, and the
+        # perpetual lift. Every target within those families is now supported, so
+        # only these remain.
         unsupported = [142, 78, 85,
-                       0x6280,   # floor: shortest lower texture
                        0x7000,   # floor: crush while lowering
                        0x6400,   # floor: texture change
-                       0x4100,   # ceiling: next neighbour ceiling
-                       0x4280,   # ceiling: shortest upper texture
                        0x4800,   # ceiling: texture change
+                       0x4040 | 0x1000,  # ceiling: crush while raising
                        0x3700]   # lift: perpetual lowest<->highest
         overlay_multi(iwad, root / "unsupported.wad", unsupported)
         _, text = run("unsupported", ["-file", str(root / "unsupported.wad")])

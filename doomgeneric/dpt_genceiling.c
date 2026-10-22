@@ -53,15 +53,10 @@ boolean DPT_GenCeilingSupported(int special)
     if (!DPT_GenCeilingDecode(special, &ceiling))
         return false;
 
-    // Ceiling movement uses explicit top/bottom heights in this engine, so any
-    // target that resolves to a height is supported. Three are not: a texture or
-    // model change (needs model-sector logic), the "next neighbour ceiling"
-    // target, and the shortest-upper-texture target - the latter two need
-    // helpers this engine does not have.
+    // Texture/model changes need model-sector logic and are reported. Every
+    // target that resolves to a height is supported now that the next-ceiling
+    // and shortest-upper-texture helpers exist.
     if (ceiling.change != 0)
-        return false;
-    if (ceiling.target == DPT_CEILING_TARGET_NNC
-        || ceiling.target == DPT_CEILING_TARGET_TEXTURE)
         return false;
 
     // Crushing only exists when lowering.
@@ -84,6 +79,25 @@ fixed_t DPT_GenCeilingDest (const dpt_genceiling_t* gen, const dpt_ceiling_env_t
 
       case DPT_CEILING_TARGET_LNC:
         return env->lowest_ceiling;
+
+      case DPT_CEILING_TARGET_NNC:
+        // "Next" depends on direction, like the floor equivalent.
+        return gen->up ? env->next_highest_ceiling : env->next_lowest_ceiling;
+
+      case DPT_CEILING_TARGET_TEXTURE:
+        // Move by the shortest upper texture around the sector, in the
+        // direction of travel, clamped in whole units to +/-32000 so the height
+        // cannot wrap - the same guard BOOM uses.
+        {
+            int delta = env->shortest_upper >> FRACBITS;
+            int units = (env->current >> FRACBITS) + (gen->up ? delta : -delta);
+
+            if (units > 32000)
+                units = 32000;
+            else if (units < -32000)
+                units = -32000;
+            return units << FRACBITS;
+        }
 
       case DPT_CEILING_TARGET_HNF:
         return env->highest_floor;
