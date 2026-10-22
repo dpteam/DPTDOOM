@@ -183,6 +183,10 @@ ctest --preset windows-headless
   `scope control|relay|both` (по умолчанию both), проверка allow при старте и
   reload идёт по каждому обслуживаемому порту; reload, запирающий порт,
   отвергается. Просроченное allow-правило действующим не считается.
+  Слоты клиентов, per-IP счётчики и rate buckets разделены по роли (24/8 слотов,
+  8/4 на IP, burst 128/24 против 32/4): иначе забитый relay занимал бы общий пул
+  и управление отвечало бы лимитом при разных портах. `master-relay` проверяет
+  это в обе стороны и падает на общей реализации.
   Native master/relay.c, docs/RELAY.md; not arbitrary proxy/TLS/auth. Host lease
   source+secret, guest public session-id, consumed listing; direct first then
   2s fallback. Tests master-relay/master-publish/UI include unavailable direct,

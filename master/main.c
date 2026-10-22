@@ -38,10 +38,27 @@ typedef int SOCKET;
 #include <signal.h>
 #include <time.h>
 
-#define DM_CLIENTS 32
+// Client slots are partitioned by role, not just counted separately. A shared
+// pool would mean a relay flood occupies every slot and the control plane starts
+// answering "global-active-connection-limit" - the isolation that --relay-port
+// exists to provide would be gone while the two ports look separate. The split is
+// fixed rather than dynamic: an operator cannot starve one plane by accident, and
+// the numbers stay checkable at compile time.
+#define DM_CONTROL_CLIENTS 24
+#define DM_RELAY_CLIENTS 8
+#define DM_CLIENTS (DM_CONTROL_CLIENTS + DM_RELAY_CLIENTS)
+// Relay attaches are rare (one per session) while control requests are frequent,
+// so the relay plane gets a tighter per-source cap. It also matches the relay's
+// own four-host-sessions-per-source limit instead of contradicting it.
 #define DM_IP_CLIENTS 8
+#define DM_IP_RELAY_CLIENTS 4
 #define DM_RATE_IPS 256
 #define DM_DEADLINE 3000
+// The split only isolates anything if both planes actually own slots.
+typedef char dpt_clients_split_must_be_nonzero[(DM_CONTROL_CLIENTS>0 && DM_RELAY_CLIENTS>0)?1:-1];
+// A control slot must survive one source filling its per-source cap, otherwise a
+// single peer could occupy the whole plane on its own.
+typedef char dpt_control_slots_must_exceed_per_source_cap[(DM_CONTROL_CLIENTS>DM_IP_CLIENTS)?1:-1];
 typedef struct
 {
     SOCKET socket;
@@ -58,9 +75,15 @@ typedef struct
     int relay_port;
 } dm_client_t;
 typedef struct { unsigned char host[4]; uint64_t time; unsigned int credit; int used; } dm_bucket_t;
+// One limiter per role. A shared global bucket let relay attaches drain the
+// control plane's burst allowance, which is exactly the coupling the separate
+// port is supposed to remove.
+#define DM_ROLES 2
+#define DM_ROLE_CONTROL 0
+#define DM_ROLE_RELAY 1
 static dm_directory_t directory;
 static dm_client_t clients[DM_CLIENTS];
-static dm_bucket_t rate_ips[DM_RATE_IPS], global_rate;
+static dm_bucket_t rate_ips[DM_ROLES][DM_RATE_IPS], global_rate[DM_ROLES];
 static volatile sig_atomic_t stopping;
 static uint64_t next_client_id;
 static pa_state_t public_address;
@@ -158,21 +181,33 @@ static int Credit(dm_bucket_t *bucket, uint64_t now, unsigned int burst, unsigne
     bucket->credit-=1000;
     return 1;
 }
-static int Rate(const unsigned char host[4], uint64_t now)
+static int Rate(unsigned int role, const unsigned char host[4], uint64_t now)
 {
     unsigned int i;
-    dm_bucket_t *bucket=NULL,*oldest=&rate_ips[0];
-    if(!Credit(&global_rate,now,128,64))return 0;
+    dm_bucket_t *bucket=NULL,*oldest=&rate_ips[role][0];
+    // Credit(bucket, now, burst, rate): burst is how many connections may arrive
+    // back to back, rate is the refill per millisecond. The control plane keeps
+    // its original 128/24 values so existing behaviour is unchanged; the relay
+    // plane gets a quarter of that burst, because one attach per session is all
+    // a legitimate peer needs. Only the burst differs: the sustained rate is not
+    // the knob that protects anything here.
+    unsigned int global_burst=role?32:128,global_refill=role?16:64;
+    unsigned int source_burst=role?4:24,source_refill=4;
+    if(!Credit(&global_rate[role],now,global_burst,global_refill))return 0;
     for(i=0;i<DM_RATE_IPS;++i)
     {
-        dm_bucket_t *entry=&rate_ips[i];
+        dm_bucket_t *entry=&rate_ips[role][i];
         if(entry->used && !memcmp(entry->host,host,4)) { bucket=entry; break; }
         if(!entry->used)oldest=entry;
         else if(oldest->used && entry->time<oldest->time)oldest=entry;
     }
     if(!bucket) { bucket=oldest; memset(bucket,0,sizeof(*bucket)); memcpy(bucket->host,host,4); }
-    return Credit(bucket,now,24,4);
+    return Credit(bucket,now,source_burst,source_refill);
 }
+// Slot range reserved for a role. Allocation and the per-source count both stay
+// inside it, so one plane can never occupy the other's slots.
+static unsigned int RoleFirst(unsigned int role){ return role?DM_CONTROL_CLIENTS:0; }
+static unsigned int RoleEnd(unsigned int role){ return role?DM_CLIENTS:DM_CONTROL_CLIENTS; }
 static void Drop(dm_client_t *client)
 {
     if(client->socket!=INVALID_SOCKET)DM_Close(client->socket);
@@ -317,14 +352,17 @@ static void Accept(SOCKET listener, int relay_port, uint64_t now)
         unsigned char host[4];
         SOCKET socket=accept(listener,(struct sockaddr*)&peer,&length);
         unsigned int i,ip_clients=0;
-        // Which port this connection came from decides which rules apply.
+        // Which port this connection came from decides which rules apply, which
+        // limiter is charged and which slots may be used.
         unsigned int scope=relay_port?DM_SCOPE_RELAY:DM_SCOPE_CONTROL;
+        unsigned int role=relay_port?DM_ROLE_RELAY:DM_ROLE_CONTROL;
+        unsigned int first=RoleFirst(role),last=RoleEnd(role);
         if(socket==INVALID_SOCKET)return;
         memcpy(host,&peer.sin_addr,4);
 #ifndef _WIN32
         if(socket>=FD_SETSIZE) { DM_Close(socket); continue; }
 #endif
-        if(!Rate(host,now)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=connection-rate-limit"); DM_Close(socket); continue; }
+        if(!Rate(role,host,now)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,relay_port?"reason=connection-rate-limit scope=relay":"reason=connection-rate-limit scope=control"); DM_Close(socket); continue; }
         // Checked before anything else is done with the connection, and by
         // source address only: the advertised/listing address is peer-supplied
         // and must never be able to lift a ban. The scope is the port the
@@ -341,11 +379,19 @@ static void Accept(SOCKET listener, int relay_port, uint64_t now)
                     relay_port?"reason=not-in-allowlist scope=relay":"reason=not-in-allowlist scope=control");
           DM_Close(socket); continue; }
         if(!Nonblocking(socket)) { ML_Event(ML_IO,host,0,now); DM_Close(socket); continue; }
-        for(i=0;i<DM_CLIENTS;++i)
+        // Counted and allocated inside this role's slot range only. Counting
+        // across the whole pool would let eight relay sockets from one source
+        // refuse that source's registration, and a full relay plane would answer
+        // control clients with a limit they cannot see the cause of.
+        for(i=first;i<last;++i)
             if(clients[i].socket!=INVALID_SOCKET && !memcmp(clients[i].host,host,4))++ip_clients;
-        if(ip_clients>=DM_IP_CLIENTS) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=per-IP-active-connection-limit"); DM_Close(socket); continue; }
-        for(i=0;i<DM_CLIENTS;++i)if(clients[i].socket==INVALID_SOCKET)break;
-        if(i==DM_CLIENTS) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=global-active-connection-limit"); DM_Close(socket); continue; }
+        if(ip_clients>=(unsigned int)(relay_port?DM_IP_RELAY_CLIENTS:DM_IP_CLIENTS))
+        { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,relay_port?"reason=per-IP-active-connection-limit scope=relay":"reason=per-IP-active-connection-limit scope=control");
+          DM_Close(socket); continue; }
+        for(i=first;i<last;++i)if(clients[i].socket==INVALID_SOCKET)break;
+        if(i==last)
+        { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,relay_port?"reason=relay-active-connection-limit":"reason=global-active-connection-limit scope=control");
+          DM_Close(socket); continue; }
         clients[i].socket=socket; clients[i].wanted=DM_HEADER; clients[i].deadline=now+DM_DEADLINE;
         memcpy(clients[i].host,host,4);
         clients[i].began=now;clients[i].id=++next_client_id;clients[i].peer_port=ntohs(peer.sin_port);
@@ -849,7 +895,7 @@ int main(int argc, char **argv)
 #else
     if(listener>=FD_SETSIZE) { DM_Close(listener); result=1; goto cleanup; }
 #endif
-    if(!Nonblocking(listener) || bind(listener,(struct sockaddr*)&address,sizeof(address))==SOCKET_ERROR || listen(listener,DM_CLIENTS)==SOCKET_ERROR)
+    if(!Nonblocking(listener) || bind(listener,(struct sockaddr*)&address,sizeof(address))==SOCKET_ERROR || listen(listener,DM_CONTROL_CLIENTS)==SOCKET_ERROR)
     { ML_Message("Master: nonblocking/bind/listen failed; check address and port"); DM_Close(listener); result=1; goto cleanup; }
     // Separate relay listener. Off by default so existing deployments keep the
     // current single-port behaviour; --relay-port turns it on.
@@ -870,7 +916,7 @@ int main(int argc, char **argv)
         if(relay_listener>=FD_SETSIZE) { DM_Close(relay_listener); DM_Close(listener); result=1; goto cleanup; }
 #endif
         relay_address.sin_port=htons((uint16_t)relay_port);
-        if(!Nonblocking(relay_listener) || bind(relay_listener,(struct sockaddr*)&relay_address,sizeof(relay_address))==SOCKET_ERROR || listen(relay_listener,DM_CLIENTS)==SOCKET_ERROR)
+        if(!Nonblocking(relay_listener) || bind(relay_listener,(struct sockaddr*)&relay_address,sizeof(relay_address))==SOCKET_ERROR || listen(relay_listener,DM_RELAY_CLIENTS)==SOCKET_ERROR)
         { ML_Message("Master: relay nonblocking/bind/listen failed; check the relay port"); DM_Close(relay_listener); DM_Close(listener); result=1; goto cleanup; }
         relay_port_enabled=1;
         relay_listen_port=relay_port;

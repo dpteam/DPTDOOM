@@ -144,6 +144,48 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-relay-') as temporary:
             text=(root/'split-events.log').read_text()
             assert 'relay-redirected-to-separate-port' in text,text
             assert 'control-op-on-relay-port' in text,text
+
+            # Isolation, which is the only reason to run two ports at all. Slots,
+            # per-source caps and rate limiters are per role, so flooding the
+            # relay port must not take the control plane's capacity with it.
+            #
+            # Paced deliberately: the flood has to outlast the burst allowance,
+            # otherwise a shared implementation would never accumulate enough
+            # held connections for this check to distinguish the two designs.
+            flood=[]
+            for _ in range(12):
+                try: flood.append(socket.create_connection(('127.0.0.1',relay_port),timeout=5))
+                except OSError: pass
+                time.sleep(.06)
+            peers.extend(flood)
+            status,body=cquery(1)
+            assert status==0,(status,body)
+            # The relay plane has its own tighter budget, and hitting it is
+            # reported as such instead of as a generic refusal. Which limit trips
+            # first depends on timing (burst before per-source cap), so accept
+            # either, but it must be the relay scope that refused.
+            relay_events=(root/'split-events.log').read_text()
+            assert ('reason=connection-rate-limit scope=relay' in relay_events
+                    or 'per-IP-active-connection-limit scope=relay' in relay_events),relay_events[-800:]
+
+            # Release the relay plane before the reverse check, otherwise this
+            # test would be measuring its own flood: the held sockets sit on the
+            # relay per-source cap, so a relay connection refused afterwards says
+            # nothing about the control plane.
+            for s in flood:s.close()
+            peers=[p for p in peers if p not in flood]
+            time.sleep(.3)
+
+            # And the reverse direction: a control-plane flood must leave the
+            # relay plane able to accept and answer. A control operation sent
+            # there still gets its ordinary rejection, which proves the
+            # connection was served rather than dropped for lack of capacity.
+            control_flood=[]
+            for _ in range(40):
+                try: control_flood.append(socket.create_connection(('127.0.0.1',control_port),timeout=5))
+                except OSError: pass
+            peers.extend(control_flood)
+            assert wire.reply(rconnect(1,b''),1)[0]==1
         finally:
             for s in peers:s.close()
             process.terminate();process.wait(10)
