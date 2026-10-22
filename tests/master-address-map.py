@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
                     with socket.create_connection(('127.0.0.1',port),timeout=3) as s:
                         s.sendall(wire.packet(1,b''))
                         wire.reply(s,1)
-                except OSError:
+                except (OSError,AssertionError):
                     rejected=True
                 return rejected, logpath.read_bytes()
             finally:
@@ -110,6 +110,57 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
     rejected,text=try_connect(with_bans('ban-self','# block local\n127.0.0.1\n'),'ban-self')
     assert rejected,text
     assert b'banned-source' in text,text
+    assert b'scope=control' in text,text
+
+    # Scope: the same source can be banned on one port and still served on the
+    # other. Without --relay-port every connection is control-scoped, so a
+    # relay-only rule must block nothing at all - that is the property that
+    # makes the feature safe to add to an existing file.
+    rejected,text=try_connect(with_bans('ban-scope-relay','127.0.0.1 scope relay\n'),'ban-scope-relay')
+    assert not rejected,text
+    rejected,text=try_connect(with_bans('ban-scope-control','127.0.0.1 scope control\n'),'ban-scope-control')
+    assert rejected and b'scope=control' in text,text
+
+    # With a dedicated relay port the two scopes separate for real: a relay-only
+    # ban kills the relay port while the control port keeps answering, and a
+    # control-only ban does the opposite.
+    def scoped_ports(rule, label):
+        with socket.socket() as r:r.bind(('127.0.0.1',0));control_port=r.getsockname()[1]
+        with socket.socket() as r:r.bind(('127.0.0.1',0));relay_port=r.getsockname()[1]
+        conf=root/(label+'.conf')
+        bans=root/(label+'.txt')
+        bans.write_text(rule)
+        conf.write_text('banlist=%s\n'%bans)
+        logpath=root/(label+'.log')
+        with logpath.open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(control_port),'--relay',
+                                      '--relay-port',str(relay_port),'--config',str(conf),
+                                      '--log',str(root/(label+'-events.log'))],
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'relay listening on' not in logpath.read_bytes():
+                    assert process.poll() is None,logpath.read_bytes()
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                def reachable(port):
+                    try:
+                        with socket.create_connection(('127.0.0.1',port),timeout=3) as s:
+                            s.sendall(wire.packet(1,b''))
+                            wire.reply(s,1)
+                        return True
+                    except (OSError,AssertionError):
+                        return False
+                return reachable(control_port),reachable(relay_port)
+            finally:
+                process.terminate();process.wait(10)
+
+    control_ok,relay_ok=scoped_ports('127.0.0.1 scope relay\n','scope-relay-port')
+    assert control_ok and not relay_ok,(control_ok,relay_ok)
+    control_ok,relay_ok=scoped_ports('127.0.0.1 scope control\n','scope-control-port')
+    assert not control_ok and relay_ok,(control_ok,relay_ok)
+    control_ok,relay_ok=scoped_ports('127.0.0.1\n','scope-both-port')
+    assert not control_ok and not relay_ok,(control_ok,relay_ok)
 
     # Malformed rule: whole reload fails, no partial list is applied.
     bad=with_bans('ban-bad','127.0.0.1\nnot-an-ip\n')
@@ -182,6 +233,64 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
 
     check_live_reload()
 
+    # Reload must not be able to do what startup refuses: an enforced allow list
+    # edited down to "no rule for the served port" would silently shut the
+    # master, so the previous list is kept instead.
+    def check_allow_reload_lockout():
+        allow=root/'allow-lock.txt'
+        allow.write_text('127.0.0.1\n')
+        conf=root/'allow-lock.conf'
+        conf.write_text('allowlist=%s\naccess-mode=allowlist\n'%allow)
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+        logpath=root/'allow-lock.log'
+
+        def reachable():
+            try:
+                with socket.create_connection(('127.0.0.1',port),timeout=3) as s:
+                    s.sendall(wire.packet(1,b''))
+                    wire.reply(s,1)
+                    return True
+            except (OSError,AssertionError):
+                return False
+
+        def wait_until(predicate, timeout=5.0):
+            deadline=time.monotonic()+timeout
+            while time.monotonic()<deadline:
+                if predicate():
+                    return True
+                time.sleep(.1)
+            return predicate()
+
+        with logpath.open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(port),'--config',str(conf),
+                                      '--log',str(root/'allow-lock-events.log')],
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'listening on' not in logpath.read_bytes():
+                    assert process.poll() is None, logpath.read_bytes()
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                assert reachable(), 'allow-lock: listed source should connect'
+
+                # Relay-only rules leave the control port with no permit.
+                allow.write_text('127.0.0.1 scope relay\n')
+                assert wait_until(lambda: b'would lock a served port out' in logpath.read_bytes()), \
+                    'allow-lock: relay-only reload was not refused'
+                assert reachable(), 'allow-lock: refused reload must keep the previous list'
+                assert process.poll() is None, 'allow-lock: master must stay up'
+
+                # An already-expired permit is not a usable rule either.
+                allow.write_text('127.0.0.1 until 2020-01-01T00:00:00Z\n')
+                assert wait_until(lambda: b'would lock a served port out' in logpath.read_bytes()), \
+                    'allow-lock: expired-only reload was not refused'
+                assert reachable(), 'allow-lock: expired rules must not take effect'
+            finally:
+                process.terminate();process.wait(10)
+
+    check_allow_reload_lockout()
+
     # Allow list: explicit access-mode, not inferred from the file existing.
     def run_with(name, conf_body, files):
         for fname,body in files.items():
@@ -223,6 +332,7 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
                         {'allow-deny.txt':'198.51.100.1\n'})
     assert state=='rejected',(state,text)
     assert b'not-in-allowlist' in text,text
+    assert b'scope=control' in text,text
 
     # Enforced: listed source accepted.
     state,text=run_with('allow-permit','allowlist=allow-permit.txt\naccess-mode=allowlist\n',
@@ -239,6 +349,25 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-hairpin-') as temporary:
     # Enforced with no usable rules would lock everyone out: refuse to start.
     state,text=run_with('allow-empty','allowlist=allow-empty.txt\naccess-mode=allowlist\n',
                         {'allow-empty.txt':'# empty\n'})
+    assert state.startswith('exit '),(state,text)
+
+    # Scoped allow rules: the startup check is per served port, so a file of
+    # relay-only rules must not start on a control-only master - it would look
+    # configured while nobody could register.
+    state,text=run_with('allow-scope-relay','allowlist=allow-scope-relay.txt\naccess-mode=allowlist\n',
+                        {'allow-scope-relay.txt':'127.0.0.1 scope relay\n'})
+    assert state.startswith('exit '),(state,text)
+    assert b'control port' in text,text
+    # A control-scoped permit serves the control port but grants nothing on
+    # relay, which is the point of the scope.
+    state,text=run_with('allow-scope-control','allowlist=allow-scope-control.txt\naccess-mode=allowlist\n',
+                        {'allow-scope-control.txt':'127.0.0.1 scope control\n'})
+    assert state=='connected',(state,text)
+    # A permit whose deadline has already passed is not a usable rule either:
+    # counting it would start a master that nobody can reach.
+    state,text=run_with('allow-scope-expired',
+                        'allowlist=allow-scope-expired.txt\naccess-mode=allowlist\n',
+                        {'allow-scope-expired.txt':'127.0.0.1 until 2020-01-01T00:00:00Z\n'})
     assert state.startswith('exit '),(state,text)
 
     # Temporary ban: expires while the master runs, without touching the file.

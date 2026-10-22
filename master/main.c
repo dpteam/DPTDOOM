@@ -317,6 +317,8 @@ static void Accept(SOCKET listener, int relay_port, uint64_t now)
         unsigned char host[4];
         SOCKET socket=accept(listener,(struct sockaddr*)&peer,&length);
         unsigned int i,ip_clients=0;
+        // Which port this connection came from decides which rules apply.
+        unsigned int scope=relay_port?DM_SCOPE_RELAY:DM_SCOPE_CONTROL;
         if(socket==INVALID_SOCKET)return;
         memcpy(host,&peer.sin_addr,4);
 #ifndef _WIN32
@@ -325,12 +327,19 @@ static void Accept(SOCKET listener, int relay_port, uint64_t now)
         if(!Rate(host,now)) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=connection-rate-limit"); DM_Close(socket); continue; }
         // Checked before anything else is done with the connection, and by
         // source address only: the advertised/listing address is peer-supplied
-        // and must never be able to lift a ban.
-        if(DM_IsBanned(&directory,host,WallNow())) { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=banned-source"); DM_Close(socket); continue; }
+        // and must never be able to lift a ban. The scope is the port the
+        // connection arrived on, so a relay-only rule cannot silence a peer's
+        // registration and a control-only rule cannot eject it from a relay.
+        if(DM_IsBanned(&directory,host,WallNow(),scope))
+        { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,
+                    relay_port?"reason=banned-source scope=relay":"reason=banned-source scope=control");
+          DM_Close(socket); continue; }
         // Bans are checked first on purpose: denying must beat permitting, so a
         // source that is both banned and allowed stays banned.
-        if(directory.allowlist_only && !DM_IsAllowed(&directory,host))
-        { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,"reason=not-in-allowlist"); DM_Close(socket); continue; }
+        if(directory.allowlist_only && !DM_IsAllowed(&directory,host,WallNow(),scope))
+        { ML_Detail(ML_LIMIT,host,ntohs(peer.sin_port),now,
+                    relay_port?"reason=not-in-allowlist scope=relay":"reason=not-in-allowlist scope=control");
+          DM_Close(socket); continue; }
         if(!Nonblocking(socket)) { ML_Event(ML_IO,host,0,now); DM_Close(socket); continue; }
         for(i=0;i<DM_CLIENTS;++i)
             if(clients[i].socket!=INVALID_SOCKET && !memcmp(clients[i].host,host,4))++ip_clients;
@@ -433,12 +442,15 @@ static const char *ConfigTemplate =
 "# Matching is against the TCP source address, never the advertised address,\n"
 "# so a peer cannot escape a ban by advertising something else.\n"
 "# Optional expiry, UTC only: 203.0.113.7 until 2026-12-31T23:59:59Z\n"
+"# Optional scope, so a relay abuser does not also lose registration (or the\n"
+"# reverse): 203.0.113.7 scope relay | control | both. Omit it for both.\n"
 "# A malformed rule stops startup instead of loading a partial list.\n"
 "# banlist=banlist.txt\n"
 "\n"
 "# Allow list: only listed source addresses may connect. The mode is explicit on\n"
 "# purpose - a leftover file must not silently close an open server. Bans always\n"
-"# win over the allow list, and an empty enforced allow list refuses to start.\n"
+"# win over the allow list, and a served port with no usable rule refuses to\n"
+"# start. Same rule grammar, including until and scope.\n"
 "# allowlist=allowlist.txt\n"
 "# access-mode=open | allowlist   (default: open)\n"
 "\n"
@@ -447,6 +459,8 @@ static const char *ConfigTemplate =
 "# commented line cannot turn it on by accident. --relay-port requires --relay\n"
 "# and must differ from --port; a relay operation on the control port is then\n"
 "# answered with a redirect carrying the relay port, so clients need no setting.\n"
+"# Ban/allow rules cover both ports unless a rule says scope control or\n"
+"# scope relay.\n"
 "\n"
 "# How the master learns its own public address: off | manual | dns | api.\n"
 "#   off     - advertise the observed source address (default)\n"
@@ -502,7 +516,10 @@ static int FileStamp(const char *path, long long *stamp)
 // Shared loader for both lists. `is_allow` selects the destination and the
 // wording; the parsing and atomic-commit rules are identical on purpose, so a
 // ban list and an allow list cannot drift apart in behaviour.
-static int LoadRules(const char *path, int is_allow, int announce)
+// `initial` is the startup load: it announces the count and skips the reload
+// lockout guard, because startup validates the final rule set itself and can
+// give a precise reason instead of "keeping the previous list" (there is none).
+static int LoadRules(const char *path, int is_allow, int initial)
 {
     FILE *file=fopen(path,"rb");
     char line[256];unsigned int number=0,accepted=0;
@@ -513,7 +530,7 @@ static int LoadRules(const char *path, int is_allow, int announce)
     {
         // A missing file is a normal state. For the allow list that is only safe
         // when the list is not enforced, which startup checks separately.
-        if(announce)
+        if(initial)
             ML_Message(is_allow
                        ? "Master: no allow list found"
                        : "Master: no ban list found; nothing is banned");
@@ -552,6 +569,25 @@ static int LoadRules(const char *path, int is_allow, int announce)
 
     if(is_allow)
     {
+        // An enforced allow list that leaves a served port without a usable rule
+        // is a lockout. Startup refuses to start in that state, and a reload must
+        // not be able to reach it either, so the previous list is kept instead of
+        // committing a list that shuts the port.
+        if(!initial && directory.allowlist_only && parsed_count)
+        {
+            unsigned int control=0,relay=0,i;
+            for(i=0;i<parsed_count;++i)
+            {
+                if(parsed[i].expires && WallNow()>=parsed[i].expires)continue;
+                if(parsed[i].scope!=DM_SCOPE_RELAY)++control;
+                if(parsed[i].scope!=DM_SCOPE_CONTROL)++relay;
+            }
+            if(!control || (relay_port_enabled && !relay))
+            {
+                ML_Message("Master: allow list reload would lock a served port out; keeping the previous list");
+                return 0;
+            }
+        }
         memcpy(directory.allowed,parsed,sizeof(parsed));
         directory.allowed_count=parsed_count;
         FileStamp(allow_path,&allow_file_stamp);
@@ -565,7 +601,7 @@ static int LoadRules(const char *path, int is_allow, int announce)
         FileStamp(ban_path,&ban_file_stamp);
     }
 
-    if(announce)
+    if(initial)
     {
         char message[192];
         snprintf(message,sizeof(message),"Master: %u %s rule(s) loaded from %s",
@@ -620,12 +656,22 @@ static void ReloadRulesIfChanged(uint64_t now)
         }
     }
 
-    // Temporary bans expire on their own. Pruning keeps the table from filling
-    // with dead rules, which would eventually reject new ones at the cap.
+    // Temporary rules expire on their own. Pruning keeps the table from filling
+    // with dead rules, which would eventually reject new ones at the cap. The
+    // allow list shares the grammar (and the cap), so it is pruned too.
     if(now>=ban_prune_next)
     {
-        unsigned int removed;
+        unsigned int removed,expired_allowed;
         ban_prune_next=now+60000;
+        expired_allowed=DM_PruneAllowed(&directory,WallNow());
+        if(expired_allowed)
+        {
+            char message[192];
+            snprintf(message,sizeof(message),
+                     "Master: %u expired allow rule(s) removed (%u still active)",
+                     expired_allowed,directory.allowed_count);
+            ML_Message(message);
+        }
         removed=DM_PruneBans(&directory,WallNow());
         if(removed)
         {
@@ -760,12 +806,18 @@ int main(int argc, char **argv)
         // otherwise only discover it from failed connections.
         if(!allow_path[0])
         { fputs("Master: access-mode=allowlist requires allowlist= with a file\n",stderr); return 2; }
-        if(!directory.allowed_count)
-        { fputs("Master: access-mode=allowlist is enforced but the allow list is empty; refusing to lock every client out\n",stderr); return 2; }
-        { char message[192];
+        // Checked per served port, because rules can be scoped: a file full of
+        // relay-only rules would otherwise leave the control port with nobody
+        // able to register, and that looks like a broken master, not a policy.
+        if(!DM_AllowedRules(&directory,DM_SCOPE_CONTROL,WallNow()))
+        { fputs("Master: access-mode=allowlist is enforced but no allow rule governs the control port; refusing to lock every client out\n",stderr); return 2; }
+        if(relay_port && !DM_AllowedRules(&directory,DM_SCOPE_RELAY,WallNow()))
+        { fputs("Master: access-mode=allowlist is enforced but no allow rule governs the relay port; refusing to lock every client out\n",stderr); return 2; }
+        { char message[256];
           snprintf(message,sizeof(message),
-                   "Master: access-mode=allowlist: only %u listed source(s) may connect; bans still win",
-                   directory.allowed_count);
+                   "Master: access-mode=allowlist: %u listed source rule(s) for control, %u for relay; bans still win",
+                   DM_AllowedRules(&directory,DM_SCOPE_CONTROL,WallNow()),
+                   DM_AllowedRules(&directory,DM_SCOPE_RELAY,WallNow()));
           ML_Message(message); }
     }
     else if(allow_path[0] && directory.allowed_count)

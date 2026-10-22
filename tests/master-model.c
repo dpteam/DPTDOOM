@@ -77,16 +77,16 @@ int main(void)
         unsigned char subnet_other[4]={192,168,11,42};
 
         memset(&bans,0,sizeof(bans));
-        REQUIRE(!DM_IsBanned(&bans,blocked,0));           // empty list bans nothing
+        REQUIRE(!DM_IsBanned(&bans,blocked,0,DM_SCOPE_BOTH));           // empty list bans nothing
 
         REQUIRE(DM_AddBan(&bans,"203.0.113.7"));        // bare address is /32
-        REQUIRE(DM_IsBanned(&bans,blocked,0));
-        REQUIRE(!DM_IsBanned(&bans,allowed,0));
-        REQUIRE(!DM_IsBanned(&bans,subnet,0));            // no accidental widening
+        REQUIRE(DM_IsBanned(&bans,blocked,0,DM_SCOPE_BOTH));
+        REQUIRE(!DM_IsBanned(&bans,allowed,0,DM_SCOPE_BOTH));
+        REQUIRE(!DM_IsBanned(&bans,subnet,0,DM_SCOPE_BOTH));            // no accidental widening
 
         REQUIRE(DM_AddBan(&bans,"192.168.10.0/24"));
-        REQUIRE(DM_IsBanned(&bans,subnet,0));
-        REQUIRE(!DM_IsBanned(&bans,subnet_other,0));
+        REQUIRE(DM_IsBanned(&bans,subnet,0,DM_SCOPE_BOTH));
+        REQUIRE(!DM_IsBanned(&bans,subnet_other,0,DM_SCOPE_BOTH));
 
         // Rejections must be errors, not silent acceptance.
         REQUIRE(!DM_AddBan(&bans,"203.0.113.7"));       // exact duplicate
@@ -117,25 +117,25 @@ int main(void)
         // Clearing is how a reload removes a rule that was deleted from the file.
         DM_ClearBans(&bans);
         REQUIRE(bans.ban_count==0);
-        REQUIRE(!DM_IsBanned(&bans,blocked,0));
+        REQUIRE(!DM_IsBanned(&bans,blocked,0,DM_SCOPE_BOTH));
 
         // Allow list: same grammar and matching, but a separate set, and it is
         // only consulted by the caller when allowlist_only is set.
         memset(&bans,0,sizeof(bans));
-        REQUIRE(!DM_IsAllowed(&bans,blocked));      // empty allow list allows nothing
+        REQUIRE(!DM_IsAllowed(&bans,blocked,0,DM_SCOPE_BOTH));      // empty allow list allows nothing
         REQUIRE(DM_AddAllowed(&bans,"203.0.113.0/24"));
-        REQUIRE(DM_IsAllowed(&bans,blocked));
-        REQUIRE(!DM_IsAllowed(&bans,allowed));
+        REQUIRE(DM_IsAllowed(&bans,blocked,0,DM_SCOPE_BOTH));
+        REQUIRE(!DM_IsAllowed(&bans,allowed,0,DM_SCOPE_BOTH));
         REQUIRE(!DM_AddAllowed(&bans,"203.0.113.0/24"));  // duplicate
         REQUIRE(!DM_AddAllowed(&bans,"192.168.10.5/24")); // non-canonical
         REQUIRE(bans.allowed_count==1);
         // The two lists are independent: allowing does not ban, banning does not allow.
-        REQUIRE(!DM_IsBanned(&bans,blocked,0));
+        REQUIRE(!DM_IsBanned(&bans,blocked,0,DM_SCOPE_BOTH));
         REQUIRE(DM_AddBan(&bans,"203.0.113.7"));
-        REQUIRE(DM_IsBanned(&bans,blocked,0) && DM_IsAllowed(&bans,blocked));
+        REQUIRE(DM_IsBanned(&bans,blocked,0,DM_SCOPE_BOTH) && DM_IsAllowed(&bans,blocked,0,DM_SCOPE_BOTH));
         DM_ClearAllowed(&bans);
-        REQUIRE(!DM_IsAllowed(&bans,blocked));
-        REQUIRE(DM_IsBanned(&bans,blocked,0));        // clearing one list leaves the other
+        REQUIRE(!DM_IsAllowed(&bans,blocked,0,DM_SCOPE_BOTH));
+        REQUIRE(DM_IsBanned(&bans,blocked,0,DM_SCOPE_BOTH));        // clearing one list leaves the other
     }
 
     // Temporary bans: "until <ISO-8601 UTC>" stops applying at that instant
@@ -149,10 +149,10 @@ int main(void)
         REQUIRE(DM_AddBan(&temp,"203.0.113.7 until 2030-01-01T00:00:00Z"));
         REQUIRE(temp.bans[0].expires!=0);
         // Before the deadline the ban applies.
-        REQUIRE(DM_IsBanned(&temp,blocked,temp.bans[0].expires-1));
+        REQUIRE(DM_IsBanned(&temp,blocked,temp.bans[0].expires-1,DM_SCOPE_BOTH));
         // At and after the deadline it does not, even before pruning runs.
-        REQUIRE(!DM_IsBanned(&temp,blocked,temp.bans[0].expires));
-        REQUIRE(!DM_IsBanned(&temp,blocked,temp.bans[0].expires+1));
+        REQUIRE(!DM_IsBanned(&temp,blocked,temp.bans[0].expires,DM_SCOPE_BOTH));
+        REQUIRE(!DM_IsBanned(&temp,blocked,temp.bans[0].expires+1,DM_SCOPE_BOTH));
 
         // Pruning removes it, so the table cannot fill up with dead rules.
         REQUIRE(DM_PruneBans(&temp,temp.bans[0].expires-1)==0);
@@ -164,7 +164,7 @@ int main(void)
         memset(&temp,0,sizeof(temp));
         REQUIRE(DM_AddBan(&temp,"203.0.113.7"));
         REQUIRE(temp.bans[0].expires==0);
-        REQUIRE(DM_IsBanned(&temp,blocked,0xffffffffu));
+        REQUIRE(DM_IsBanned(&temp,blocked,0xffffffffu,DM_SCOPE_BOTH));
         REQUIRE(DM_PruneBans(&temp,0xffffffffu)==0);
 
         // Malformed expiry must be rejected, not silently treated as permanent.
@@ -184,6 +184,93 @@ int main(void)
         (void)deadline;
     }
 
-    puts("Master model: schema, bounds, lease/expiry, source/token auth, capacity, header validation and ban rules OK");
+    // Rule scope: a relay-only ban must not silence a peer's registration, and
+    // a control-only ban must not eject it from a relay. Unscoped rules keep
+    // applying everywhere, so an existing ban file changes meaning not at all.
+    {
+        dm_directory_t scoped;
+        unsigned char peer[4]={203,0,113,7};
+        unsigned char other[4]={198,51,100,9};
+
+        memset(&scoped,0,sizeof(scoped));
+        REQUIRE(DM_AddBan(&scoped,"203.0.113.7 scope relay"));
+        REQUIRE(scoped.bans[0].scope==DM_SCOPE_RELAY);
+        REQUIRE(scoped.bans[0].expires==0);
+        REQUIRE(DM_IsBanned(&scoped,peer,0,DM_SCOPE_RELAY));
+        REQUIRE(!DM_IsBanned(&scoped,peer,0,DM_SCOPE_CONTROL));
+        REQUIRE(!DM_IsBanned(&scoped,other,0,DM_SCOPE_RELAY));
+
+        // Scope without a deadline and with one, in either the natural order.
+        REQUIRE(DM_AddBan(&scoped,"198.51.100.9 scope control"));
+        REQUIRE(scoped.bans[1].scope==DM_SCOPE_CONTROL);
+        REQUIRE(DM_IsBanned(&scoped,other,0,DM_SCOPE_CONTROL));
+        REQUIRE(!DM_IsBanned(&scoped,other,0,DM_SCOPE_RELAY));
+
+        REQUIRE(DM_AddBan(&scoped,"192.0.2.5 until 2030-01-01T00:00:00Z scope relay"));
+        REQUIRE(scoped.bans[2].scope==DM_SCOPE_RELAY);
+        REQUIRE(scoped.bans[2].expires!=0);
+        {
+            unsigned char timed[4]={192,0,2,5};
+            REQUIRE(DM_IsBanned(&scoped,timed,scoped.bans[2].expires-1,DM_SCOPE_RELAY));
+            REQUIRE(!DM_IsBanned(&scoped,timed,scoped.bans[2].expires,DM_SCOPE_RELAY));
+            REQUIRE(!DM_IsBanned(&scoped,timed,scoped.bans[2].expires-1,DM_SCOPE_CONTROL));
+        }
+
+        // Explicit "both" is the default, not a third kind of rule.
+        REQUIRE(DM_AddBan(&scoped,"192.0.2.77 scope both"));
+        REQUIRE(scoped.bans[3].scope==DM_SCOPE_BOTH);
+        {
+            unsigned char everywhere[4]={192,0,2,77};
+            REQUIRE(DM_IsBanned(&scoped,everywhere,0,DM_SCOPE_CONTROL));
+            REQUIRE(DM_IsBanned(&scoped,everywhere,0,DM_SCOPE_RELAY));
+        }
+
+        // Same address with different scopes are distinct rules, so an operator
+        // can ban relay-only first and extend it later without a conflict.
+        REQUIRE(DM_AddBan(&scoped,"203.0.113.7 scope control"));
+        REQUIRE(scoped.ban_count==5);
+        REQUIRE(DM_IsBanned(&scoped,peer,0,DM_SCOPE_CONTROL));
+        REQUIRE(DM_IsBanned(&scoped,peer,0,DM_SCOPE_RELAY));
+        // ...but an exact repeat still is not.
+        REQUIRE(!DM_AddBan(&scoped,"203.0.113.7 scope control"));
+
+        // A malformed or unknown scope is an error, never a silent widening to
+        // "both": a typo must not start blocking the port the operator spared.
+        REQUIRE(!DM_AddBan(&scoped,"198.18.0.1 scope"));
+        REQUIRE(!DM_AddBan(&scoped,"198.18.0.2 scope Control"));
+        REQUIRE(!DM_AddBan(&scoped,"198.18.0.3 scope gameport"));
+        REQUIRE(!DM_AddBan(&scoped,"198.18.0.4 scope relay extra"));
+        REQUIRE(!DM_AddBan(&scoped,"198.18.0.5 scope relay until 2030-01-01T00:00:00Z"));
+        REQUIRE(!DM_AddBan(&scoped,"198.18.0.6 until 2030-01-01T00:00:00Z scope"));
+        REQUIRE(!DM_AddBan(&scoped,"198.18.0.7 until 2030-01-01T00:00:00Zscope relay"));
+
+        // The allow list shares the grammar, and the per-port count is what the
+        // startup check uses to avoid locking a served port out.
+        memset(&scoped,0,sizeof(scoped));
+        REQUIRE(DM_AddAllowed(&scoped,"203.0.113.7 scope relay"));
+        REQUIRE(DM_AddAllowed(&scoped,"198.51.100.9"));
+        REQUIRE(DM_AllowedRules(&scoped,DM_SCOPE_RELAY,0)==2);   // relay rule + unscoped
+        REQUIRE(DM_AllowedRules(&scoped,DM_SCOPE_CONTROL,0)==1); // only the unscoped one
+        REQUIRE(DM_IsAllowed(&scoped,peer,0,DM_SCOPE_RELAY));
+        REQUIRE(!DM_IsAllowed(&scoped,peer,0,DM_SCOPE_CONTROL));
+        REQUIRE(DM_IsAllowed(&scoped,other,0,DM_SCOPE_CONTROL));
+        REQUIRE(DM_IsAllowed(&scoped,other,0,DM_SCOPE_RELAY));
+        // A temporary allow must stop permitting; ignoring the deadline would
+        // leave a permit that never ends.
+        REQUIRE(DM_AddAllowed(&scoped,"192.0.2.5 until 2030-01-01T00:00:00Z"));
+        {
+            unsigned char timed[4]={192,0,2,5};
+            REQUIRE(DM_IsAllowed(&scoped,timed,scoped.allowed[2].expires-1,DM_SCOPE_CONTROL));
+            REQUIRE(!DM_IsAllowed(&scoped,timed,scoped.allowed[2].expires,DM_SCOPE_CONTROL));
+        }
+        // Expired permits are pruned like expired bans, or 64 dead lines would
+        // make the cap reject new rules.
+        REQUIRE(DM_AllowedRules(&scoped,DM_SCOPE_CONTROL,scoped.allowed[2].expires)==1);
+        REQUIRE(DM_PruneAllowed(&scoped,scoped.allowed[2].expires-1)==0);
+        REQUIRE(DM_PruneAllowed(&scoped,scoped.allowed[2].expires)==1);
+        REQUIRE(scoped.allowed_count==2);
+    }
+
+    puts("Master model: schema, bounds, lease/expiry, source/token auth, capacity, header validation, ban rules and rule scope OK");
     return 0;
 }

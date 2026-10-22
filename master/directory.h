@@ -26,6 +26,11 @@ typedef struct
 // a different IP, and would also punish an innocent third party whose address
 // was advertised. Source is what the kernel tells us and what auth/limits use.
 #define DM_MAX_BANS 64
+// Which listening port a rule governs. A relay ban should not also silence a
+// peer's registration, and a control ban should not be able to cut a player out
+// of a relayed session, so rules can be scoped. DM_SCOPE_BOTH is the default and
+// keeps every existing file meaning exactly what it meant before.
+enum { DM_SCOPE_BOTH=0, DM_SCOPE_CONTROL, DM_SCOPE_RELAY };
 typedef struct
 {
     unsigned char network[4];
@@ -34,6 +39,7 @@ typedef struct
     // pruned on reload/periodically, so an expired rule stops applying even if
     // the file is never touched again.
     uint64_t expires;
+    unsigned int scope;
 } dm_ban_t;
 typedef struct
 {
@@ -54,7 +60,8 @@ typedef struct
 // Syntax: private-or-loopback-IPv4/canonical-prefix=public-IPv4.
 int DM_AddAddressMap(dm_directory_t *directory, const char *text);
 int DM_AddHairpinSubnet(dm_directory_t *directory, const char *cidr);
-// Ban rule syntax: IPv4 or canonical IPv4/prefix. A host address means /32.
+// Ban rule syntax: IPv4 or canonical IPv4/prefix, optional " until <UTC>",
+// optional " scope control|relay|both". A host address means /32.
 // Returns 0 on malformed input, overflow or an exact duplicate; callers treat
 // that as a config error rather than silently ignoring half a ban list.
 // Shared rule parser, exposed so both lists use identical grammar and the
@@ -64,10 +71,12 @@ int DM_AddBan(dm_directory_t *directory, const char *text);
 // Clears every rule, used when reloading the file so a removed line really
 // removes the ban.
 void DM_ClearBans(dm_directory_t *directory);
-// True when the TCP source address matches a ban rule that has not expired.
+// True when the TCP source address matches a ban rule that has not expired and
+// that governs `scope` (DM_SCOPE_CONTROL or DM_SCOPE_RELAY).
 // `now` is Unix seconds; 0 means "no expiry has passed yet", which keeps the
 // permanent-only callers and tests unchanged.
-int DM_IsBanned(const dm_directory_t *directory, const unsigned char source[4], uint64_t now);
+int DM_IsBanned(const dm_directory_t *directory, const unsigned char source[4],
+                uint64_t now, unsigned int scope);
 // Drops expired ban rules. Returns how many were removed.
 unsigned int DM_PruneBans(dm_directory_t *directory, uint64_t now);
 
@@ -76,7 +85,14 @@ unsigned int DM_PruneBans(dm_directory_t *directory, uint64_t now);
 // over the allow list, so denying always beats permitting.
 int DM_AddAllowed(dm_directory_t *directory, const char *text);
 void DM_ClearAllowed(dm_directory_t *directory);
-int DM_IsAllowed(const dm_directory_t *directory, const unsigned char source[4]);
+int DM_IsAllowed(const dm_directory_t *directory, const unsigned char source[4],
+                 uint64_t now, unsigned int scope);
+// How many allow rules govern `scope` and have not expired. Used at startup and
+// on reload to refuse an enforced allow list that would lock every client out of
+// one of the served ports.
+unsigned int DM_AllowedRules(const dm_directory_t *directory, unsigned int scope, uint64_t now);
+// Drops expired allow rules. Returns how many were removed.
+unsigned int DM_PruneAllowed(dm_directory_t *directory, uint64_t now);
 void DM_AdvertisedAddress(const dm_directory_t *directory, const unsigned char source[4], unsigned char output[4]);
 int DM_PublicIPv4(const unsigned char ip[4]);
 int DM_MappingReady(const dm_directory_t *directory, const unsigned char source[4]);

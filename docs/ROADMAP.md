@@ -384,6 +384,12 @@ partition может породить две отдельные локальны
   master cid/source port/specific reject/progress reasons без secrets.
   Refusal/timeout/truncated/wrong-service/rejected cases покрыты tests, полные
   локальные 29/26/28 suites повторно зелёные. Реальная внешняя причина ещё не установлена.
+- [x] Модерация: `banlist=`/`allowlist=` по TCP source, `access-mode`,
+  TTL-баны (`until <UTC>`), hot reload с сохранением прежнего списка при ошибке,
+  и `scope control|relay|both` — правило можно привязать к порту. Allow-проверка
+  при старте и reload идёт по каждому обслуживаемому порту, поэтому список,
+  запирающий порт, не применяется; просроченное разрешение действующим не
+  считается.
 - [ ] Browser compatibility badges/ping/filter/favorites; сейчас не обещать
   совпадение build/resources до handshake и game-port reachability.
 - [ ] Отдельный безопасный game-query/challenge для port reachability; текущий

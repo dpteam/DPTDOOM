@@ -179,8 +179,10 @@ ctest --preset windows-headless
   выключено по умолчанию): операции управления на relay-порту получают
   DM_BAD_REQUEST, а relay-операция на порту управления — статус 5 DM_REDIRECT
   с номером порта; движок следует редиректу один раз, строка LIST не меняется
-  (порт в неё не упаковывается). Ban/allow по-прежнему общие для обоих портов
-  (scope — в IDEAS).
+  (порт в неё не упаковывается). Ban/allow-правила можно привязать к порту:
+  `scope control|relay|both` (по умолчанию both), проверка allow при старте и
+  reload идёт по каждому обслуживаемому порту; reload, запирающий порт,
+  отвергается. Просроченное allow-правило действующим не считается.
   Native master/relay.c, docs/RELAY.md; not arbitrary proxy/TLS/auth. Host lease
   source+secret, guest public session-id, consumed listing; direct first then
   2s fallback. Tests master-relay/master-publish/UI include unavailable direct,
