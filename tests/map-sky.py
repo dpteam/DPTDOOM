@@ -201,9 +201,11 @@ def main():
         supported = (
             # Boom generalized doors: all eight trigger classes.
             [0x3c00 + t for t in range(8)]
+            # Boom sector-effect lines: friction, wind, current.
             # Floors: every target, both directions, including the texture-based
             # one and the relative 24/32 heights.
-            + [0x6000, 0x6002, 0x6004, 0x6006, 0x6007,
+            + [223, 224, 225,
+               0x6000, 0x6002, 0x6004, 0x6006, 0x6007,
                0x6080, 0x6100, 0x6180, 0x6200, 0x6300, 0x6380, 0x6280,
                0x6040, 0x60c0, 0x6140, 0x61c0, 0x6240, 0x6340, 0x7140,
                0x6400, 0x6800, 0x6c00, 0x6c20,
@@ -229,6 +231,7 @@ def main():
         # numbers). The rest are the two remaining combinations: crush in the
         # direction where it has no meaning.
         unsupported = [142, 78, 85,
+                       226,      # point-source push/pull: needs MT_PUSH/MT_PULL
                        0x7000,   # floor: crush while lowering
                        0x4040 | 0x1000]  # ceiling: crush while raising
         overlay_multi(iwad, root / "unsupported.wad", unsupported)
@@ -247,16 +250,17 @@ def main():
         _, text = run("sec-supported", ["-file", str(root / "sec-supported.wad")])
         assert "Map compatibility:" not in text, text
 
-        # Friction is supported now, so a sector flagged with it must stay quiet.
-        overlay(iwad, root / "sec-friction.wad", sector_special=0x100)
-        _, text = run("sec-friction", ["-file", str(root / "sec-friction.wad")])
-        assert "Map compatibility:" not in text, text
-
-        for name, value in (("sec-push", 0x200), ("sec-undefined", 0x400)):
+        # Friction and push are both supported now, so sectors flagged with them
+        # must stay quiet. Only undefined bits are still reported.
+        for name, value in (("sec-friction", 0x100), ("sec-push", 0x200)):
             overlay(iwad, root / (name + ".wad"), sector_special=value)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
-            assert "Map compatibility:" in text and " sector special(s)" in text, text
-            assert (" %d" % value) in text, text
+            assert "Map compatibility:" not in text, text
+
+        overlay(iwad, root / "sec-undefined.wad", sector_special=0x400)
+        _, text = run("sec-undefined", ["-file", str(root / "sec-undefined.wad")])
+        assert "Map compatibility:" in text and " sector special(s)" in text, text
+        assert " 1024" in text, text
 
         # The baseline overlay has no Boom specials and must stay quiet, even
         # though stock Doom II MAP01 does use vanilla types 102 and 103.

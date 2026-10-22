@@ -36,6 +36,7 @@
 #include "dpt_genlocked.h"
 #include "dpt_secspecial.h"
 #include "dpt_friction.h"
+#include "dpt_push.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -1364,6 +1365,50 @@ void P_UpdateSpecials (void)
 	if (!levelTimeCount)
 	    G_ExitLevel();
     }
+
+    //	BOOM PUSHERS (wind and current)
+    //
+    // Applied here rather than from a thinker: wind and current are constant
+    // per sector, derived from the map at load, so there is no state to tick and
+    // nothing to archive. Doing it in this one place keeps the order relative to
+    // thing movement fixed, which is what makes the result reproducible.
+    //
+    // Documented narrowing: Boom walks each sector's touching-thing list (every
+    // thing whose bounding box overlaps the sector). This engine has no such
+    // list, so it walks the sector's own thing list - things whose centre is in
+    // the sector. A thing straddling a boundary is pushed only once its centre
+    // crosses, the same narrowing as variable friction.
+    for (i = 0; i < numsectors; ++i)
+    {
+	sector_t* sec = &sectors[i];
+	mobj_t* thing;
+
+	if (sec->push_type == DPT_PUSH_NONE || !DPT_PushFlagged(sec->special))
+	    continue;
+
+	for (thing = sec->thinglist; thing; thing = thing->snext)
+	{
+	    dpt_push_t force;
+
+	    // Boom (MBF rules): players and things that can be killed or shot,
+	    // but never noclip objects. Missiles and decorations are excluded.
+	    if (!(thing->player || (thing->flags & (MF_COUNTKILL | MF_SHOOTABLE))))
+		continue;
+	    if (thing->flags & MF_NOCLIP)
+		continue;
+
+	    force = DPT_PushForce((dpt_pushtype_t)sec->push_type,
+				  thing->z > thing->floorz,
+				  sec->push_x, sec->push_y);
+	    if (!force.x && !force.y)
+		continue;
+
+	    // Boom shifts by FRACBITS-PUSH_FACTOR, where PUSH_FACTOR is 7. Keeping
+	    // the same scaling makes the strength match Boom's for the same line.
+	    thing->momx += force.x << (FRACBITS - 7);
+	    thing->momy += force.y << (FRACBITS - 7);
+	}
+    }
     
     //	ANIMATE FLATS AND TEXTURES GLOBALLY
     for (anim = anims ; anim < lastanim ; anim++)
@@ -1808,6 +1853,30 @@ void P_SpawnSpecials (void)
 	    }
     }
 
+    // Boom pusher sectors: wind (224) and current (225). The point-source variant
+    // (226) is deliberately not handled here - it needs MT_PUSH/MT_PULL things,
+    // which this engine does not have, and is reported instead.
+    for (i = 0; i < numsectors; ++i)
+    {
+	sectors[i].push_type = DPT_PUSH_NONE;
+	sectors[i].push_x = 0;
+	sectors[i].push_y = 0;
+    }
+    for (i = 0; i < numlines; ++i)
+    {
+	dpt_pushtype_t type = DPT_PushTypeForLine(lines[i].special);
+	int secnum;
+	if (type == DPT_PUSH_NONE)
+	    continue;
+	for (secnum = 0; secnum < numsectors; ++secnum)
+	    if (sectors[secnum].tag == lines[i].tag)
+	    {
+		sectors[secnum].push_type = (int)type;
+		sectors[secnum].push_x = DPT_PushMagnitude(lines[i].dx);
+		sectors[secnum].push_y = DPT_PushMagnitude(lines[i].dy);
+	    }
+    }
+
     // Boom/MBF extended linedef specials are 142 and above, plus two types that
     // Boom placed inside the vanilla 1..141 range: 78 (SR change floor texture
     // and type, numeric model) and 85 (scrolling wall, right). Vanilla Doom and
@@ -1827,6 +1896,11 @@ void P_SpawnSpecials (void)
 	    if (special < 142 && special != 78 && special != 85)
 		continue;
 	    if (special == 271 || special == 272)
+		continue;
+	    // Boom's sector-effect lines: variable friction, wind and current. The
+	    // point-source push/pull line (226) is deliberately absent - it needs
+	    // MT_PUSH/MT_PULL things this engine does not have, so it stays reported.
+	    if (special == 223 || special == 224 || special == 225)
 		continue;
 	    if (DPT_GenDoorSupported(special))
 		continue;

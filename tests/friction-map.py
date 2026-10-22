@@ -100,8 +100,9 @@ with tempfile.TemporaryDirectory(prefix="dptdoom-friction-") as temporary:
     repeat = run(root, "friction-repeat", ["-file", str(root / "friction.wad")])
     assert repeat == with_friction, ("friction run is not reproducible", repeat, with_friction)
 
-    # The unsupported push bit must still be reported, so a map using it does not
-    # look fully supported while the mechanic does nothing.
+    # The push bit is supported too now, so a sector flagged with it must stay
+    # quiet. The point-source push/pull line (226) is what still gets reported,
+    # and push-map covers that.
     sky.overlay(iwad, root / "push.wad", sector_special=0x200)
     work = root / "push"
     work.mkdir()
@@ -109,6 +110,6 @@ with tempfile.TemporaryDirectory(prefix="dptdoom-friction-") as temporary:
                              "-headless-tics", "5", "-file", str(root / "push.wad")],
                             cwd=work, capture_output=True, text=True, timeout=120)
     text = result.stdout + result.stderr
-    assert "Map compatibility:" in text and " sector special(s)" in text, text
+    assert "Map compatibility:" not in text, text
 
-    print("Boom friction: flag alone is a no-op, 223 changes movement, reproducible, push still reported OK")
+    print("Boom friction: flag alone is a no-op, 223 changes movement, reproducible, push bit quiet OK")

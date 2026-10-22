@@ -32,11 +32,12 @@ boolean DPT_SecSpecialSupported(int special)
     if (!DPT_SecSpecialDecode(special, &sec))
         return false;
 
-    // Friction is implemented: linedef 223 sets a per-sector friction value at
-    // level load and the movement code honours it on flagged sectors. Push still
-    // needs a pusher thinker with a touching-things list and water-height
-    // tracking, neither of which this engine has, so it is reported.
-    return !sec.push;
+    // Friction (linedef 223) and push (linedefs 224/225) are both implemented:
+    // the values are derived from the map at level load and honoured on flagged
+    // sectors. The point-source push/pull variant (linedef 226) is not, but it is
+    // a linedef rather than a sector bit, so it is reported there instead of
+    // making every pushed sector look unsupported.
+    return true;
 }
 
 int DPT_SecSpecialDamage(int damage)

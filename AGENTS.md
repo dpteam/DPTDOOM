@@ -243,9 +243,15 @@ ctest --preset windows-headless
   применяется в `P_XYMovement` и `P_MovePlayer` только на секторах с битом
   `0x0100`. Известное сужение: берётся сектор, где объект стоит, а не все
   касаемые (нет touching-sector list) — записано в коде и MAPS.md.
+  **Pushers wind/current (linedef 224/225)** реализованы: `dpt_push.c` даёт силу
+  по типу и высоте (ветер — полная в воздухе/половинная на полу, течение — ноль в
+  воздухе/полная на полу), сектор хранит `push_type`/`push_x`/`push_y` вне
+  savegame, применяется в `P_UpdateSpecials` к игрокам и `MF_COUNTKILL`/
+  `MF_SHOOTABLE` без `MF_NOCLIP`, масштаб `<< (FRACBITS-7)` как в BOOM. То же
+  сужение: `sector->thinglist` (центр), не touching-sector list.
   Не реализованы и попадают в отчёт `Map compatibility:`: crush в бессмысленном
-  направлении и push/pull sector specials (нужен pusher-thinker с
-  touching-sector list и учётом воды). Все цели floor/ceiling/lift, включая `sT`,
+  направлении и linedef 226 (push/pull от точечного источника — нужны
+  `MT_PUSH`/`MT_PULL`, которых нет). Все цели floor/ceiling/lift, включая `sT`,
   `NnC`, perpetual и все четыре варианта `change`, теперь поддержаны — для них
   добавлены `P_FindNextHighestCeiling`/`P_FindNextLowestCeiling`,
   `P_FindShortestTextureAround`/`P_FindShortestUpperAround` (последние

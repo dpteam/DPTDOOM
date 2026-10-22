@@ -47,10 +47,10 @@ boolean DPT_SecSpecialIsGeneralized (int special);
 // undefined, so they are reported rather than guessed.
 boolean DPT_SecSpecialDecode (int special, dpt_secspecial_t* out);
 
-// True when every set bit is implemented. Push needs a pusher thinker plus a
-// per-object touching-sector list and water-height tracking, which this engine
-// does not have, so it is reported rather than silently ignored. Friction is
-// implemented through linedef 223 and the movement code.
+// True when every set bit is implemented. Friction and push are both derived
+// from the map at level load (linedefs 223, 224 and 225), so every defined bit is
+// supported; only bits outside DPT_SEC_KNOWN_MASK are rejected, because BOOM
+// leaves those undefined.
 boolean DPT_SecSpecialSupported (int special);
 
 // Damage per damage field value: 0, 5, 10, 20.

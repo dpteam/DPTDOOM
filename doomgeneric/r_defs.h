@@ -115,6 +115,13 @@ typedef	struct
     int		friction;
     int		movefactor;
 
+    // Boom pusher sectors (linedefs 224/225). Same treatment: derived from the
+    // map at level load, never archived, so the save format is untouched.
+    // push_type is a dpt_pushtype_t; the two magnitudes are whole map units.
+    int		push_type;
+    int		push_x;
+    int		push_y;
+
     // 0 = untraversed, 1,2 = sndlines -1
     int		soundtraversed;
 

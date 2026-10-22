@@ -599,6 +599,15 @@ partition может породить две отдельные локальны
   отдаётся декодером двумя разными полями (`monsters`/`model`). `ceiling_t`
   получил `newspecial`/`texture`, которые архивируются **только** для типов
   `genCeilingChg*`, поэтому ванильный save layout не изменился.
+- [x] Boom generalized **sector specials** целиком: base/damage/secret,
+  **variable friction** (linedef 223) и **pushers wind/current** (linedef 224/225).
+  Friction считается из длины линии (`dpt_friction.c`), pushers — из направления
+  (`dpt_push.c`); оба вынесены в data-free модули и применяются из
+  `P_XYMovement`/`P_MovePlayer` и `P_UpdateSpecials`. Значения выводятся из карты
+  при загрузке уровня и **вне savegame**, поэтому формат сохранения не менялся.
+  То же задокументированное сужение у обоих: `sector->thinglist` (центр объекта),
+  а не per-object touching-sector list, как в BOOM. Linedef 226 (push/pull от
+  точки) не реализован — нужны `MT_PUSH`/`MT_PULL`, и он честно попадает в отчёт.
 - [x] Boom generalized **crushers** (`0x2f80..0x2fff`): trigger/speed/monster/
   silent, скорости 1x..8x `CEILSPEED`, `silent` → `silentCrushAndRaise`.
   Добавлено `ceiling_t.basespeed`, чтобы `T_MoveCeiling` не сбрасывал
