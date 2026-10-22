@@ -59,15 +59,16 @@ int main(void)
     REQUIRE(DPT_SecSpecialSuitBlocks(2));
     REQUIRE(!DPT_SecSpecialSuitBlocks(3));
 
-    // Supported subset: base type, damage and secret only. Friction (bit 8) and
-    // push (bit 9) need thinkers this engine does not have.
+    // Supported subset: base type, damage, secret and friction. Push (bit 9)
+    // still needs a pusher thinker plus per-object touching-sector and
+    // water-height tracking, which this engine does not have.
     REQUIRE(DPT_SecSpecialSupported(0));           // no special at all
     REQUIRE(DPT_SecSpecialSupported(0x61));        // base 1, damage 3
     REQUIRE(DPT_SecSpecialSupported(0x80 | 5));    // secret, base 5
     REQUIRE(DPT_SecSpecialSupported(0xE1));        // base 1, damage 3, secret
-    REQUIRE(!DPT_SecSpecialSupported(0x100));      // friction
+    REQUIRE(DPT_SecSpecialSupported(0x100));       // friction
     REQUIRE(!DPT_SecSpecialSupported(0x200));      // push
-    REQUIRE(!DPT_SecSpecialSupported(0x300));      // both
+    REQUIRE(!DPT_SecSpecialSupported(0x300));      // friction + push
     REQUIRE(!DPT_SecSpecialSupported(0x400));      // undefined bit
 
     // Vanilla specials stay in the vanilla path, so their damage field is not

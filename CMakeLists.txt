@@ -79,7 +79,7 @@ set(engine_sources
 )
 list(TRANSFORM engine_sources PREPEND "doomgeneric/")
 add_executable(dptdoom ${engine_sources})
-target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c doomgeneric/dpt_secspecial.c doomgeneric/dpt_pitch.c)
+target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c doomgeneric/dpt_secspecial.c doomgeneric/dpt_pitch.c doomgeneric/dpt_friction.c)
 target_compile_definitions(dptdoom PRIVATE DPT_DEH_CLASSIC)
 target_include_directories(dptdoom PRIVATE doomgeneric)
 if(DPTDOOM_NETWORK)
@@ -264,6 +264,9 @@ if(BUILD_TESTING)
     target_include_directories(deh-misc-test PRIVATE doomgeneric)
     target_compile_definitions(deh-misc-test PRIVATE DPT_DEH_CLASSIC $<$<C_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
     add_test(NAME deh-misc COMMAND deh-misc-test)
+    add_executable(friction-test tests/friction.c doomgeneric/dpt_friction.c)
+    target_include_directories(friction-test PRIVATE doomgeneric)
+    add_test(NAME friction COMMAND friction-test)
     add_executable(pitch-math-test tests/pitch-math.c doomgeneric/dpt_pitch.c)
     target_include_directories(pitch-math-test PRIVATE doomgeneric)
     add_test(NAME pitch-math COMMAND pitch-math-test)
@@ -501,6 +504,10 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/state-smoke.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
         set_tests_properties(state-smoke PROPERTIES TIMEOUT 180)
+        add_test(NAME friction-map COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/friction-map.py"
+            --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+        set_tests_properties(friction-map PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         add_test(NAME pitch-aim COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/pitch-aim.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
@@ -642,6 +649,7 @@ set(DPTDOOM_FAST_TESTS
     # Data-free decoders and parsers
     deh-misc
     pitch-math
+    friction
     gendoor genfloor genceiling gencrusher genstairs genlift genlocked
     secspecial
     config-keys

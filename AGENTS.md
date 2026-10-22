@@ -237,9 +237,16 @@ ctest --preset windows-headless
   без карты; data-free тесты `gendoor`/`genfloor`/`genceiling`/`gencrusher`/
   `genstairs`/`genlift`/`genlocked`/`secspecial`). Задержка generalized-лифтов
   исправлена на BOOM'овскую (35/105/175/350 тиков вместо 8/24/40/80).
+  **Variable friction (linedef 223)** реализован: `dpt_friction.c` считает
+  значение из длины линии (граница — `ORIG_FRICTION 0xE800`), сектор хранит
+  `friction`/`movefactor` вне savegame (выводится из карты при загрузке уровня),
+  применяется в `P_XYMovement` и `P_MovePlayer` только на секторах с битом
+  `0x0100`. Известное сужение: берётся сектор, где объект стоит, а не все
+  касаемые (нет touching-sector list) — записано в коде и MAPS.md.
   Не реализованы и попадают в отчёт `Map compatibility:`: цель `sT` (floor и
   ceiling), ceiling `NnC`, perpetual-лифт, texture/model `change`, crush в
-  бессмысленном направлении, friction/push sector specials.
+  бессмысленном направлении, push/pull sector specials (нужен pusher-thinker с
+  touching-sector list и учётом воды).
   Не выдавать загрузку карты за совместимость. Детали/тесты — `docs/MAPS.md`,
   `map-sky` и data-free тесты.
 - DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Text + Weapon frames + Thing numeric/flags/states/sounds + Frame graph/visual/psprite** classic

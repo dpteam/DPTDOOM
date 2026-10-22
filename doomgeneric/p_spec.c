@@ -35,6 +35,7 @@
 #include "dpt_genlift.h"
 #include "dpt_genlocked.h"
 #include "dpt_secspecial.h"
+#include "dpt_friction.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -1775,6 +1776,36 @@ void P_SpawnSpecials (void)
 	    numlinespecials++;
 	    break;
 	}
+    }
+
+    // Boom variable friction (linedef 223). Like the sky transfer above, this is
+    // map data: it is recomputed on every level load and deliberately kept out
+    // of the savegame, so a save made before this existed still loads.
+    //
+    // Every sector starts at vanilla friction. Boom only honours the stored value
+    // on sectors flagged with FRICTION_MASK, which is checked at use time - so a
+    // 223 line that tags an unflagged sector does nothing, exactly as in Boom.
+    for (i = 0; i < numsectors; ++i)
+    {
+	sectors[i].friction = DPT_ORIG_FRICTION;
+	sectors[i].movefactor = DPT_ORIG_FRICTION_FACTOR;
+    }
+    for (i = 0; i < numlines; ++i)
+    {
+	dpt_friction_t values;
+	int secnum;
+	if (lines[i].special != 223)
+	    continue;
+	// Boom derives the value from the line's length, in map units.
+	if (!DPT_FrictionForLength(P_AproxDistance(lines[i].dx, lines[i].dy) >> FRACBITS,
+				   &values))
+	    continue;
+	for (secnum = 0; secnum < numsectors; ++secnum)
+	    if (sectors[secnum].tag == lines[i].tag)
+	    {
+		sectors[secnum].friction = values.friction;
+		sectors[secnum].movefactor = values.movefactor;
+	    }
     }
 
     // Boom/MBF extended linedef specials are 142 and above, plus two types that

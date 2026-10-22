@@ -109,6 +109,12 @@ typedef	struct
     // not part of the savegame archive.
     int		sky;
 
+    // Boom variable friction from linedef 223. Also recomputed at level load
+    // and kept out of the savegame for the same reason: it is map data, not
+    // simulation state, so a save made before this field existed still loads.
+    int		friction;
+    int		movefactor;
+
     // 0 = untraversed, 1,2 = sndlines -1
     int		soundtraversed;
 

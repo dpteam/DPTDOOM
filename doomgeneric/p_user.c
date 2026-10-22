@@ -25,6 +25,7 @@
 #include "d_event.h"
 
 #include "p_local.h"
+#include "dpt_friction.h"
 
 #include "doomstat.h"
 
@@ -149,12 +150,23 @@ void P_MovePlayer (player_t* player)
     // Do not let the player control movement
     //  if not onground.
     onground = (player->mo->z <= player->mo->floorz);
-	
-    if (cmd->forwardmove && onground)
-	P_Thrust (player, player->mo->angle, cmd->forwardmove*2048);
-    
-    if (cmd->sidemove && onground)
-	P_Thrust (player, player->mo->angle-ANG90, cmd->sidemove*2048);
+
+    // Boom variable friction also scales how hard the player can push off the
+    // floor. 2048 is the vanilla value, which is exactly Boom's
+    // ORIG_FRICTION_FACTOR, so the default path is unchanged.
+    {
+	int movefactor = DPT_ORIG_FRICTION_FACTOR;
+	sector_t* floor_sector = player->mo->subsector->sector;
+
+	if (DPT_FrictionFlagged(floor_sector->special))
+	    movefactor = floor_sector->movefactor;
+
+	if (cmd->forwardmove && onground)
+	    P_Thrust (player, player->mo->angle, cmd->forwardmove*movefactor);
+
+	if (cmd->sidemove && onground)
+	    P_Thrust (player, player->mo->angle-ANG90, cmd->sidemove*movefactor);
+    }
 
     if ( (cmd->forwardmove || cmd->sidemove) 
 	 && player->mo->state == &states[S_PLAY] )

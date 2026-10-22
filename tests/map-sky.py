@@ -250,7 +250,12 @@ def main():
         _, text = run("sec-supported", ["-file", str(root / "sec-supported.wad")])
         assert "Map compatibility:" not in text, text
 
-        for name, value in (("sec-friction", 0x100), ("sec-undefined", 0x400)):
+        # Friction is supported now, so a sector flagged with it must stay quiet.
+        overlay(iwad, root / "sec-friction.wad", sector_special=0x100)
+        _, text = run("sec-friction", ["-file", str(root / "sec-friction.wad")])
+        assert "Map compatibility:" not in text, text
+
+        for name, value in (("sec-push", 0x200), ("sec-undefined", 0x400)):
             overlay(iwad, root / (name + ".wad"), sector_special=value)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and " sector special(s)" in text, text

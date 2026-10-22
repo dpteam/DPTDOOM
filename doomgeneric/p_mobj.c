@@ -33,6 +33,7 @@
 
 #include "doomstat.h"
 #include "dpt_rules.h"
+#include "dpt_friction.h"
 
 
 void G_PlayerReborn (int player);
@@ -252,8 +253,23 @@ void P_XYMovement (mobj_t* mo)
     }
     else
     {
-	mo->momx = FixedMul (mo->momx, FRICTION);
-	mo->momy = FixedMul (mo->momy, FRICTION);
+	// Boom variable friction. The value lives on the sector and is only
+	// honoured when the sector carries the friction flag; otherwise the vanilla
+	// constant applies, so nothing changes on maps that do not use it.
+	//
+	// Documented narrowing: Boom looks at every sector the object's bounding box
+	// touches and takes the slipperiest, while this engine has no per-object
+	// touching-sector list and uses the sector the object stands in. The
+	// difference is visible only while an object straddles a friction boundary:
+	// ice under half the player's body is not felt until the centre crosses.
+	sector_t* friction_sector = mo->subsector->sector;
+	int friction = FRICTION;
+
+	if (DPT_FrictionFlagged(friction_sector->special))
+	    friction = friction_sector->friction;
+
+	mo->momx = FixedMul (mo->momx, friction);
+	mo->momy = FixedMul (mo->momy, friction);
     }
 }
 

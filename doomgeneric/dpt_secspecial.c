@@ -32,9 +32,11 @@ boolean DPT_SecSpecialSupported(int special)
     if (!DPT_SecSpecialDecode(special, &sec))
         return false;
 
-    // Friction and push are carried by thinkers this engine does not implement.
-    // The base type, damage and secret parts are all implemented.
-    return !sec.friction && !sec.push;
+    // Friction is implemented: linedef 223 sets a per-sector friction value at
+    // level load and the movement code honours it on flagged sectors. Push still
+    // needs a pusher thinker with a touching-things list and water-height
+    // tracking, neither of which this engine has, so it is reported.
+    return !sec.push;
 }
 
 int DPT_SecSpecialDamage(int damage)
