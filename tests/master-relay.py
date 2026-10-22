@@ -197,4 +197,93 @@ with tempfile.TemporaryDirectory(prefix='dptdoom-relay-') as temporary:
                               capture_output=True,text=True,timeout=10)
         assert result.returncode!=0,(label,result.returncode)
 
-    print('Native relay: opt-in, authenticated host, single paired guest, consumed listing, bounded transport/backpressure, dedicated relay port and cleanup OK')
+    # Relay limits: configurable, but the numbers must actually take effect
+    # rather than only appear in the startup banner.
+    def relay_banner(extra):
+        with socket.socket() as r:r.bind(('127.0.0.1',0));port=r.getsockname()[1]
+        with (root/'limits.log').open('wb') as log:
+            process=subprocess.Popen([exe,'--port',str(port),'--relay']+extra,
+                                     cwd=root,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+10
+                while b'Relay ENABLED' not in (root/'limits.log').read_bytes():
+                    if process.poll() is not None:
+                        return process.returncode,(root/'limits.log').read_bytes()
+                    assert time.monotonic()<deadline
+                    time.sleep(.02)
+                return 0,(root/'limits.log').read_bytes()
+            finally:
+                process.terminate();process.wait(10)
+
+    code,text=relay_banner(['--relay-sessions','2','--relay-per-source','1',
+                            '--relay-buffer','1024','--relay-rate','16384',
+                            '--relay-idle-seconds','30','--relay-lifetime-seconds','300'])
+    assert code==0,text
+    assert b'2 session pairs' in text,text
+    assert b'max 1 per source' in text,text
+    assert b'1024-byte buffers' in text,text
+    assert b'16384 bytes/s' in text,text
+    assert b'30s idle' in text and b'300s lifetime' in text,text
+
+    # Defaults are unchanged when nothing is passed, so an existing deployment
+    # behaves exactly as before.
+    code,text=relay_banner([])
+    assert code==0,text
+    assert b'8 session pairs' in text and b'65536 bytes/s' in text,text
+    assert b'120s idle' in text and b'21600s lifetime' in text,text
+
+    # Out-of-range values and contradictory combinations are startup errors, not
+    # silently clamped: a limit that does not do what it says is worse than none.
+    for extra,label in ((['--relay-sessions','0'],'sessions-zero'),
+                        (['--relay-sessions','9'],'sessions-above-max'),
+                        (['--relay-per-source','5'],'per-source-above-max'),
+                        (['--relay-rate','1024'],'rate-below-min'),
+                        (['--relay-buffer','8192'],'buffer-above-array'),
+                        (['--relay-idle-seconds','5'],'idle-below-min'),
+                        (['--relay-lifetime-seconds','30'],'lifetime-below-min'),
+                        (['--relay-sessions','2','--relay-per-source','4'],'per-source-above-sessions'),
+                        (['--relay-idle-seconds','600','--relay-lifetime-seconds','300'],'lifetime-below-idle')):
+        result=subprocess.run([exe,'--port','25135','--relay']+extra,cwd=root,
+                              capture_output=True,text=True,timeout=10)
+        assert result.returncode!=0,(label,result.returncode,result.stdout)
+
+    # A lowered limit must also cap behaviour, not just the banner. With the
+    # defaults a second waiting host from the same source is accepted (cap 4);
+    # with per-source 1 it must be refused, which is the observable difference.
+    with socket.socket() as r:r.bind(('127.0.0.1',0));cap_port=r.getsockname()[1]
+    with (root/'cap.log').open('wb') as log:
+        process=subprocess.Popen([exe,'--port',str(cap_port),'--relay',
+                                  '--relay-sessions','2','--relay-per-source','1'],
+                                 cwd=root,stdout=log,stderr=log)
+        held=[]
+        try:
+            deadline=time.monotonic()+10
+            while b'Relay ENABLED' not in (root/'cap.log').read_bytes():
+                assert process.poll() is None,(root/'cap.log').read_bytes()
+                assert time.monotonic()<deadline
+                time.sleep(.02)
+            def cap_connect(op,body):
+                s=socket.create_connection(('127.0.0.1',cap_port),timeout=5)
+                s.sendall(wire.packet(op,body));return s
+            def cap_query(op,body=b''):
+                with cap_connect(op,body) as s:return wire.reply(s,op)
+            # Two distinct leases from the same source: different game ports, so
+            # the directory accepts both.
+            first=cap_query(2,wire.info(2400))[1][:40]
+            second=cap_query(2,wire.info(2500))[1][:40]
+            host_a=cap_connect(5,first);held.append(host_a)
+            # Waiting, not yet paired, so this is the second concurrent host.
+            host_b=cap_connect(5,second);held.append(host_b)
+            # An accepted attach gets no reply until pairing, so "no reply" would
+            # surface as a socket abort and look like a crash. Report the refusal
+            # status explicitly instead.
+            try:
+                status=wire.reply(host_b,5)[0]
+            except OSError:
+                status=None
+            assert status==4,(status,(root/'cap.log').read_text()[-400:])
+        finally:
+            for s in held:s.close()
+            process.terminate();process.wait(10)
+
+    print('Native relay: opt-in, authenticated host, single paired guest, consumed listing, bounded transport/backpressure, dedicated relay port, configurable limits and cleanup OK')

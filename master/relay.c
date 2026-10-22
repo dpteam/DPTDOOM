@@ -18,8 +18,10 @@ typedef int SOCKET;
 #include "log.h"
 #include <stdio.h>
 
-#define MR_BUFFER 4096
-#define MR_RATE 65536
+#define MR_DEFAULT_RATE 65536
+#define MR_DEFAULT_PER_SOURCE 4
+static mr_limits_t limits = { MR_SESSIONS, MR_DEFAULT_PER_SOURCE, MR_DEFAULT_RATE,
+                              MR_BUFFER, 120, 21600 };
 typedef struct
 {
     SOCKET socket;
@@ -58,6 +60,27 @@ static void Drop(unsigned int index,const char *reason,uint64_t now)
 }
 void MR_Init(void)
 {unsigned int i;memset(sessions,0,sizeof(sessions));for(i=0;i<MR_SESSIONS;++i)sessions[i].peer[0].socket=sessions[i].peer[1].socket=INVALID_SOCKET;}
+int MR_SetLimits(const mr_limits_t *wanted)
+{
+    // Every bound is checked here rather than at each use site, so there is one
+    // place to see what the relay can be configured to do. Rejecting the whole
+    // struct keeps a bad config from applying half a change.
+    if(!wanted)return 0;
+    if(wanted->sessions<1 || wanted->sessions>MR_SESSIONS)return 0;
+    if(wanted->per_source<1 || wanted->per_source>4)return 0;
+    if(wanted->rate<4096 || wanted->rate>1048576)return 0;
+    if(wanted->buffer<512 || wanted->buffer>MR_BUFFER)return 0;
+    if(wanted->idle_seconds<10 || wanted->idle_seconds>3600)return 0;
+    if(wanted->lifetime_seconds<60 || wanted->lifetime_seconds>86400)return 0;
+    // A per-source cap above the session count would be unreachable, which reads
+    // as a configured limit that silently does nothing.
+    if(wanted->per_source>wanted->sessions)return 0;
+    // Lifetime below idle would make the idle limit unreachable in the same way.
+    if(wanted->lifetime_seconds<wanted->idle_seconds)return 0;
+    limits=*wanted;
+    return 1;
+}
+const mr_limits_t *MR_Limits(void){return &limits;}
 static dm_entry_t *Entry(dm_directory_t *d,const unsigned char id[16])
 {unsigned int i;for(i=0;i<DM_MAX_SERVERS;++i)if(d->entries[i].active&&!memcmp(d->entries[i].id,id,16))return &d->entries[i];return NULL;}
 unsigned int MR_Attach(dm_directory_t *d,uintptr_t socket,unsigned int op,const unsigned char source[4],const unsigned char *body,uint64_t now)
@@ -67,14 +90,16 @@ unsigned int MR_Attach(dm_directory_t *d,uintptr_t socket,unsigned int op,const 
     if(op==DM_RELAY_HOST && DM_Renew(d,source,body,now,0,reply)!=DM_OK)return DM_UNAUTHORIZED;
     for(i=0;i<MR_SESSIONS;++i)
     {
-        if(!sessions[i].used){if(free_slot==MR_SESSIONS)free_slot=i;continue;}
+        // Only the first limits.sessions slots are usable, so a lowered limit
+        // really lowers capacity instead of just being reported as lower.
+        if(!sessions[i].used){if(i<limits.sessions && free_slot==MR_SESSIONS)free_slot=i;continue;}
         if(!memcmp(sessions[i].id,body,16))break;
     }
     if(op==DM_RELAY_HOST)
     {
         if(i<MR_SESSIONS)return DM_CONFLICT;
         for(i=0;i<MR_SESSIONS;++i)if(sessions[i].used&&!memcmp(sessions[i].source,source,4))++source_sessions;
-        if(source_sessions>=4)return DM_CAPACITY;
+        if(source_sessions>=limits.per_source)return DM_CAPACITY;
         if(free_slot==MR_SESSIONS)return DM_CAPACITY;
         s=&sessions[free_slot];s->used=1;s->began=s->activity=s->window=now;
         memcpy(s->id,body,16);s->peer[0].socket=(SOCKET)socket;entry->relay_available=1;
@@ -83,7 +108,7 @@ unsigned int MR_Attach(dm_directory_t *d,uintptr_t socket,unsigned int op,const 
     }
     if(i==MR_SESSIONS||sessions[i].paired)return DM_CONFLICT;
     s=&sessions[i];s->peer[1].socket=(SOCKET)socket;s->paired=1;s->began=s->activity=now;
-    for(i=0;i<2;++i){s->peer[i].allowance=MR_RATE;DM_Header(s->peer[i].reply,i?DM_RELAY_JOIN:DM_RELAY_HOST,0,DM_OK);}
+    for(i=0;i<2;++i){s->peer[i].allowance=limits.rate;DM_Header(s->peer[i].reply,i?DM_RELAY_JOIN:DM_RELAY_HOST,0,DM_OK);}
     // The listing is consumed atomically with pairing. Raw game handshake still
     // validates build/resources/rules; no other guest may enter this pair.
     memset(entry,0,sizeof(*entry));
@@ -102,10 +127,10 @@ void MR_Prepare(dm_directory_t *d,fd_set *reads,fd_set *writes,uintptr_t *maximu
         if(!s->paired&&entry)entry->relay_available=1;
         // A waiting authenticated host is kept alive by its directory lease,
         // not by game data. Its idle/lifetime clock starts only after pairing.
-        if(s->paired&&(now-s->activity>=120000 || now-s->began>=21600000)){Drop(i,"idle/lifetime-limit",now);continue;}
+        if(s->paired&&(now-s->activity>=(uint64_t)limits.idle_seconds*1000 || now-s->began>=(uint64_t)limits.lifetime_seconds*1000)){Drop(i,"idle/lifetime-limit",now);continue;}
         if(s->paired && s->peer[0].eof && s->peer[1].eof && !s->peer[0].have && !s->peer[1].have)
         {Drop(i,"both-peers-finished",now);continue;}
-        if(now-s->window>=1000){s->window=now;for(j=0;j<2;++j)s->peer[j].allowance=MR_RATE;}
+        if(now-s->window>=1000){s->window=now;for(j=0;j<2;++j)s->peer[j].allowance=limits.rate;}
         for(j=0;j<(s->paired?2u:1u);++j)
         {
             mr_peer_t *p=&s->peer[j],*other=&s->peer[1-j];
@@ -157,7 +182,7 @@ void MR_Poll(fd_set *reads,fd_set *writes,uint64_t now)
             }
             if(s->used&&FD_ISSET(p->socket,reads))
             {
-                unsigned int capacity=p->allowance<MR_BUFFER?p->allowance:MR_BUFFER;
+                unsigned int capacity=p->allowance<limits.buffer?p->allowance:limits.buffer;
                 if(!s->paired)capacity=1;
                 n=(int)recv(p->socket,(char*)p->data,capacity,0);
                 if(n<=0)

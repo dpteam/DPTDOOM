@@ -186,7 +186,11 @@ ctest --preset windows-headless
   Слоты клиентов, per-IP счётчики и rate buckets разделены по роли (24/8 слотов,
   8/4 на IP, burst 128/24 против 32/4): иначе забитый relay занимал бы общий пул
   и управление отвечало бы лимитом при разных портах. `master-relay` проверяет
-  это в обе стороны и падает на общей реализации.
+  это в обе стороны и падает на общей реализации. Лимиты relay настраиваются
+  `--relay-sessions/--relay-per-source/--relay-rate/--relay-buffer/
+  --relay-idle-seconds/--relay-lifetime-seconds` с жёсткими границами; вне
+  диапазона и противоречивые комбинации — ошибка запуска, понижённый per-source
+  реально отказывает второму хосту с того же IP.
   Native master/relay.c, docs/RELAY.md; not arbitrary proxy/TLS/auth. Host lease
   source+secret, guest public session-id, consumed listing; direct first then
   2s fallback. Tests master-relay/master-publish/UI include unavailable direct,

@@ -818,6 +818,7 @@ int main(int argc, char **argv)
     const char *config_path=NULL;
     unsigned int port=25135,i;
     unsigned int relay_port=0;
+    mr_limits_t relay_limits=*MR_Limits();
     unsigned int log_size=1048576;
     struct sockaddr_in address;
     SOCKET listener;
@@ -830,7 +831,7 @@ int main(int argc, char **argv)
     {
         if(!strcmp(argv[i],"--version")) { puts("DPT.DOOM master 0.1.0-dev"); return 0; }
         if(!strcmp(argv[i],"--help"))
-        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path] [--relay]\n  [--relay-port 1..65535]\nDefault loopback:25135, TTL 60s, no address rewriting, relay OFF.\nLoopback means only this machine can connect; for LAN/Internet clients pass\n  --bind 0.0.0.0 (or a specific interface address), or bind=0.0.0.0 in --config.\n--relay: opt-in 8 bounded session pairs, no arbitrary proxy or TLS.\n--relay-port: serve relay on its own port instead of the control port; requires\n  --relay and a port different from --port. Control operations are refused on the\n  relay port, and a relay operation on the control port is answered with a\n  redirect carrying the relay port, so clients need no extra setting.\nConfig: see docs/MASTER.md. No game-port probing or router changes."); return 0; }
+        { puts("dptdoom-master [--bind numeric-IPv4] [--port 1..65535] [--lease-seconds 3..300]\n  [--log path] [--log-max-bytes 4096..16777216] [--config path] [--relay]\n  [--relay-port 1..65535]\nDefault loopback:25135, TTL 60s, no address rewriting, relay OFF.\nLoopback means only this machine can connect; for LAN/Internet clients pass\n  --bind 0.0.0.0 (or a specific interface address), or bind=0.0.0.0 in --config.\n--relay: opt-in 8 bounded session pairs, no arbitrary proxy or TLS.\n--relay-port: serve relay on its own port instead of the control port; requires\n  --relay and a port different from --port. Control operations are refused on the\n  relay port, and a relay operation on the control port is answered with a\n  redirect carrying the relay port, so clients need no extra setting.\nRelay limits (with --relay), all optional: --relay-sessions 1..8,\n  --relay-per-source 1..4, --relay-rate 4096..1048576 bytes/s,\n  --relay-buffer 512..4096, --relay-idle-seconds 10..3600,\n  --relay-lifetime-seconds 60..86400. Defaults 8/4/65536/4096/120/21600.\nConfig: see docs/MASTER.md. No game-port probing or router changes."); return 0; }
         if(!strcmp(argv[i],"--relay")){relay_enabled=1;continue;}
         if(i+1>=(unsigned int)argc)goto usage;
         if(!strcmp(argv[i],"--bind")){host=argv[++i];host_from_cli=1;}
@@ -839,10 +840,26 @@ int main(int argc, char **argv)
         else if(!strcmp(argv[i],"--log-max-bytes")) { if(!Number(argv[++i],4096,16777216,&log_size))goto usage; }
         else if(!strcmp(argv[i],"--port")) { if(!Number(argv[++i],1,65535,&port))goto usage; }
         else if(!strcmp(argv[i],"--relay-port")) { if(!Number(argv[++i],1,65535,&relay_port))goto usage; }
+        else if(!strcmp(argv[i],"--relay-sessions")) { if(!Number(argv[++i],1,MR_SESSIONS,&relay_limits.sessions))goto usage; }
+        else if(!strcmp(argv[i],"--relay-per-source")) { if(!Number(argv[++i],1,4,&relay_limits.per_source))goto usage; }
+        else if(!strcmp(argv[i],"--relay-rate")) { if(!Number(argv[++i],4096,1048576,&relay_limits.rate))goto usage; }
+        else if(!strcmp(argv[i],"--relay-buffer")) { if(!Number(argv[++i],512,MR_BUFFER,&relay_limits.buffer))goto usage; }
+        else if(!strcmp(argv[i],"--relay-idle-seconds")) { if(!Number(argv[++i],10,3600,&relay_limits.idle_seconds))goto usage; }
+        else if(!strcmp(argv[i],"--relay-lifetime-seconds")) { if(!Number(argv[++i],60,86400,&relay_limits.lifetime_seconds))goto usage; }
         else if(!strcmp(argv[i],"--lease-seconds")) { if(!Number(argv[++i],3,300,&directory.lease_seconds))goto usage; }
         else goto usage;
     }
     if(config_path && !LoadConfig(config_path,&host,host_from_cli))return 2;
+    // Validated before any socket exists, so a rejected limit cannot leave a
+    // half-started master behind. The individual --relay-* ranges are checked
+    // while parsing; this catches the relations between them.
+    if(relay_enabled && !MR_SetLimits(&relay_limits))
+    {
+        fputs("Master: invalid relay limits: --relay-per-source must not exceed "
+              "--relay-sessions, and --relay-lifetime-seconds must be at least "
+              "--relay-idle-seconds\n",stderr);
+        return 2;
+    }
     if(ban_path[0] && !LoadRules(ban_path,0,1))return 2;
     if(allow_path[0] && !LoadRules(allow_path,1,1))return 2;
     if(directory.allowlist_only)
@@ -943,7 +960,17 @@ int main(int argc, char **argv)
     }
     {char message[360];snprintf(message,sizeof(message),"Public address discovery: mode=%s host=%s refresh_seconds=%u (API URL omitted; HTTPS request only in explicit api mode)",public_address.mode,public_address.host[0]?public_address.host:"none",public_address.refresh_seconds);ML_Message(message);}
     ML_Message("Master diagnostic v2: status 0=OK 1=BAD_REQUEST 2=UNAUTHORIZED 3=CONFLICT 4=CAPACITY 5=REDIRECT(relay-on-separate-port,2-byte-body); cid is local to this process, peer port is TCP source port, not game port");
-    ML_Message(relay_enabled?"Relay ENABLED: 8 session pairs, 4096-byte buffers/side, 64KiB/s/side, 120s idle, 6h lifetime; registered peers only; NO encryption":"Relay disabled (operator must explicitly pass --relay)");
+    if(relay_enabled)
+    {
+        char message[320];
+        snprintf(message,sizeof(message),
+            "Relay ENABLED: %u session pairs, max %u per source, %u-byte buffers/side, %u bytes/s/side, %us idle, %us lifetime; registered peers only; NO encryption",
+            relay_limits.sessions,relay_limits.per_source,relay_limits.buffer,
+            relay_limits.rate,relay_limits.idle_seconds,relay_limits.lifetime_seconds);
+        ML_Message(message);
+    }
+    else
+        ML_Message("Relay disabled (operator must explicitly pass --relay)");
     ML_Message("Requests are logged with byte progress and failure reason; no names/tokens/payload dumps. Missing remote events means no observed request, not proof of firewall cause.");
     result=Run(listener,relay_listener);
     MR_Close();
