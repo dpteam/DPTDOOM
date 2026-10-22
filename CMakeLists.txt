@@ -79,7 +79,7 @@ set(engine_sources
 )
 list(TRANSFORM engine_sources PREPEND "doomgeneric/")
 add_executable(dptdoom ${engine_sources})
-target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c doomgeneric/dpt_secspecial.c doomgeneric/dpt_pitch.c doomgeneric/dpt_friction.c doomgeneric/dpt_genchange.c doomgeneric/dpt_push.c)
+target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c doomgeneric/dpt_secspecial.c doomgeneric/dpt_pitch.c doomgeneric/dpt_friction.c doomgeneric/dpt_genchange.c doomgeneric/dpt_push.c doomgeneric/dpt_scroll.c)
 target_compile_definitions(dptdoom PRIVATE DPT_DEH_CLASSIC)
 target_include_directories(dptdoom PRIVATE doomgeneric)
 if(DPTDOOM_NETWORK)
@@ -264,6 +264,9 @@ if(BUILD_TESTING)
     target_include_directories(deh-misc-test PRIVATE doomgeneric)
     target_compile_definitions(deh-misc-test PRIVATE DPT_DEH_CLASSIC $<$<C_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
     add_test(NAME deh-misc COMMAND deh-misc-test)
+    add_executable(scroll-test tests/scroll.c doomgeneric/dpt_scroll.c)
+    target_include_directories(scroll-test PRIVATE doomgeneric)
+    add_test(NAME scroll COMMAND scroll-test)
     add_executable(push-test tests/push.c doomgeneric/dpt_push.c)
     target_include_directories(push-test PRIVATE doomgeneric)
     add_test(NAME push COMMAND push-test)
@@ -507,6 +510,10 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/state-smoke.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
         set_tests_properties(state-smoke PROPERTIES TIMEOUT 180)
+        add_test(NAME scroll-map COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/scroll-map.py"
+            --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+        set_tests_properties(scroll-map PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         add_test(NAME push-map COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/push-map.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
@@ -658,6 +665,7 @@ set(DPTDOOM_FAST_TESTS
     pitch-math
     friction
     push
+    scroll
     gendoor genfloor genceiling gencrusher genstairs genlift genlocked
     secspecial
     config-keys

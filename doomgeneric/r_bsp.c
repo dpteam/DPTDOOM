@@ -511,7 +511,9 @@ void R_Subsector (int num)
 	floorplane = R_FindPlane (frontsector->floorheight,
 				  frontsector->floorpic,
 				  frontsector->lightlevel,
-				  frontsector->sky);
+				  frontsector->sky,
+				  frontsector->floor_xoffs,
+				  frontsector->floor_yoffs);
     }
     else
 	floorplane = NULL;
@@ -522,7 +524,9 @@ void R_Subsector (int num)
 	ceilingplane = R_FindPlane (frontsector->ceilingheight,
 				    frontsector->ceilingpic,
 				    frontsector->lightlevel,
-				    frontsector->sky);
+				    frontsector->sky,
+				    frontsector->ceiling_xoffs,
+				    frontsector->ceiling_yoffs);
     }
     else
 	ceilingplane = NULL;

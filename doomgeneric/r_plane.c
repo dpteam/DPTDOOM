@@ -75,6 +75,11 @@ int			spanstop[SCREENHEIGHT];
 lighttable_t**		planezlight;
 fixed_t			planeheight;
 
+// Flat offsets of the plane being drawn, set by R_DrawPlanes from the visplane.
+// Kept as file-scope because R_MapPlane is called per span and recomputing them
+// there would mean passing them through two call sites for no benefit.
+static fixed_t		xoffs, yoffs;
+
 fixed_t			yslope[SCREENHEIGHT];
 fixed_t			distscale[SCREENWIDTH];
 fixed_t			basexscale;
@@ -147,8 +152,11 @@ R_MapPlane
 	
     length = FixedMul (distance,distscale[x1]);
     angle = (viewangle + xtoviewangle[x1])>>ANGLETOFINESHIFT;
-    ds_xfrac = viewx + FixedMul(finecosine[angle], length);
-    ds_yfrac = -viewy - FixedMul(finesine[angle], length);
+    // Boom scrolling: the sector's flat offsets shift the texture coordinate.
+    // Applied here rather than by moving the picture, so the flat itself stays a
+    // plain span draw and the offsets are the only state.
+    ds_xfrac = viewx + FixedMul(finecosine[angle], length) + xoffs;
+    ds_yfrac = -viewy - FixedMul(finesine[angle], length) + yoffs;
 
     if (fixedcolormap)
 	ds_colormap = fixedcolormap;
@@ -212,7 +220,9 @@ R_FindPlane
 ( fixed_t	height,
   int		picnum,
   int		lightlevel,
-  int		sky )
+  int		sky,
+  fixed_t	xoffs,
+  fixed_t	yoffs )
 {
     visplane_t*	check;
 	
@@ -220,6 +230,12 @@ R_FindPlane
     {
 	height = 0;			// all skys map together
 	lightlevel = 0;
+	// Sky planes are drawn by the sky code, which ignores flat offsets, so the
+	// offsets must not take part in merging: otherwise a scrolling sky ceiling
+	// would fragment into one visplane per distinct offset and could exhaust the
+	// visplane pool for no visual difference.
+	xoffs = 0;
+	yoffs = 0;
     }
 	
     for (check=visplanes; check<lastvisplane; check++)
@@ -227,6 +243,8 @@ R_FindPlane
 	if (height == check->height
 	    && picnum == check->picnum
 	    && lightlevel == check->lightlevel
+	    && xoffs == check->xoffs
+	    && yoffs == check->yoffs
 	    && (picnum != skyflatnum || sky == check->sky))
 	{
 	    break;
@@ -246,6 +264,8 @@ R_FindPlane
     check->picnum = picnum;
     check->lightlevel = lightlevel;
     check->sky = sky;
+    check->xoffs = xoffs;
+    check->yoffs = yoffs;
     check->minx = SCREENWIDTH;
     check->maxx = -1;
     
@@ -309,6 +329,13 @@ R_CheckPlane
     lastvisplane->height = pl->height;
     lastvisplane->picnum = pl->picnum;
     lastvisplane->lightlevel = pl->lightlevel;
+    // Every field that decides whether two planes may share a draw must be
+    // copied, not just the ones that existed when this was written. Missing sky
+    // here meant a split sky plane lost its transferred texture, and missing the
+    // scroll offsets would draw a split plane at the wrong scroll position.
+    lastvisplane->sky = pl->sky;
+    lastvisplane->xoffs = pl->xoffs;
+    lastvisplane->yoffs = pl->yoffs;
     
     pl = lastvisplane++;
     pl->minx = start;
@@ -420,6 +447,11 @@ void R_DrawPlanes (void)
 	// regular flat
         lumpnum = firstflat + flattranslation[pl->picnum];
 	ds_source = W_CacheLumpNum(lumpnum, PU_STATIC);
+
+	// Boom scrolling: the plane's own offsets, not a global, so two planes with
+	// the same picture scroll independently.
+	xoffs = pl->xoffs;
+	yoffs = pl->yoffs;
 	
 	planeheight = abs(pl->height-viewz);
 	light = (pl->lightlevel >> LIGHTSEGSHIFT)+extralight;

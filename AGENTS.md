@@ -249,9 +249,17 @@ ctest --preset windows-headless
   savegame, применяется в `P_UpdateSpecials` к игрокам и `MF_COUNTKILL`/
   `MF_SHOOTABLE` без `MF_NOCLIP`, масштаб `<< (FRACBITS-7)` как в BOOM. То же
   сужение: `sector->thinglist` (центр), не touching-sector list.
+  **Скроллеры (250-253, 254, 48/85)** реализованы: `dpt_scroll.c` (скорость
+  `>> 5`, `CARRYFACTOR` 3/32, неоднородные правила знаков, проекция стен через
+  целочисленный sqrt), сектор хранит `floor_xoffs`/`ceiling_xoffs` и скорости вне
+  savegame, рендер прибавляет смещения в `R_MapPlane`, visplane сравнивает их при
+  слиянии. Скай-плоскости не скроллятся (рисуются скай-кодом) — поведение BOOM.
+  Тест `scroll-map` поэтому проверяет `Scroller report`, а не пиксели.
   Не реализованы и попадают в отчёт `Map compatibility:`: crush в бессмысленном
-  направлении и linedef 226 (push/pull от точечного источника — нужны
-  `MT_PUSH`/`MT_PULL`, которых нет). Все цели floor/ceiling/lift, включая `sT`,
+  направлении, linedef 226 (push/pull от точечного источника — нужны
+  `MT_PUSH`/`MT_PULL`, которых нет), ускоряющиеся скроллеры 214-218 и смещаемые
+  высотой 245-249 (нужно состояние на скроллер в savegame). Все цели
+  floor/ceiling/lift, включая `sT`,
   `NnC`, perpetual и все четыре варианта `change`, теперь поддержаны — для них
   добавлены `P_FindNextHighestCeiling`/`P_FindNextLowestCeiling`,
   `P_FindShortestTextureAround`/`P_FindShortestUpperAround` (последние

@@ -64,7 +64,9 @@ R_FindPlane
 ( fixed_t	height,
   int		picnum,
   int		lightlevel,
-  int		sky );
+  int		sky,
+  fixed_t	xoffs,
+  fixed_t	yoffs );
 
 visplane_t*
 R_CheckPlane

@@ -37,6 +37,7 @@
 #include "dpt_secspecial.h"
 #include "dpt_friction.h"
 #include "dpt_push.h"
+#include "dpt_scroll.h"
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_argv.h"
@@ -1366,6 +1367,44 @@ void P_UpdateSpecials (void)
 	    G_ExitLevel();
     }
 
+    //	BOOM SCROLLERS (floor/ceiling flats, and objects riding a floor)
+    //
+    // Velocities are constant and live on the sector, so this is a plain
+    // accumulate: no thinker, no state to archive. Same touching-thing narrowing
+    // as the pushers below - the sector's own thing list, not Boom's
+    // per-object list, so a thing is carried once its centre is inside.
+    for (i = 0; i < numsectors; ++i)
+    {
+	sector_t* sec = &sectors[i];
+	mobj_t* thing;
+
+	if (sec->scroll_floor_x || sec->scroll_floor_y)
+	{
+	    sec->floor_xoffs += sec->scroll_floor_x;
+	    sec->floor_yoffs += sec->scroll_floor_y;
+	}
+	if (sec->scroll_ceiling_x || sec->scroll_ceiling_y)
+	{
+	    sec->ceiling_xoffs += sec->scroll_ceiling_x;
+	    sec->ceiling_yoffs += sec->scroll_ceiling_y;
+	}
+	if (!sec->scroll_carry_x && !sec->scroll_carry_y)
+	    continue;
+
+	for (thing = sec->thinglist; thing; thing = thing->snext)
+	{
+	    // Boom: anything on the floor (or floating in water) and clipped. This
+	    // engine has no water-height notion, so "on the floor" is the whole rule.
+	    if (thing->flags & MF_NOCLIP)
+		continue;
+	    if ((thing->flags & MF_NOGRAVITY) || thing->z > sec->floorheight)
+		continue;
+
+	    thing->momx += sec->scroll_carry_x;
+	    thing->momy += sec->scroll_carry_y;
+	}
+    }
+
     //	BOOM PUSHERS (wind and current)
     //
     // Applied here rather than from a thinker: wind and current are constant
@@ -1434,6 +1473,30 @@ void P_UpdateSpecials (void)
 	    // EFFECT FIRSTCOL SCROLL +
 	    sides[line->sidenum[0]].textureoffset += FRACUNIT;
 	    break;
+	  case 85:
+	    // Boom's two-way wall scroll: the same side, the other direction.
+	    sides[line->sidenum[0]].textureoffset -= FRACUNIT;
+	    break;
+	  case 254:
+	  {
+	    // Boom's tag-based wall scroll: the scroll vector is projected onto
+	    // each tagged line's own direction, so a ring of lines scrolls as if a
+	    // flat were moving underneath it.
+	    dpt_scroll_t offsets = DPT_ScrollWallOffsets(
+		DPT_ScrollSpeed(line->dx), DPT_ScrollSpeed(line->dy),
+		line->dx, line->dy);
+	    int j;
+	    for (j = 0; j < numlines; ++j)
+	    {
+		if (lines[j].tag != line->tag || &lines[j] == line)
+		    continue;
+		if (lines[j].sidenum[0] < 0)
+		    continue;
+		sides[lines[j].sidenum[0]].textureoffset += offsets.x;
+		sides[lines[j].sidenum[0]].rowoffset += offsets.y;
+	    }
+	    break;
+	  }
 	}
     }
 
@@ -1811,12 +1874,14 @@ void P_SpawnSpecials (void)
 	    break;
 	  }
 	  case 48:
+	  case 85:
+	  case 254:
             if (numlinespecials >= MAXLINEANIMS)
             {
                 I_Error("Too many scrolling wall linedefs! "
                         "(Vanilla limit is 64)");
             }
-	    // EFFECT FIRSTCOL SCROLL+
+	    // EFFECT FIRSTCOL SCROLL+ / Boom tag-based wall scroll
 	    linespeciallist[numlinespecials] = &lines[i];
 	    numlinespecials++;
 	    break;
@@ -1853,6 +1918,66 @@ void P_SpawnSpecials (void)
 	    }
     }
 
+    // Boom scrollers (linedefs 250-253). Constant speed, derived from the line,
+    // so the velocities live on the sector and P_UpdateSpecials just adds them.
+    // Only the two stateful families (214-218 accelerative, 245-249 displacement
+    // driven) are left to the compatibility report.
+    for (i = 0; i < numsectors; ++i)
+    {
+	sectors[i].floor_xoffs = sectors[i].floor_yoffs = 0;
+	sectors[i].ceiling_xoffs = sectors[i].ceiling_yoffs = 0;
+	sectors[i].scroll_floor_x = sectors[i].scroll_floor_y = 0;
+	sectors[i].scroll_ceiling_x = sectors[i].scroll_ceiling_y = 0;
+	sectors[i].scroll_carry_x = sectors[i].scroll_carry_y = 0;
+    }
+    for (i = 0; i < numlines; ++i)
+    {
+	dpt_scroll_kind_t kind = DPT_ScrollKindForLine(lines[i].special);
+	fixed_t speed_x, speed_y;
+	int secnum;
+
+	if (kind == DPT_SCROLL_NONE || kind == DPT_SCROLL_WALL
+	    || kind == DPT_SCROLL_WALL_FIRST)
+	    continue;
+
+	speed_x = DPT_ScrollSpeed(lines[i].dx);
+	speed_y = DPT_ScrollSpeed(lines[i].dy);
+
+	for (secnum = 0; secnum < numsectors; ++secnum)
+	{
+	    dpt_scroll_t offsets;
+	    sector_t* sec;
+
+	    if (sectors[secnum].tag != lines[i].tag)
+		continue;
+
+	    sec = &sectors[secnum];
+	    offsets = DPT_ScrollFlatOffsets(kind, speed_x, speed_y);
+
+	    if (kind == DPT_SCROLL_CEILING)
+	    {
+		sec->scroll_ceiling_x += offsets.x;
+		sec->scroll_ceiling_y += offsets.y;
+	    }
+	    else
+	    {
+		sec->scroll_floor_x += offsets.x;
+		sec->scroll_floor_y += offsets.y;
+	    }
+
+	    if (kind == DPT_SCROLL_FLOOR_CARRY || kind == DPT_SCROLL_CARRY)
+	    {
+		// Boom scales the *unnegated* vector here: sc_floor is created with
+		// (-dx, dy) but sc_carry with (+dx, +dy). That is not a mistake in
+		// Boom - the flat's texture coordinate moves by -dx, so the picture
+		// appears to move by +dx, which is the direction things must ride.
+		// Using the negated offset here would drag objects against the visual.
+		sec->scroll_carry_x += DPT_ScrollCarrySpeed(speed_x);
+		sec->scroll_carry_y += DPT_ScrollCarrySpeed(speed_y);
+	    }
+	}
+    }
+
     // Boom pusher sectors: wind (224) and current (225). The point-source variant
     // (226) is deliberately not handled here - it needs MT_PUSH/MT_PULL things,
     // which this engine does not have, and is reported instead.
@@ -1877,13 +2002,13 @@ void P_SpawnSpecials (void)
 	    }
     }
 
-    // Boom/MBF extended linedef specials are 142 and above, plus two types that
-    // Boom placed inside the vanilla 1..141 range: 78 (SR change floor texture
-    // and type, numeric model) and 85 (scrolling wall, right). Vanilla Doom and
-    // Doom II do not use 78 or 85 at all. Everything in that set except the two
-    // sky transfers we implement is inert in this engine, so say so once per
-    // level instead of letting a map look supported while its mechanics do
-    // nothing.
+    // Boom/MBF extended linedef specials are 142 and above, plus 78, which Boom
+    // placed inside the vanilla 1..141 range (SR change floor texture and type,
+    // numeric model); vanilla Doom and Doom II never use 78. 85 also lives in
+    // that range but is now implemented as the reverse wall scroll, so it no
+    // longer reaches this report. Everything still in the set is inert in this
+    // engine, so say so once per level instead of letting a map look supported
+    // while its mechanics do nothing.
     {
 	int unsupported_ids[16];
 	int unsupported_occurrences = 0;
@@ -1901,6 +2026,11 @@ void P_SpawnSpecials (void)
 	    // point-source push/pull line (226) is deliberately absent - it needs
 	    // MT_PUSH/MT_PULL things this engine does not have, so it stays reported.
 	    if (special == 223 || special == 224 || special == 225)
+		continue;
+	    // Boom scrollers this engine implements as constant velocities. The two
+	    // stateful families (214-218 accelerative, 245-249 displacement driven)
+	    // are deliberately absent, so they stay reported.
+	    if (DPT_ScrollKindForLine(special) != DPT_SCROLL_NONE)
 		continue;
 	    if (DPT_GenDoorSupported(special))
 		continue;

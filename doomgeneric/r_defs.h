@@ -122,6 +122,17 @@ typedef	struct
     int		push_x;
     int		push_y;
 
+    // Boom scrollers (linedefs 250-253). The offsets are what the renderer adds
+    // to a flat's texture coordinate; the velocities are per tic and are added
+    // to the offsets in P_UpdateSpecials. All four are map data: computed at
+    // level load and never archived, so an older save still loads. The carry
+    // velocity is the speed objects standing on this floor are dragged at.
+    fixed_t	floor_xoffs, floor_yoffs;
+    fixed_t	ceiling_xoffs, ceiling_yoffs;
+    fixed_t	scroll_floor_x, scroll_floor_y;
+    fixed_t	scroll_ceiling_x, scroll_ceiling_y;
+    fixed_t	scroll_carry_x, scroll_carry_y;
+
     // 0 = untraversed, 1,2 = sndlines -1
     int		soundtraversed;
 
@@ -446,6 +457,11 @@ typedef struct
   // Per-sector sky texture from Boom/MBF sky transfer; 0 means "use the
   // level-wide skytexture". Skies with different textures must not merge.
   int			sky;
+  // Flat texture offsets from Boom scrolling. Two planes with the same picture
+  // and height but different offsets must not merge, or one of them would jump
+  // to the other's scroll position.
+  fixed_t		xoffs;
+  fixed_t		yoffs;
   int			minx;
   int			maxx;
   

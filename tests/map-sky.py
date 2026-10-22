@@ -183,10 +183,11 @@ def main():
         assert "Map sky: count=1 first=0:" in text, text
 
         # Unimplemented Boom/MBF specials must be reported, not silently inert.
-        # 142+ is the main Boom extended range; 78 and 85 are Boom types placed
-        # inside the vanilla 1..141 range (vanilla never uses those numbers).
-        for name, special in (("unsupported-142", 142), ("unsupported-78", 78),
-                              ("unsupported-85", 85)):
+        # 142+ is the main Boom extended range; 78 is a Boom type placed inside the
+        # vanilla 1..141 range (vanilla never uses that number). 85 used to be in
+        # this list too; it is now implemented as the reverse wall scroll, so it
+        # belongs to the supported set below.
+        for name, special in (("unsupported-142", 142), ("unsupported-78", 78)):
             overlay(iwad, root / (name + ".wad"), special)
             _, text = run(name, ["-file", str(root / (name + ".wad"))])
             assert "Map compatibility:" in text and (" %d" % special) in text, text
@@ -201,10 +202,11 @@ def main():
         supported = (
             # Boom generalized doors: all eight trigger classes.
             [0x3c00 + t for t in range(8)]
-            # Boom sector-effect lines: friction, wind, current.
+            # Boom sector-effect lines: friction, wind, current, wall scrollers
+            # (48/85/254) and flat scrollers (250-253).
             # Floors: every target, both directions, including the texture-based
             # one and the relative 24/32 heights.
-            + [223, 224, 225,
+            + [223, 224, 225, 48, 85, 254, 250, 251, 252, 253,
                0x6000, 0x6002, 0x6004, 0x6006, 0x6007,
                0x6080, 0x6100, 0x6180, 0x6200, 0x6300, 0x6380, 0x6280,
                0x6040, 0x60c0, 0x6140, 0x61c0, 0x6240, 0x6340, 0x7140,
@@ -230,7 +232,7 @@ def main():
         # types placed inside the vanilla 1..141 range (vanilla never uses those
         # numbers). The rest are the two remaining combinations: crush in the
         # direction where it has no meaning.
-        unsupported = [142, 78, 85,
+        unsupported = [142, 78,
                        226,      # point-source push/pull: needs MT_PUSH/MT_PULL
                        0x7000,   # floor: crush while lowering
                        0x4040 | 0x1000]  # ceiling: crush while raising

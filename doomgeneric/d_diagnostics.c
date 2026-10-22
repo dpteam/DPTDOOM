@@ -261,6 +261,18 @@ void D_DiagnosticsTic(void)
                 (unsigned int)playeringame[0], (unsigned int)playeringame[1], (unsigned int)paused,
                  p->mo ? p->mo->x : 0, p->mo ? p->mo->y : 0, p->health, p->ammo[am_clip]);
             {
+                // Boom scroller state for the player's own sector. Reported
+                // numerically because a ceiling scroll is invisible on a sky
+                // ceiling: sky planes are drawn by the sky code, not as flats, so
+                // their offsets never reach the framebuffer. A pixel comparison
+                // would call that "inert" when it is correct.
+                const sector_t* here = p->mo ? p->mo->subsector->sector : NULL;
+                printf("Scroller report: floor_off=%d,%d ceiling_off=%d,%d carry=%d,%d\n",
+                    here ? here->floor_xoffs : 0, here ? here->floor_yoffs : 0,
+                    here ? here->ceiling_xoffs : 0, here ? here->ceiling_yoffs : 0,
+                    here ? here->scroll_carry_x : 0, here ? here->scroll_carry_y : 0);
+            }
+            {
                 // Boom/MBF sky transfer state, derived from map linedefs.
                 int si,count=0,first=-1;
                 for (si=0;si<numsectors;++si)
