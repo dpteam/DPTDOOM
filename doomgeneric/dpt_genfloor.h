@@ -44,6 +44,10 @@ typedef struct
     int     change;           // 0=none 1=zero type 2=texture 3=texture+type
     boolean crush;
     boolean monsters;         // monsters may activate (only when change == 0)
+    // With a change, the model bit stops meaning "monsters may activate" and
+    // instead asks for a source sector at the destination height. It is exposed
+    // separately so callers cannot read one meaning as the other.
+    boolean model;
 } dpt_genfloor_t;
 
 boolean DPT_GenFloorIsFloor(int special);

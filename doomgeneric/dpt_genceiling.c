@@ -11,6 +11,7 @@
 //   change   0x0c00  (0=none, 1=zero type, 2=texture, 3=texture+type)
 //   crush    0x1000
 #include "dpt_genceiling.h"
+#include "dpt_genchange.h"
 
 boolean DPT_GenCeilingIsCeiling(int special)
 {
@@ -43,6 +44,7 @@ boolean DPT_GenCeilingDecode(int special, dpt_genceiling_t *out)
     }
 
     out->monsters = out->change == 0 && (special & 0x0020) != 0;
+    out->model = out->change != 0 && (special & 0x0020) != 0;
     return true;
 }
 
@@ -53,12 +55,10 @@ boolean DPT_GenCeilingSupported(int special)
     if (!DPT_GenCeilingDecode(special, &ceiling))
         return false;
 
-    // Texture/model changes need model-sector logic and are reported. Every
-    // target that resolves to a height is supported now that the next-ceiling
-    // and shortest-upper-texture helpers exist.
-    if (ceiling.change != 0)
-        return false;
-
+    // Texture/model changes are supported: the effect comes from the change field
+    // and the source sector is either the activating line's front sector or, with
+    // the model bit, a sector at the destination height.
+    //
     // Crushing only exists when lowering.
     if (ceiling.crush && ceiling.up)
         return false;

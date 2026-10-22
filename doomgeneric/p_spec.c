@@ -2031,3 +2031,52 @@ fixed_t P_FindShortestUpperAround(int secnum)
 {
     return ShortestTextureAround(secnum, 1);
 }
+
+//
+// P_FindModelFloorSector / P_FindModelCeilingSector
+//
+// Boom's "numeric model": the first two-sided line around the sector whose other
+// side is at exactly `height`. The generalized change copies the texture (and
+// sometimes the sector type) from it, which is how a map author says "become
+// like that sector over there" without naming a texture.
+//
+// Only the other side of a two-sided line counts: a one-sided line has no
+// neighbouring sector to copy from. NULL means "no model at that height", and the
+// caller then leaves the sector unchanged - Boom does the same rather than
+// guessing a source.
+//
+static sector_t* ModelSectorAround(int secnum, fixed_t height, int ceiling)
+{
+    sector_t* sec;
+    int i;
+
+    if (secnum < 0 || secnum >= numsectors)
+        return NULL;
+
+    sec = &sectors[secnum];
+    for (i = 0; i < sec->linecount; i++)
+    {
+        sector_t* other;
+
+        if (!twoSided(secnum, i))
+            continue;
+
+        other = getNextSector(sec->lines[i], sec);
+        if (!other)
+            continue;
+
+        if (ceiling ? other->ceilingheight == height : other->floorheight == height)
+            return other;
+    }
+    return NULL;
+}
+
+sector_t* P_FindModelFloorSector(fixed_t height, int secnum)
+{
+    return ModelSectorAround(secnum, height, 0);
+}
+
+sector_t* P_FindModelCeilingSector(fixed_t height, int secnum)
+{
+    return ModelSectorAround(secnum, height, 1);
+}

@@ -577,21 +577,28 @@ partition может породить две отдельные локальны
   неподдерживаемыми; все они добавлены отдельными шагами ниже. Реальная
   анимация — ручная проверка.
 - [x] Boom generalized **floors** (`0x6000..0x7fff`): **все цели**, включая
-  `sT` и относительные 24/32, в обоих направлениях; скорости 1x..8x
-  `FLOORSPEED`, все восемь триггеров. Назначение считает чистая
-  `DPT_GenFloorDest`, движок только собирает высоты соседей. Декодер
-  `dpt_genfloor.c` покрыт data-free тестом `genfloor` на все 2048 комбинаций
-  полей, правила поддержки и высоты назначения. Не поддержаны только
-  `change != 0` и crush-при-опускании. Реальная анимация — вручную.
+  `sT` и относительные 24/32, в обоих направлениях, и **все четыре варианта
+  `change`** (включая model-сектор). Скорости 1x..8x `FLOORSPEED`, все восемь
+  триггеров. Назначение считает чистая `DPT_GenFloorDest`, движок только собирает
+  высоты соседей. Декодер `dpt_genfloor.c` покрыт data-free тестом `genfloor` на
+  все 2048 комбинаций полей, правила поддержки и высоты назначения. Не поддержан
+  только crush-при-опускании. Реальная анимация — вручную.
 - [x] Boom generalized **ceilings** (`0x4000..0x5fff`): **все цели**, включая
-  `NnC` и `sT`, в обоих направлениях; скорости 1x..8x `CEILSPEED`, все восемь
-  триггеров. Для этого добавлены `P_FindNextHighestCeiling`,
-  `P_FindNextLowestCeiling`, `P_FindShortestTextureAround` и
-  `P_FindShortestUpperAround` (последние возвращают `32000<<FRACBITS`, как BOOM,
-  а не `INT_MAX` — иначе высота переполнилась бы). Декодер `dpt_genceiling.c`
-  покрыт data-free тестом `genceiling` на 2048 комбинаций, включая порядок
-  ceiling-целей (отличается от floors). Не поддержаны только `change != 0` и
-  crush-при-подъёме. Реальная анимация — вручную.
+  `NnC` и `sT`, в обоих направлениях, и все четыре варианта `change`. Для целей
+  добавлены `P_FindNextHighestCeiling`, `P_FindNextLowestCeiling`,
+  `P_FindShortestTextureAround` и `P_FindShortestUpperAround` (последние
+  возвращают `32000<<FRACBITS`, как BOOM, а не `INT_MAX` — иначе высота
+  переполнилась бы). Декодер `dpt_genceiling.c` покрыт data-free тестом
+  `genceiling` на 2048 комбинаций, включая порядок ceiling-целей (отличается от
+  floors). Не поддержан только crush-при-подъёме. Реальная анимация — вручную.
+- [x] Boom generalized **change** (`0x0c00` + model-бит `0x0020`): новая текстура
+  и, в зависимости от поля, обнуление/копирование типа сектора. Отображение поля
+  вынесено в общий data-free `dpt_genchange.c`, потому что номера не идут в
+  порядке эффектов. Источник — `line->frontsector` либо model-сектор на высоте
+  назначения (`P_FindModelFloorSector`/`P_FindModelCeilingSector`). Бит 0x0020
+  отдаётся декодером двумя разными полями (`monsters`/`model`). `ceiling_t`
+  получил `newspecial`/`texture`, которые архивируются **только** для типов
+  `genCeilingChg*`, поэтому ванильный save layout не изменился.
 - [x] Boom generalized **crushers** (`0x2f80..0x2fff`): trigger/speed/monster/
   silent, скорости 1x..8x `CEILSPEED`, `silent` → `silentCrushAndRaise`.
   Добавлено `ceiling_t.basespeed`, чтобы `T_MoveCeiling` не сбрасывал

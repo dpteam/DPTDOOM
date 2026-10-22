@@ -6,6 +6,7 @@
 // combination against BOOM's documented encoding, including the target numbering
 // and the model/monster bit that changes meaning depending on the change field.
 #include "dpt_genfloor.h"
+#include "dpt_genchange.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -107,16 +108,22 @@ int main(void)
     REQUIRE(DPT_GenFloorSupported(0x6000 | (3 << 7)));       // down LnC
     REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0040 | (5 << 7))); // up by texture
 
-    REQUIRE(!DPT_GenFloorSupported(0x6000 | 0x0400));        // texture change
-    REQUIRE(!DPT_GenFloorSupported(0x6000 | 0x0800));        // texture + type
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0400));         // zero type
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0800));         // copy type
     REQUIRE(!DPT_GenFloorSupported(0x6000 | 0x1000));        // crush while down
     REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0006));         // push trigger
     REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0007));         // push retrigger
     REQUIRE(!DPT_GenFloorSupported(0x5fff));                 // not a floor
 
-    // Across every field combination the rule is exactly: a texture/model change
-    // and crush while lowering are the only rejections. Enumerating it stops a
-    // future edit from silently widening or narrowing support.
+    // Texture/type change is supported now, so no change value is rejected.
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0400));         // zero type
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0800));         // copy type
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0c00));         // texture only
+    REQUIRE(DPT_GenFloorSupported(0x6000 | 0x0c00 | 0x0020)); // + model sector
+
+    // Across every field combination the rule is exactly: crush while lowering
+    // is the only rejection. Enumerating it stops a future edit from silently
+    // widening or narrowing support.
     for (trigger = 0; trigger < 8; ++trigger)
     for (speed = 0; speed < 4; ++speed)
     for (up = 0; up < 2; ++up)
@@ -124,12 +131,32 @@ int main(void)
     for (change = 0; change < 4; ++change)
     for (target_bits = 0; target_bits < 8; ++target_bits)
     {
-        int expected;
         special = 0x6000 | trigger | (speed << 3) | (up << 6) | (change << 10)
                 | (crush << 12) | (target_bits << 7);
-        expected = change == 0 && !(crush && !up);
-        REQUIRE(DPT_GenFloorSupported(special) == expected);
+        REQUIRE(DPT_GenFloorSupported(special) == !(crush && !up));
     }
+
+    // The model bit changes meaning with the change field, and reading one as the
+    // other is silent: with no change it means "monsters may activate", with a
+    // change it asks for a source sector at the destination height.
+    REQUIRE(DPT_GenFloorDecode(0x6000 | 0x0020, &floor));
+    REQUIRE(floor.monsters && !floor.model);
+    REQUIRE(DPT_GenFloorDecode(0x6000 | 0x0c00 | 0x0020, &floor));
+    REQUIRE(!floor.monsters && floor.model);
+
+    // Change field -> effect. Boom's numbering is not the order of the effects,
+    // which is why it is mapped rather than used raw.
+    REQUIRE(DPT_GenChangeEffect(0) == DPT_CHANGE_NONE);
+    REQUIRE(DPT_GenChangeEffect(1) == DPT_CHANGE_TEXTURE_ZERO_TYPE);
+    REQUIRE(DPT_GenChangeEffect(2) == DPT_CHANGE_TEXTURE_TYPE);
+    REQUIRE(DPT_GenChangeEffect(3) == DPT_CHANGE_TEXTURE);
+    REQUIRE(DPT_GenChangeEffect(4) == DPT_CHANGE_NONE);      // out of range
+    REQUIRE(!DPT_GenChangeNeedsSource(DPT_CHANGE_NONE));
+    REQUIRE(DPT_GenChangeNeedsSource(DPT_CHANGE_TEXTURE));
+    REQUIRE(DPT_GenChangeWritesType(DPT_CHANGE_TEXTURE_TYPE));
+    REQUIRE(DPT_GenChangeWritesType(DPT_CHANGE_TEXTURE_ZERO_TYPE));
+    REQUIRE(!DPT_GenChangeWritesType(DPT_CHANGE_TEXTURE));
+    REQUIRE(!DPT_GenChangeWritesType(DPT_CHANGE_NONE));
 
     // Destination selection. The engine gathers the neighbour heights; the
     // choice of which one to use is where a wrong helper would hide, so every

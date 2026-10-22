@@ -372,9 +372,9 @@ P_UseSpecialLine
 	    else if (DPT_GenDoorSupported(line->special))
 		done = EV_DoGenDoorSector(back, line->special);
 	    else if (DPT_GenFloorSupported(line->special))
-		done = EV_DoGenFloorSector(back, line->special);
+		done = EV_DoGenFloorSector(back, line, line->special);
 	    else if (DPT_GenCeilingSupported(line->special))
-		done = EV_DoGenCeilingSector(back, line->special);
+		done = EV_DoGenCeilingSector(back, line, line->special);
 	    else if (DPT_GenCrusherSupported(line->special))
 		done = EV_DoGenCrusherSector(back, line->special);
 	    else if (DPT_GenStairsSupported(line->special))

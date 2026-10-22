@@ -15,6 +15,7 @@
 // 24, 32, ... in steps of 8. Keeping the raw numbering here makes the decoder
 // testable against BOOM's documented values.
 #include "dpt_genfloor.h"
+#include "dpt_genchange.h"
 
 // BOOM target order: HnF, LnF, NnF, LnC, C, sT, then absolute heights.
 #define DPT_TARGET_FIRST 1
@@ -55,6 +56,7 @@ boolean DPT_GenFloorDecode(int special, dpt_genfloor_t *out)
     // not change textures. With a texture change it selects the model sector
     // instead, so monsters cannot activate those lines.
     out->monsters = out->change == 0 && (special & 0x0020) != 0;
+    out->model = out->change != 0 && (special & 0x0020) != 0;
     return true;
 }
 
@@ -65,12 +67,11 @@ boolean DPT_GenFloorSupported(int special)
     if (!DPT_GenFloorDecode(special, &floor))
         return false;
 
-    // Texture/sector-type changes need model-sector logic and are reported.
-    // Every target that resolves to a height is supported: the two texture-based
-    // ones now have their helpers, so nothing in the target field is rejected.
-    if (floor.change != 0)
-        return false;
-
+    // Texture/sector-type changes are supported: the effect comes from the
+    // change field and the source sector is either the activating line's front
+    // sector or, with the model bit, a sector at the destination height. Both are
+    // resolved when the thinker is created.
+    //
     // Crushing only exists as a raising floor.
     if (floor.crush && !floor.up)
         return false;

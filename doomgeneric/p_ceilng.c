@@ -20,6 +20,7 @@
 #include "z_zone.h"
 #include "doomdef.h"
 #include "dpt_genceiling.h"
+#include "dpt_genchange.h"
 #include "dpt_gencrusher.h"
 #include "p_local.h"
 
@@ -87,6 +88,16 @@ void T_MoveCeiling (ceiling_t* ceiling)
 	      case crushAndRaise:
 		ceiling->direction = -1;
 		break;
+
+	      case genCeilingChg0:
+	      case genCeilingChgT:
+		// Boom's generalized change: the type is written too.
+		ceiling->sector->special = ceiling->newspecial;
+		// fall through
+	      case genCeilingChg:
+		ceiling->sector->ceilingpic = ceiling->texture;
+		P_RemoveActiveCeiling(ceiling);
+		break;
 		
 	      default:
 		break;
@@ -127,6 +138,15 @@ void T_MoveCeiling (ceiling_t* ceiling)
 
 	      case lowerAndCrush:
 	      case lowerToFloor:
+		P_RemoveActiveCeiling(ceiling);
+		break;
+
+	      case genCeilingChg0:
+	      case genCeilingChgT:
+		ceiling->sector->special = ceiling->newspecial;
+		// fall through
+	      case genCeilingChg:
+		ceiling->sector->ceilingpic = ceiling->texture;
 		P_RemoveActiveCeiling(ceiling);
 		break;
 
@@ -246,7 +266,8 @@ EV_DoCeiling
 static int
 GenCeilingOnSector
 ( sector_t*		sec,
-  const dpt_genceiling_t*	gen )
+  const dpt_genceiling_t*	gen,
+  line_t*		line )
 {
     ceiling_t*		ceiling;
 
@@ -289,6 +310,39 @@ GenCeilingOnSector
 	}
     }
 
+    // Boom's change field, same rules as the floors. The model bit asks for a
+    // source sector at the destination height; which height to match depends on
+    // the target - the floor-based targets look for a floor, the rest a ceiling.
+    if (gen->change != 0)
+    {
+	int effect = DPT_GenChangeEffect(gen->change);
+	sector_t* source = NULL;
+
+	if (gen->model)
+	{
+	    int secnum = (int)(sec - sectors);
+	    fixed_t dest = gen->up ? ceiling->topheight : ceiling->bottomheight;
+	    boolean floor_target = gen->target == DPT_CEILING_TARGET_HNF
+				|| gen->target == DPT_CEILING_TARGET_FLOOR;
+	    source = floor_target
+		? P_FindModelFloorSector(dest, secnum)
+		: P_FindModelCeilingSector(dest, secnum);
+	}
+	else if (line && line->frontsector)
+	    source = line->frontsector;
+
+	if (source && DPT_GenChangeNeedsSource(effect))
+	{
+	    ceiling->texture = source->ceilingpic;
+	    if (DPT_GenChangeWritesType(effect))
+		ceiling->newspecial = effect == DPT_CHANGE_TEXTURE_ZERO_TYPE
+		    ? 0 : source->special;
+	    ceiling->type = effect == DPT_CHANGE_TEXTURE ? genCeilingChg
+			  : effect == DPT_CHANGE_TEXTURE_TYPE ? genCeilingChgT
+			  : genCeilingChg0;
+	}
+    }
+
     ceiling->tag = sec->tag;
     P_AddActiveCeiling(ceiling);
     return 1;
@@ -316,7 +370,7 @@ EV_DoGenCeiling
     secnum = -1;
     rtn = 0;
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
-	if (GenCeilingOnSector(&sectors[secnum], &gen))
+	if (GenCeilingOnSector(&sectors[secnum], &gen, line))
 	    rtn = 1;
     return rtn;
 }
@@ -328,6 +382,7 @@ EV_DoGenCeiling
 int
 EV_DoGenCeilingSector
 ( sector_t*	sec,
+  line_t*	line,
   int		special )
 {
     dpt_genceiling_t	gen;
@@ -336,7 +391,7 @@ EV_DoGenCeilingSector
         || !DPT_GenCeilingDecode(special, &gen)
         || !DPT_GenCeilingSupported(special))
         return 0;
-    return GenCeilingOnSector(sec, &gen);
+    return GenCeilingOnSector(sec, &gen, line);
 }
 
 

@@ -21,6 +21,7 @@
 #include "z_zone.h"
 #include "doomdef.h"
 #include "dpt_genfloor.h"
+#include "dpt_genchange.h"
 #include "dpt_genstairs.h"
 #include "p_local.h"
 
@@ -224,6 +225,16 @@ void T_MoveFloor(floormove_t* floor)
 	      case donutRaise:
 		floor->sector->special = floor->newspecial;
 		floor->sector->floorpic = floor->texture;
+		break;
+	      case genFloorChg0:
+	      case genFloorChgT:
+		// Boom's generalized change: the type is written too. Which of the
+		// three variants applied was decided when the thinker was created.
+		floor->sector->special = floor->newspecial;
+		// fall through
+	      case genFloorChg:
+		floor->sector->floorpic = floor->texture;
+		break;
 	      default:
 		break;
 	    }
@@ -235,6 +246,14 @@ void T_MoveFloor(floormove_t* floor)
 	      case lowerAndChange:
 		floor->sector->special = floor->newspecial;
 		floor->sector->floorpic = floor->texture;
+		break;
+	      case genFloorChg0:
+	      case genFloorChgT:
+		floor->sector->special = floor->newspecial;
+		// fall through
+	      case genFloorChg:
+		floor->sector->floorpic = floor->texture;
+		break;
 	      default:
 		break;
 	    }
@@ -445,7 +464,8 @@ EV_DoFloor
 static int
 GenFloorOnSector
 ( sector_t*		sec,
-  const dpt_genfloor_t*	gen )
+  const dpt_genfloor_t*	gen,
+  line_t*		line )
 {
     floormove_t*	floor;
 
@@ -495,6 +515,40 @@ GenFloorOnSector
 	floor->type = gen->crush ? raiseFloorCrush : raiseFloor;
 	floor->crush = gen->crush;
     }
+
+    // Boom's change field. The texture always comes from a source sector: the
+    // activating line's front sector, or - with the model bit - a sector whose
+    // floor (or ceiling, for the ceiling-height targets) sits exactly at the
+    // destination. No source means no change at all, which is what Boom does
+    // instead of guessing one.
+    if (gen->change != 0)
+    {
+	int effect = DPT_GenChangeEffect(gen->change);
+	sector_t* source = NULL;
+
+	if (gen->model)
+	{
+	    int secnum = (int)(sec - sectors);
+	    boolean ceiling_target = gen->target == DPT_FLOOR_TARGET_LNC
+				  || gen->target == DPT_FLOOR_TARGET_CEIL;
+	    source = ceiling_target
+		? P_FindModelCeilingSector(floor->floordestheight, secnum)
+		: P_FindModelFloorSector(floor->floordestheight, secnum);
+	}
+	else if (line && line->frontsector)
+	    source = line->frontsector;
+
+	if (source && DPT_GenChangeNeedsSource(effect))
+	{
+	    floor->texture = source->floorpic;
+	    if (DPT_GenChangeWritesType(effect))
+		floor->newspecial = effect == DPT_CHANGE_TEXTURE_ZERO_TYPE
+		    ? 0 : source->special;
+	    floor->type = effect == DPT_CHANGE_TEXTURE ? genFloorChg
+			: effect == DPT_CHANGE_TEXTURE_TYPE ? genFloorChgT
+			: genFloorChg0;
+	}
+    }
     return 1;
 }
 
@@ -521,7 +575,7 @@ EV_DoGenFloor
     secnum = -1;
     rtn = 0;
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
-	if (GenFloorOnSector(&sectors[secnum], &gen))
+	if (GenFloorOnSector(&sectors[secnum], &gen, line))
 	    rtn = 1;
     return rtn;
 }
@@ -533,6 +587,7 @@ EV_DoGenFloor
 int
 EV_DoGenFloorSector
 ( sector_t*	sec,
+  line_t*	line,
   int		special )
 {
     dpt_genfloor_t	gen;
@@ -541,7 +596,7 @@ EV_DoGenFloorSector
         || !DPT_GenFloorDecode(special, &gen)
         || !DPT_GenFloorSupported(special))
         return 0;
-    return GenFloorOnSector(sec, &gen);
+    return GenFloorOnSector(sec, &gen, line);
 }
 
 

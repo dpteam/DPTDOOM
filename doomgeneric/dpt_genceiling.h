@@ -43,6 +43,9 @@ typedef struct
     int     change;           // 0=none 1=zero type 2=texture 3=texture+type
     boolean crush;
     boolean monsters;         // monsters may activate (only when change == 0)
+    // With a change, the model bit selects a source sector at the destination
+    // height instead of the activating line's front sector.
+    boolean model;
 } dpt_genceiling_t;
 
 boolean DPT_GenCeilingIsCeiling(int special);

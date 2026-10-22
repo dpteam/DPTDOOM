@@ -982,6 +982,24 @@ static void saveg_read_ceiling_t(ceiling_t *str)
 
     // int olddirection;
     str->olddirection = saveg_read32();
+
+    // Boom generalized change fields, written only for the types that use them.
+    // Vanilla saves never contain those types, so their byte layout is unchanged
+    // and an old save still loads; a save made while such a ceiling is in flight
+    // keeps the texture and sector type it will apply on arrival.
+    if (str->type == genCeilingChg || str->type == genCeilingChgT
+        || str->type == genCeilingChg0)
+    {
+        // int newspecial;
+        str->newspecial = saveg_read32();
+        // short texture;
+        str->texture = saveg_read16();
+    }
+    else
+    {
+        str->newspecial = 0;
+        str->texture = 0;
+    }
 }
 
 static void saveg_write_ceiling_t(ceiling_t *str)
@@ -1015,6 +1033,18 @@ static void saveg_write_ceiling_t(ceiling_t *str)
 
     // int olddirection;
     saveg_write32(str->olddirection);
+
+    // Boom generalized change fields, only for the types that carry them. This
+    // keeps the vanilla byte layout: those types never appear in a vanilla save,
+    // so nothing extra is written for one.
+    if (str->type == genCeilingChg || str->type == genCeilingChgT
+        || str->type == genCeilingChg0)
+    {
+        // int newspecial;
+        saveg_write32(str->newspecial);
+        // short texture;
+        saveg_write16(str->texture);
+    }
 }
 
 //

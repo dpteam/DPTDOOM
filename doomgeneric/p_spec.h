@@ -94,6 +94,11 @@ fixed_t P_FindNextLowestCeiling(sector_t* sec, int currentheight);
 // overflow guard rather than INT_MAX.
 fixed_t P_FindShortestTextureAround(int secnum);
 fixed_t P_FindShortestUpperAround(int secnum);
+// A sector bounding `secnum` whose floor (respectively ceiling) is exactly at
+// `height`, or NULL. Boom's "numeric model": the generalized change can copy a
+// texture and sector type from the sector the floor is moving to meet.
+sector_t* P_FindModelFloorSector(fixed_t height, int secnum);
+sector_t* P_FindModelCeilingSector(fixed_t height, int secnum);
 
 fixed_t
 P_FindNextHighestFloor
@@ -391,8 +396,8 @@ int EV_DoGenLift (line_t* line);
 
 // Push-trigger (P1/PR) entry points: BOOM applies these to the sector behind the
 // line instead of by tag.
-int EV_DoGenFloorSector (sector_t* sec, int special);
-int EV_DoGenCeilingSector (sector_t* sec, int special);
+int EV_DoGenFloorSector (sector_t* sec, line_t* line, int special);
+int EV_DoGenCeilingSector (sector_t* sec, line_t* line, int special);
 int EV_DoGenCrusherSector (sector_t* sec, int special);
 int EV_DoGenStairsSector (sector_t* sec, int special);
 int EV_DoGenLiftSector (sector_t* sec, int special, int tag);
@@ -529,7 +534,13 @@ typedef enum
     lowerAndCrush,
     crushAndRaise,
     fastCrushAndRaise,
-    silentCrushAndRaise
+    silentCrushAndRaise,
+
+    // Boom generalized ceilings that change the texture and possibly the sector
+    // type on arrival; same three variants as the floors.
+    genCeilingChg,
+    genCeilingChgT,
+    genCeilingChg0
 
 } ceiling_e;
 
@@ -555,6 +566,11 @@ typedef struct
     // ID
     int		tag;                   
     int		olddirection;
+
+    // Boom generalized change: what the sector becomes when the ceiling arrives.
+    // Unused (zero) for vanilla types, which have no such feature.
+    int		newspecial;
+    short	texture;
     
 } ceiling_t;
 
@@ -614,7 +630,14 @@ typedef enum
      // raise to next highest floor, turbo-speed
     raiseFloorTurbo,       
     donutRaise,
-    raiseFloor512
+    raiseFloor512,
+
+    // Boom generalized floors that also change the texture and possibly the
+    // sector type when they arrive. The three variants differ only in what
+    // happens to the type: left alone, copied from the source, or zeroed.
+    genFloorChg,
+    genFloorChgT,
+    genFloorChg0
     
 } floor_e;
 

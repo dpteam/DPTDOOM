@@ -5,6 +5,7 @@
 // different meaning for the crush bit. Both are easy to get subtly wrong, so the
 // decoder is checked exhaustively against BOOM's documented encoding.
 #include "dpt_genceiling.h"
+#include "dpt_genchange.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -97,15 +98,20 @@ int main(void)
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (2 << 7))); // up NnC
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (5 << 7))); // up by texture
 
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0400));           // texture change
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0800));           // texture + type
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0400));            // zero type
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0800));            // copy type
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0040 | 0x1000));  // crush while up
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0006)); // push trigger
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0007)); // push retrigger
     REQUIRE(!DPT_GenCeilingSupported(0x6000));                    // not a ceiling
 
-    // Exhaustive: a texture/model change and crush while raising are the only
-    // rejections.
+    // Texture/type change is supported now.
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0400));            // zero type
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0800));            // copy type
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0c00));            // texture only
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0c00 | 0x0020));   // + model sector
+
+    // Exhaustive: crush while raising is the only rejection.
     for (trigger = 0; trigger < 8; ++trigger)
     for (speed = 0; speed < 4; ++speed)
     for (up = 0; up < 2; ++up)
@@ -113,12 +119,16 @@ int main(void)
     for (change = 0; change < 4; ++change)
     for (target_bits = 0; target_bits < 8; ++target_bits)
     {
-        int expected;
         special = 0x4000 | trigger | (speed << 3) | (up << 6) | (change << 10)
                 | (crush << 12) | (target_bits << 7);
-        expected = change == 0 && !(crush && up);
-        REQUIRE(DPT_GenCeilingSupported(special) == expected);
+        REQUIRE(DPT_GenCeilingSupported(special) == !(crush && up));
     }
+
+    // The model bit is a monster flag only when no change is requested.
+    REQUIRE(DPT_GenCeilingDecode(0x4000 | 0x0020, &ceiling));
+    REQUIRE(ceiling.monsters && !ceiling.model);
+    REQUIRE(DPT_GenCeilingDecode(0x4000 | 0x0c00 | 0x0020, &ceiling));
+    REQUIRE(!ceiling.monsters && ceiling.model);
 
     // Destination selection, with every neighbour value distinct so an
     // accidental swap between two targets cannot pass.
