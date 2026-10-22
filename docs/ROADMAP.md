@@ -612,16 +612,17 @@ partition может породить две отдельные локальны
   **не** степени двойки; концы совпадают с ванильными `build8`/`turbo16`.
   Обход секторов параметризован по образцу `EV_BuildStairs`. Декодер
   `dpt_genstairs.c` покрыт data-free тестом `genstairs` на 512 комбинаций.
-- [x] Boom generalized **lifts** (`0x3400..0x37ff`), targets 1..3: lowest
-  neighbour floor, next lowest floor и lowest neighbour ceiling — все три идут
-  через один цикл `downWaitUpStay`, различается только высота назначения,
-  которую считает чистая `DPT_GenLiftDest`. Скорость из документированной
-  таблицы (`P_SLOW=8..P_TURBO=64`), все восемь триггеров.
+- [x] Boom generalized **lifts** (`0x3400..0x37ff`), все четыре targets: lowest
+  neighbour floor, next lowest floor, lowest neighbour ceiling и perpetual. Первые
+  три идут через один цикл `downWaitUpStay`, различается только высота назначения
+  (чистые `DPT_GenLiftDest`/`DPT_GenLiftHigh`). Perpetual — ванильный
+  `perpetualRaise` между самым низким и самым высоким floor соседей, начальное
+  направление из `P_Random() & 1`, перед стартом `P_ActivateInStasis`. Скорость из
+  документированной таблицы (`P_SLOW=8..P_TURBO=64`), все восемь триггеров.
   Задержка **исправлена** на BOOM'овскую: 35/105/175/350 тиков (`1*35`,
   `PLATWAIT*35`, `5*35`, `10*35`); прежние 8/24/40/80 были примерно вчетверо
-  короче. Perpetual (target 4) требует отдельного типа движения и попадает в
-  отчёт. Декодер `dpt_genlift.c` покрыт data-free тестом `genlift` на 1024
-  комбинации плюс проверка высот назначения.
+  короче. Декодер `dpt_genlift.c` покрыт data-free тестом `genlift` на 1024
+  комбинации плюс проверка высот назначения и верха.
 - [x] Boom generalized **locked doors** (`0x3800..0x3bff`) целиком: все восемь
   триггеров, 4 скорости, оба kind (open/wait/close и open-and-stay) и все 8
   значений lock, включая режим `sk=ck`. Layout сверен с PrBoom editing

@@ -67,20 +67,19 @@ int main(void)
 
     REQUIRE(DPT_GenLiftSupported(0x3400 | (1 << 8)));         // next lowest floor
     REQUIRE(DPT_GenLiftSupported(0x3400 | (2 << 8)));         // lowest ceiling
-    REQUIRE(!DPT_GenLiftSupported(0x3400 | (3 << 8)));        // perpetual
+    REQUIRE(DPT_GenLiftSupported(0x3400 | (3 << 8)));         // perpetual
     REQUIRE(DPT_GenLiftSupported(0x3406));                    // P1
     REQUIRE(DPT_GenLiftSupported(0x3407));                    // PR
     REQUIRE(!DPT_GenLiftSupported(0x3000));                   // not a lift
 
-    // Every supported combination must be one of the three real targets, and
-    // the perpetual target must be the only rejected one across all fields.
+    // All four targets are supported, so no combination is rejected.
     for (trigger = 0; trigger < 8; ++trigger)
     for (speed = 0; speed < 4; ++speed)
     for (delay = 0; delay < 4; ++delay)
     for (target = 0; target < 4; ++target)
     {
         special = 0x3400 | trigger | (speed << 3) | (delay << 6) | (target << 8);
-        REQUIRE(DPT_GenLiftSupported(special) == (target != 3));
+        REQUIRE(DPT_GenLiftSupported(special));
     }
 
     // Destination (the low point) for each supported target, with distinct
@@ -112,6 +111,24 @@ int main(void)
 
         REQUIRE(DPT_GenLiftDest(NULL, &env) == env.current);
         REQUIRE(DPT_GenLiftDest(&lift, NULL) == 0);
+
+        // High point: every target except perpetual stops where it started, so
+        // the platform returns to its own floor. Perpetual rises to the highest
+        // neighbour floor, clamped so it cannot start below itself.
+        env.highest_floor = 96 * FRACUNIT;
+        lift.target = DPT_LIFT_TARGET_LNF;
+        REQUIRE(DPT_GenLiftHigh(&lift, &env) == env.current);
+        lift.target = DPT_LIFT_TARGET_PERPETUAL;
+        REQUIRE(DPT_GenLiftHigh(&lift, &env) == env.highest_floor);
+        REQUIRE(DPT_GenLiftDest(&lift, &env) == env.lowest_floor);
+
+        // Highest neighbour below the current floor: clamp to the current floor
+        // rather than producing a platform that only travels downwards.
+        env.highest_floor = -40 * FRACUNIT;
+        REQUIRE(DPT_GenLiftHigh(&lift, &env) == env.current);
+
+        REQUIRE(DPT_GenLiftHigh(NULL, &env) == env.current);
+        REQUIRE(DPT_GenLiftHigh(&lift, NULL) == 0);
     }
 
     puts("Boom generalized lifts: range bounds, 1024 field combinations, "

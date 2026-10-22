@@ -38,6 +38,7 @@ typedef struct
     fixed_t lowest_floor;      // lowest surrounding floor
     fixed_t next_lowest_floor; // highest surrounding floor below current
     fixed_t lowest_ceiling;    // lowest surrounding ceiling
+    fixed_t highest_floor;     // highest surrounding floor (perpetual target)
 } dpt_lift_env_t;
 
 // Destination (the low point of the travel) for a supported generalized lift.
@@ -45,5 +46,10 @@ typedef struct
 // with nothing lower simply does not move, and the ceiling target is clamped to
 // the current floor so the platform cannot start above itself.
 fixed_t DPT_GenLiftDest (const dpt_genlift_t* gen, const dpt_lift_env_t* env);
+
+// High point of the travel. Only the perpetual target uses anything other than
+// the sector's own floor height: it oscillates between the lowest and highest
+// surrounding floors, and BOOM clamps the top so it cannot start below itself.
+fixed_t DPT_GenLiftHigh (const dpt_genlift_t* gen, const dpt_lift_env_t* env);
 
 #endif

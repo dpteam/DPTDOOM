@@ -268,7 +268,8 @@ GenLiftOnSector
     memset(plat, 0, sizeof(*plat));
     P_AddThinker(&plat->thinker);
 
-    plat->type = downWaitUpStay;
+    plat->type = gen->target == DPT_LIFT_TARGET_PERPETUAL
+	? perpetualRaise : downWaitUpStay;
     plat->sector = sec;
     plat->sector->specialdata = plat;
     plat->thinker.function.acp1 = (actionf_p1) T_PlatRaise;
@@ -276,18 +277,23 @@ GenLiftOnSector
     plat->tag = tag;
     plat->speed = (FRACUNIT / 8) * gen->speed_eighths;
 
-    // Destination comes from the tested pure function.
+    // Both endpoints come from the tested pure functions.
     {
 	dpt_lift_env_t env;
 	env.current = sec->floorheight;
 	env.lowest_floor = P_FindLowestFloorSurrounding(sec);
 	env.next_lowest_floor = P_FindNextLowestFloor(sec, sec->floorheight);
 	env.lowest_ceiling = P_FindLowestCeilingSurrounding(sec);
+	env.highest_floor = P_FindHighestFloorSurrounding(sec);
 	plat->low = DPT_GenLiftDest(gen, &env);
+	plat->high = DPT_GenLiftHigh(gen, &env);
     }
-    plat->high = sec->floorheight;
     plat->wait = gen->delay_tics;
-    plat->status = down;
+    // The perpetual platform starts in either direction, chosen by the shared
+    // random stream - the same way vanilla's perpetualRaise does, so the
+    // simulation stays deterministic for a given set of commands.
+    plat->status = gen->target == DPT_LIFT_TARGET_PERPETUAL
+	? (P_Random() & 1) : down;
     S_StartSound(&sec->soundorg,sfx_pstart);
 
     P_AddActivePlat(plat);
@@ -300,7 +306,8 @@ GenLiftOnSector
 // Targets 1..3 share one down/wait/up platform; only the destination height
 // differs, so the platform is built here instead of reusing EV_DoPlatform.
 // Speed and delay come from the generalized bits instead of the fixed
-// PLATSPEED/PLATWAIT. The perpetual target is reported, not approximated.
+// PLATSPEED/PLATWAIT. The perpetual target oscillates between the lowest and
+// highest neighbouring floors using the engine's perpetualRaise type.
 //
 int
 EV_DoGenLift
@@ -313,6 +320,11 @@ EV_DoGenLift
     if (!DPT_GenLiftDecode(line->special, &gen)
         || !DPT_GenLiftSupported(line->special))
         return 0;
+
+    // BOOM reactivates stasis platforms before starting a perpetual lift, so a
+    // retrigger resumes a paused one instead of stacking a second thinker.
+    if (gen.target == DPT_LIFT_TARGET_PERPETUAL)
+	P_ActivateInStasis(line->tag);
 
     secnum = -1;
     rtn = 0;

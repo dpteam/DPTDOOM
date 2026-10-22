@@ -217,7 +217,7 @@ def main():
                # the line.
                0x2f80, 0x2f82, 0x2fd8, 0x2f86, 0x2f87,
                0x3140, 0x3142, 0x3144, 0x3146,
-               0x3400, 0x3402, 0x3404, 0x3406, 0x3500, 0x3600,
+               0x3400, 0x3402, 0x3404, 0x3406, 0x3500, 0x3600, 0x3700,
                0x3800, 0x3840, 0x3880, 0x39c0, 0x3806]
         )
         overlay_multi(iwad, root / "supported.wad", supported)
@@ -227,11 +227,10 @@ def main():
         # Unsupported: 142+ is the main Boom extended range; 78 and 85 are Boom
         # types placed inside the vanilla 1..141 range (vanilla never uses those
         # numbers). The rest are the two remaining combinations: crush in the
-        # direction where it has no meaning, and the perpetual lift.
+        # direction where it has no meaning.
         unsupported = [142, 78, 85,
                        0x7000,   # floor: crush while lowering
-                       0x4040 | 0x1000,  # ceiling: crush while raising
-                       0x3700]   # lift: perpetual lowest<->highest
+                       0x4040 | 0x1000]  # ceiling: crush while raising
         overlay_multi(iwad, root / "unsupported.wad", unsupported)
         _, text = run("unsupported", ["-file", str(root / "unsupported.wad")])
         assert "Map compatibility:" in text, text

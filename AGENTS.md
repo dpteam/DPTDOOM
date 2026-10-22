@@ -224,8 +224,8 @@ ctest --preset windows-headless
   generalized-дверей `0x3c00..0x3fff`, locked doors `0x3800..0x3bff` (все
   8 lock-значений и режим `sk=ck`, ключи проверяются до создания thinker-а),
   generalized crushers `0x2f80..0x2fff`
-  и stairs `0x3000..0x33ff`, **все три** lift-цели `0x3400..0x37ff`
-  (LNF/NNLF/LNC; perpetual не поддержан), плюс
+  и stairs `0x3000..0x33ff`, **все четыре** lift-targets `0x3400..0x37ff`
+  (LNF/NNLF/LNC и perpetual через ванильный `perpetualRaise`), плюс
   подмножества generalized floors `0x6000..0x7fff` и ceilings
   `0x4000..0x5fff` (все цели, сводящиеся к высоте: HNF/LNF/NNF/LNC/C и
   относительные 24/32); push-триггеры P1/PR работают для всех семейств и действуют
@@ -243,11 +243,11 @@ ctest --preset windows-headless
   применяется в `P_XYMovement` и `P_MovePlayer` только на секторах с битом
   `0x0100`. Известное сужение: берётся сектор, где объект стоит, а не все
   касаемые (нет touching-sector list) — записано в коде и MAPS.md.
-  Не реализованы и попадают в отчёт `Map compatibility:`: perpetual-лифт, crush в
-  бессмысленном направлении, push/pull sector specials (нужен pusher-thinker с
-  touching-sector list и учётом воды). Все цели floor/ceiling, включая `sT` и
-  `NnC`, и все четыре варианта `change` теперь поддержаны — для них добавлены
-  `P_FindNextHighestCeiling`/`P_FindNextLowestCeiling`,
+  Не реализованы и попадают в отчёт `Map compatibility:`: crush в бессмысленном
+  направлении и push/pull sector specials (нужен pusher-thinker с
+  touching-sector list и учётом воды). Все цели floor/ceiling/lift, включая `sT`,
+  `NnC`, perpetual и все четыре варианта `change`, теперь поддержаны — для них
+  добавлены `P_FindNextHighestCeiling`/`P_FindNextLowestCeiling`,
   `P_FindShortestTextureAround`/`P_FindShortestUpperAround` (последние
   возвращают `32000<<FRACBITS`, как BOOM, чтобы высота не переполнилась),
   `P_FindModelFloorSector`/`P_FindModelCeilingSector` и общий data-free

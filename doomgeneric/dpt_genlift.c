@@ -45,15 +45,9 @@ boolean DPT_GenLiftSupported(int special)
     if (!DPT_GenLiftDecode(special, &lift))
         return false;
 
-    // Targets 1..3 all use the same down/wait/up platform; only the destination
-    // height differs, and this engine computes that itself. Target 4 (perpetual
-    // lowest<->highest) needs a platform that reverses forever, which is a
-    // different movement type, so it is reported rather than approximated.
-    if (lift.target == DPT_LIFT_TARGET_PERPETUAL)
-        return false;
-
-    // Every trigger, including push, is dispatched; push acts on the sector
-    // behind the line.
+    // All four targets are supported. 1..3 are one down/wait/up platform with a
+    // different destination; 4 oscillates forever between the lowest and highest
+    // neighbouring floors, which this engine already has as perpetualRaise.
     (void) lift;
     return true;
 }
@@ -77,9 +71,29 @@ fixed_t DPT_GenLiftDest (const dpt_genlift_t* gen, const dpt_lift_env_t* env)
         low = env->lowest_ceiling;
         return low > env->current ? env->current : low;
 
+      case DPT_LIFT_TARGET_PERPETUAL:
+        // The perpetual platform's low point is the lowest neighbour floor.
+        low = env->lowest_floor;
+        return low > env->current ? env->current : low;
+
       case DPT_LIFT_TARGET_LNF:
       default:
         low = env->lowest_floor;
         return low > env->current ? env->current : low;
     }
+}
+
+fixed_t DPT_GenLiftHigh (const dpt_genlift_t* gen, const dpt_lift_env_t* env)
+{
+    fixed_t high;
+
+    if (!gen || !env)
+        return env ? env->current : 0;
+
+    // Every other target stops at the height it started from.
+    if (gen->target != DPT_LIFT_TARGET_PERPETUAL)
+        return env->current;
+
+    high = env->highest_floor;
+    return high < env->current ? env->current : high;
 }
