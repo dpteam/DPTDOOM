@@ -14,7 +14,7 @@
 
 int main(void)
 {
-    static const int delays[4] = {8, 24, 40, 80};
+    static const int delays[4] = {35, 105, 175, 350};
     static const int speeds[4] = {8, 16, 32, 64};
     int trigger, speed, monster, delay, target, special;
     dpt_genlift_t lift;
@@ -44,34 +44,77 @@ int main(void)
         REQUIRE(lift.target == target + 1);
     }
 
-    // Documented spot values: W1, slow, 8 tics, lowest neighbour floor.
+    // Documented spot values: W1, slow, 1 second (35 tics), lowest neighbour floor.
     REQUIRE(DPT_GenLiftDecode(0x3400, &lift));
     REQUIRE(lift.trigger == 0 && lift.speed_eighths == 8);
-    REQUIRE(lift.delay_tics == 8 && lift.target == DPT_LIFT_TARGET_LNF);
-    // SR, turbo, 80 tics, target 4 (perpetual).
+    REQUIRE(lift.delay_tics == 35 && lift.target == DPT_LIFT_TARGET_LNF);
+    // SR, turbo, 10 seconds (350 tics), target 4 (perpetual).
     REQUIRE(DPT_GenLiftDecode(0x3400 | 3 | (3 << 3) | (3 << 6) | (3 << 8), &lift));
     REQUIRE(lift.trigger == 3 && lift.speed_eighths == 64);
-    REQUIRE(lift.delay_tics == 80 && lift.target == DPT_LIFT_TARGET_PERPETUAL);
+    REQUIRE(lift.delay_tics == 350 && lift.target == DPT_LIFT_TARGET_PERPETUAL);
 
-    // Supported: only target 1 (lowest neighbour floor), but every trigger class
-    // including push.
+    // Supported: targets 1..3 (lowest / next lowest neighbour floor, lowest
+    // neighbour ceiling), every trigger class including push. Only the
+    // perpetual target is reported.
     REQUIRE(DPT_GenLiftSupported(0x3400));                    // W1 LNF
     REQUIRE(DPT_GenLiftSupported(0x3401));                    // WR
     REQUIRE(DPT_GenLiftSupported(0x3402));                    // S1
     REQUIRE(DPT_GenLiftSupported(0x3403));                    // SR
     REQUIRE(DPT_GenLiftSupported(0x3404));                    // G1
     REQUIRE(DPT_GenLiftSupported(0x3405));                    // GR
-    REQUIRE(DPT_GenLiftSupported(0x3400 | 0x00c0));           // 80 tic delay
+    REQUIRE(DPT_GenLiftSupported(0x3400 | 0x00c0));           // 10 s delay
     REQUIRE(DPT_GenLiftSupported(0x3400 | 0x0018));           // turbo
 
-    REQUIRE(!DPT_GenLiftSupported(0x3400 | (1 << 8)));        // next lowest floor
-    REQUIRE(!DPT_GenLiftSupported(0x3400 | (2 << 8)));        // lowest ceiling
+    REQUIRE(DPT_GenLiftSupported(0x3400 | (1 << 8)));         // next lowest floor
+    REQUIRE(DPT_GenLiftSupported(0x3400 | (2 << 8)));         // lowest ceiling
     REQUIRE(!DPT_GenLiftSupported(0x3400 | (3 << 8)));        // perpetual
     REQUIRE(DPT_GenLiftSupported(0x3406));                    // P1
     REQUIRE(DPT_GenLiftSupported(0x3407));                    // PR
     REQUIRE(!DPT_GenLiftSupported(0x3000));                   // not a lift
 
+    // Every supported combination must be one of the three real targets, and
+    // the perpetual target must be the only rejected one across all fields.
+    for (trigger = 0; trigger < 8; ++trigger)
+    for (speed = 0; speed < 4; ++speed)
+    for (delay = 0; delay < 4; ++delay)
+    for (target = 0; target < 4; ++target)
+    {
+        special = 0x3400 | trigger | (speed << 3) | (delay << 6) | (target << 8);
+        REQUIRE(DPT_GenLiftSupported(special) == (target != 3));
+    }
+
+    // Destination (the low point) for each supported target, with distinct
+    // neighbour values so a swap between targets cannot pass.
+    {
+        dpt_lift_env_t env;
+        env.current = 0;
+        env.lowest_floor = -64 * FRACUNIT;
+        env.next_lowest_floor = -16 * FRACUNIT;
+        env.lowest_ceiling = -8 * FRACUNIT;
+
+        lift.target = DPT_LIFT_TARGET_LNF;
+        REQUIRE(DPT_GenLiftDest(&lift, &env) == env.lowest_floor);
+        lift.target = DPT_LIFT_TARGET_NNLF;
+        REQUIRE(DPT_GenLiftDest(&lift, &env) == env.next_lowest_floor);
+        lift.target = DPT_LIFT_TARGET_LNC;
+        REQUIRE(DPT_GenLiftDest(&lift, &env) == env.lowest_ceiling);
+
+        // The ceiling target is clamped to the current floor: a platform must
+        // never start above its own high point.
+        env.lowest_ceiling = 40 * FRACUNIT;
+        lift.target = DPT_LIFT_TARGET_LNC;
+        REQUIRE(DPT_GenLiftDest(&lift, &env) == env.current);
+        // ...while the next-lowest target is not clamped, matching BOOM: with
+        // nothing lower the platform simply does not travel.
+        env.next_lowest_floor = env.current;
+        lift.target = DPT_LIFT_TARGET_NNLF;
+        REQUIRE(DPT_GenLiftDest(&lift, &env) == env.current);
+
+        REQUIRE(DPT_GenLiftDest(NULL, &env) == env.current);
+        REQUIRE(DPT_GenLiftDest(&lift, NULL) == 0);
+    }
+
     puts("Boom generalized lifts: range bounds, 1024 field combinations, "
-         "speed/delay tables and supported-target rules OK");
+         "speed/delay tables, supported targets and destinations OK");
     return 0;
 }

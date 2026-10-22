@@ -19,7 +19,12 @@ boolean DPT_GenLiftIsLift(int special)
 
 boolean DPT_GenLiftDecode(int special, dpt_genlift_t *out)
 {
-    static const int delays[4] = {8, 24, 40, 80};
+    // BOOM's wait values are 1/3/5/10 seconds expressed in tics (35 tics per
+    // second), i.e. 35/105/175/350. An earlier version of this table used
+    // 8/24/40/80, which made every generalized lift pause about four times
+    // shorter than BOOM - visible as a platform that barely settles before
+    // rising again.
+    static const int delays[4] = {35, 105, 175, 350};
     static const int speeds[4] = {8, 16, 32, 64};
 
     if (!out || !DPT_GenLiftIsLift(special))
@@ -40,15 +45,41 @@ boolean DPT_GenLiftSupported(int special)
     if (!DPT_GenLiftDecode(special, &lift))
         return false;
 
-    // Only "lowest neighbour floor" (BOOM target 1) maps onto this engine's
-    // downWaitUpStay platform. The other targets (next lowest floor, lowest
-    // neighbour ceiling, perpetual lowest<->highest) need movement types the
-    // engine does not have, so they are reported rather than approximated.
-    if (lift.target != DPT_LIFT_TARGET_LNF)
+    // Targets 1..3 all use the same down/wait/up platform; only the destination
+    // height differs, and this engine computes that itself. Target 4 (perpetual
+    // lowest<->highest) needs a platform that reverses forever, which is a
+    // different movement type, so it is reported rather than approximated.
+    if (lift.target == DPT_LIFT_TARGET_PERPETUAL)
         return false;
 
     // Every trigger, including push, is dispatched; push acts on the sector
     // behind the line.
     (void) lift;
     return true;
+}
+
+
+fixed_t DPT_GenLiftDest (const dpt_genlift_t* gen, const dpt_lift_env_t* env)
+{
+    fixed_t low;
+
+    if (!gen || !env)
+        return env ? env->current : 0;
+
+    switch (gen->target)
+    {
+      case DPT_LIFT_TARGET_NNLF:
+        // BOOM does not clamp this one: with nothing lower, the target equals
+        // the current height and the platform simply does not travel.
+        return env->next_lowest_floor;
+
+      case DPT_LIFT_TARGET_LNC:
+        low = env->lowest_ceiling;
+        return low > env->current ? env->current : low;
+
+      case DPT_LIFT_TARGET_LNF:
+      default:
+        low = env->lowest_floor;
+        return low > env->current ? env->current : low;
+    }
 }

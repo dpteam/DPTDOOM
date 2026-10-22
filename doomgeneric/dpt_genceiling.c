@@ -34,12 +34,12 @@ boolean DPT_GenCeilingDecode(int special, dpt_genceiling_t *out)
     if (raw_target >= 7)
     {
         out->target = 0;
-        out->absolute_height = 24 + (raw_target - 7) * 8;
+        out->relative_height = 24 + (raw_target - 7) * 8;
     }
     else
     {
         out->target = raw_target;
-        out->absolute_height = 0;
+        out->relative_height = 0;
     }
 
     out->monsters = out->change == 0 && (special & 0x0020) != 0;
@@ -53,18 +53,52 @@ boolean DPT_GenCeilingSupported(int special)
     if (!DPT_GenCeilingDecode(special, &ceiling))
         return false;
 
-    // Only mappings that exist in this engine are accepted. Ceiling movement is
-    // limited to "raise to highest neighbour ceiling", "lower to floor" and
-    // "lower to floor and crush"; neighbour-next/neighbour-highest targets and
-    // any texture/model change are reported instead of approximated.
-    if (ceiling.change != 0 || ceiling.absolute_height != 0)
+    // Ceiling movement uses explicit top/bottom heights in this engine, so any
+    // target that resolves to a height is supported. Three are not: a texture or
+    // model change (needs model-sector logic), the "next neighbour ceiling"
+    // target, and the shortest-upper-texture target - the latter two need
+    // helpers this engine does not have.
+    if (ceiling.change != 0)
+        return false;
+    if (ceiling.target == DPT_CEILING_TARGET_NNC
+        || ceiling.target == DPT_CEILING_TARGET_TEXTURE)
         return false;
 
-    if (ceiling.up)
-        return ceiling.target == DPT_CEILING_TARGET_HNC && !ceiling.crush;
-
-    if (ceiling.target != DPT_CEILING_TARGET_FLOOR)
+    // Crushing only exists when lowering.
+    if (ceiling.crush && ceiling.up)
         return false;
-    // Lowering to the floor only crushes when the crush bit is set.
+
     return true;
+}
+
+
+fixed_t DPT_GenCeilingDest (const dpt_genceiling_t* gen, const dpt_ceiling_env_t* env)
+{
+    if (!gen || !env)
+        return env ? env->current : 0;
+
+    switch (gen->target)
+    {
+      case DPT_CEILING_TARGET_HNC:
+        return env->highest_ceiling;
+
+      case DPT_CEILING_TARGET_LNC:
+        return env->lowest_ceiling;
+
+      case DPT_CEILING_TARGET_HNF:
+        return env->highest_floor;
+
+      case DPT_CEILING_TARGET_FLOOR:
+        return env->floor;
+
+      case 0:
+        // Relative by 24 or 32 units from the current height.
+        return gen->up
+            ? env->current + gen->relative_height * FRACUNIT
+            : env->current - gen->relative_height * FRACUNIT;
+
+      default:
+        // Unsupported targets never reach the engine.
+        return env->current;
+    }
 }

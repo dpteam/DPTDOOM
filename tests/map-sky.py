@@ -201,13 +201,19 @@ def main():
         supported = (
             # Boom generalized doors: all eight trigger classes.
             [0x3c00 + t for t in range(8)]
-            # Floors, ceilings, crushers, stairs, lifts and locked doors,
-            # including push (P1/PR), which acts on the sector behind the line.
+            # Floors: every target that resolves to a height, both directions.
             + [0x6000, 0x6002, 0x6004, 0x6006, 0x6007,
-               0x4040, 0x4042, 0x4046,
+               0x6080, 0x6100, 0x6180, 0x6200, 0x6300, 0x6380,
+               0x6040, 0x60c0, 0x6140, 0x61c0, 0x6240, 0x6340, 0x7140,
+               # Ceilings: the same, plus crush while lowering.
+               0x4000, 0x4080, 0x40c0, 0x4180, 0x4200, 0x4240, 0x4300, 0x4380,
+               0x4040, 0x4042, 0x4046, 0x5200,
+               # Crushers, stairs, lifts (all three supported targets), locked
+               # doors, including push (P1/PR) which acts on the sector behind
+               # the line.
                0x2f80, 0x2f82, 0x2fd8, 0x2f86, 0x2f87,
                0x3140, 0x3142, 0x3144, 0x3146,
-               0x3400, 0x3402, 0x3404, 0x3406,
+               0x3400, 0x3402, 0x3404, 0x3406, 0x3500, 0x3600,
                0x3800, 0x3840, 0x3880, 0x39c0, 0x3806]
         )
         overlay_multi(iwad, root / "supported.wad", supported)
@@ -216,9 +222,18 @@ def main():
 
         # Unsupported: 142+ is the main Boom extended range; 78 and 85 are Boom
         # types placed inside the vanilla 1..141 range (vanilla never uses those
-        # numbers). 0x6200/0x4080/0x3500 are generalized targets outside the
-        # supported subset (0x6000 itself is supported).
-        unsupported = [142, 78, 85, 0x6200, 0x4080, 0x3500]
+        # numbers). The rest are generalized targets and combinations outside the
+        # supported subset: the shortest-texture targets, the next-neighbour
+        # ceiling, the perpetual lift, a texture change, and crush in the
+        # direction where it has no meaning.
+        unsupported = [142, 78, 85,
+                       0x6280,   # floor: shortest lower texture
+                       0x7000,   # floor: crush while lowering
+                       0x6400,   # floor: texture change
+                       0x4100,   # ceiling: next neighbour ceiling
+                       0x4280,   # ceiling: shortest upper texture
+                       0x4800,   # ceiling: texture change
+                       0x3700]   # lift: perpetual lowest<->highest
         overlay_multi(iwad, root / "unsupported.wad", unsupported)
         _, text = run("unsupported", ["-file", str(root / "unsupported.wad")])
         assert "Map compatibility:" in text, text

@@ -83,6 +83,9 @@ getSide
 
 fixed_t P_FindLowestFloorSurrounding(sector_t* sec);
 fixed_t P_FindHighestFloorSurrounding(sector_t* sec);
+// Largest surrounding floor height strictly below `currentheight`, or
+// `currentheight` when there is none. BOOM's "next lowest floor".
+fixed_t P_FindNextLowestFloor(sector_t* sec, int currentheight);
 
 fixed_t
 P_FindNextHighestFloor

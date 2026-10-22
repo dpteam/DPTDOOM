@@ -262,22 +262,28 @@ GenCeilingOnSector
     ceiling->crush = false;
     ceiling->speed = CEILSPEED << gen->speed_shift;
 
-    if (gen->up)
+    // Destination comes from the tested pure function; the engine only gathers
+    // the neighbour heights it needs.
     {
-	// Raise to the highest surrounding ceiling. Vanilla has no separate
-	// "next neighbour" ceiling type, which is why only HnC is supported.
-	ceiling->type = raiseToHighest;
-	ceiling->topheight = P_FindHighestCeilingSurrounding(sec);
-	ceiling->direction = 1;
-    }
-    else
-    {
-	ceiling->type = gen->crush ? lowerAndCrush : lowerToFloor;
-	ceiling->crush = gen->crush;
-	ceiling->bottomheight = sec->floorheight;
-	if (gen->crush)
-	    ceiling->bottomheight += 8*FRACUNIT;
-	ceiling->direction = -1;
+	dpt_ceiling_env_t env;
+	env.current = sec->ceilingheight;
+	env.highest_ceiling = P_FindHighestCeilingSurrounding(sec);
+	env.lowest_ceiling = P_FindLowestCeilingSurrounding(sec);
+	env.highest_floor = P_FindHighestFloorSurrounding(sec);
+	env.floor = sec->floorheight;
+	if (gen->up)
+	{
+	    ceiling->type = raiseToHighest;
+	    ceiling->direction = 1;
+	    ceiling->topheight = DPT_GenCeilingDest(gen, &env);
+	}
+	else
+	{
+	    ceiling->type = gen->crush ? lowerAndCrush : lowerToFloor;
+	    ceiling->crush = gen->crush;
+	    ceiling->direction = -1;
+	    ceiling->bottomheight = DPT_GenCeilingDest(gen, &env);
+	}
     }
 
     ceiling->tag = sec->tag;

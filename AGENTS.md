@@ -224,19 +224,24 @@ ctest --preset windows-headless
   generalized-дверей `0x3c00..0x3fff`, locked doors `0x3800..0x3bff` (все
   8 lock-значений и режим `sk=ck`, ключи проверяются до создания thinker-а),
   generalized crushers `0x2f80..0x2fff`
-  и stairs `0x3000..0x33ff`, подмножество lifts `0x3400..0x37ff`, плюс
+  и stairs `0x3000..0x33ff`, **все три** lift-цели `0x3400..0x37ff`
+  (LNF/NNLF/LNC; perpetual не поддержан), плюс
   подмножества generalized floors `0x6000..0x7fff` и ceilings
-  `0x4000..0x5fff`; push-триггеры P1/PR работают для всех семейств и действуют
+  `0x4000..0x5fff` (все цели, сводящиеся к высоте: HNF/LNF/NNF/LNC/C и
+  относительные 24/32); push-триггеры P1/PR работают для всех семейств и действуют
   на сектор за линией; generalized sector specials (base/damage/secret, без
   friction/push). Декодеры в `dpt_gendoor.c`/`dpt_genfloor.c`/
   `dpt_genceiling.c`/`dpt_gencrusher.c`/`dpt_genstairs.c`/`dpt_genlift.c`/
-  `dpt_genlocked.c`/`dpt_secspecial.c`,
-  data-free тесты `gendoor`/`genfloor`/`genceiling`/`gencrusher`/`genstairs`/
-  `genlift`/`genlocked`/`secspecial`). Остальные Boom/MBF specials (часть
-  lift-целей, часть floor/ceiling-целей, friction/push) не реализованы и
-  попадают в отчёт
-  `Map compatibility:`; не выдавать загрузку карты за совместимость.
-  Детали/тесты — `docs/MAPS.md`, `map-sky` и data-free тесты.
+  `dpt_genlocked.c`/`dpt_secspecial.c`, высоты назначения — в чистых
+  `DPT_GenFloorDest`/`DPT_GenCeilingDest`/`DPT_GenLiftDest`, поэтому проверяются
+  без карты; data-free тесты `gendoor`/`genfloor`/`genceiling`/`gencrusher`/
+  `genstairs`/`genlift`/`genlocked`/`secspecial`). Задержка generalized-лифтов
+  исправлена на BOOM'овскую (35/105/175/350 тиков вместо 8/24/40/80).
+  Не реализованы и попадают в отчёт `Map compatibility:`: цель `sT` (floor и
+  ceiling), ceiling `NnC`, perpetual-лифт, texture/model `change`, crush в
+  бессмысленном направлении, friction/push sector specials.
+  Не выдавать загрузку карты за совместимость. Детали/тесты — `docs/MAPS.md`,
+  `map-sky` и data-free тесты.
 - DeHackEd subset: deh_classic.c, DPT_DEH_CLASSIC, **Misc + Ammo + bounded Text + Weapon frames + Thing numeric/flags/states/sounds + Frame graph/visual/psprite** classic
   v3.0/Doom19/format6; FEATURE_DEHACKED остаётся OFF. -deh files first, explicit
   -dehlump IWAD/PWAD directory order second; atomic per source, strict rejects.

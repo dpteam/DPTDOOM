@@ -395,6 +395,46 @@ P_FindNextHighestFloor
 }
 
 //
+// P_FindNextLowestFloor
+//
+// Largest surrounding floor height strictly below currentheight, or
+// currentheight when there is none. BOOM uses this for "next lowest floor"
+// targets; it is the mirror of P_FindNextHighestFloor and needs no overflow
+// emulation, because it scans without building a height list.
+//
+fixed_t
+P_FindNextLowestFloor
+( sector_t* sec,
+  int       currentheight )
+{
+    fixed_t     height = currentheight;
+    int         found = 0;
+    int         i;
+    line_t*     check;
+    sector_t*   other;
+
+    for (i = 0; i < sec->linecount; i++)
+    {
+        check = sec->lines[i];
+        other = getNextSector(check, sec);
+
+        if (!other)
+            continue;
+
+        // Strictly below the current height, and the highest such candidate:
+        // that is "next lowest". The found flag is what makes the first
+        // candidate acceptable, since it is already below currentheight.
+        if (other->floorheight < currentheight
+            && (!found || other->floorheight > height))
+        {
+            height = other->floorheight;
+            found = 1;
+        }
+    }
+    return height;
+}
+
+//
 // FIND LOWEST CEILING IN THE SURROUNDING SECTORS
 //
 fixed_t

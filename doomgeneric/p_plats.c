@@ -276,9 +276,15 @@ GenLiftOnSector
     plat->tag = tag;
     plat->speed = (FRACUNIT / 8) * gen->speed_eighths;
 
-    plat->low = P_FindLowestFloorSurrounding(sec);
-    if (plat->low > sec->floorheight)
-	plat->low = sec->floorheight;
+    // Destination comes from the tested pure function.
+    {
+	dpt_lift_env_t env;
+	env.current = sec->floorheight;
+	env.lowest_floor = P_FindLowestFloorSurrounding(sec);
+	env.next_lowest_floor = P_FindNextLowestFloor(sec, sec->floorheight);
+	env.lowest_ceiling = P_FindLowestCeilingSurrounding(sec);
+	plat->low = DPT_GenLiftDest(gen, &env);
+    }
     plat->high = sec->floorheight;
     plat->wait = gen->delay_tics;
     plat->status = down;
@@ -291,9 +297,10 @@ GenLiftOnSector
 //
 // Boom generalized lift.
 //
-// Only the "lowest neighbour floor" target maps onto this engine's
-// downWaitUpStay platform (lower, wait, raise). Speed and delay come from the
-// generalized bits instead of the fixed PLATSPEED/PLATWAIT.
+// Targets 1..3 share one down/wait/up platform; only the destination height
+// differs, so the platform is built here instead of reusing EV_DoPlatform.
+// Speed and delay come from the generalized bits instead of the fixed
+// PLATSPEED/PLATWAIT. The perpetual target is reported, not approximated.
 //
 int
 EV_DoGenLift

@@ -47,12 +47,12 @@ int main(void)
         if (raw >= 7)
         {
             REQUIRE(ceiling.target == 0);
-            REQUIRE(ceiling.absolute_height == 24 + (raw - 7) * 8);
+            REQUIRE(ceiling.relative_height == 24 + (raw - 7) * 8);
         }
         else
         {
             REQUIRE(ceiling.target == raw);
-            REQUIRE(ceiling.absolute_height == 0);
+            REQUIRE(ceiling.relative_height == 0);
         }
         REQUIRE(ceiling.monsters == false);  // 0x0020 not set here
     }
@@ -77,30 +77,87 @@ int main(void)
     REQUIRE(DPT_GenCeilingDecode(0x4000 | (5 << 7), &ceiling));
     REQUIRE(ceiling.target == DPT_CEILING_TARGET_TEXTURE);
     REQUIRE(DPT_GenCeilingDecode(0x4000 | (6 << 7), &ceiling));
-    REQUIRE(ceiling.absolute_height == 24 && ceiling.target == 0);
+    REQUIRE(ceiling.relative_height == 24 && ceiling.target == 0);
 
-    // Supported subset: raise to highest neighbour ceiling, or lower to floor
-    // with optional crush. Push triggers are supported and act on the sector
-    // behind the line.
+    // Supported subset: every target that resolves to a height this engine can
+    // compute, in both directions; crush only while lowering. Push triggers act
+    // on the sector behind the line. Reported: texture/model change and the
+    // "next neighbour ceiling" target, which needs a helper we do not have.
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040));            // up HnC
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7)));          // down F
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x1000)); // down F crush
     REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | 0x0002));   // S1 up HnC
+    REQUIRE(DPT_GenCeilingSupported(0x4000));                    // down HnC
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | (1 << 7)));         // LnC
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | (3 << 7)));         // HnF
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | (6 << 7)));         // by 24
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (6 << 7))); // up by 24
+    REQUIRE(DPT_GenCeilingSupported(0x4000 | 0x0040 | (4 << 7))); // up F
 
-    REQUIRE(!DPT_GenCeilingSupported(0x4000));                    // down HnC
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | (1 << 7)));         // LnC
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | (2 << 7)));         // NnC
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | (3 << 7)));         // HnF
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | (5 << 7)));         // sT
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | (6 << 7)));         // absolute
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0400));           // texture change
     REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0040 | 0x1000));  // crush while up
-    REQUIRE(!DPT_GenCeilingSupported(0x4000 | 0x0040 | (4 << 7))); // up F
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0006)); // push trigger
     REQUIRE(DPT_GenCeilingSupported(0x4000 | (4 << 7) | 0x0007)); // push retrigger
     REQUIRE(!DPT_GenCeilingSupported(0x6000));                    // not a ceiling
 
+    // Exhaustive: texture/model change, the next-neighbour target and crush
+    // while raising are the only rejections.
+    for (trigger = 0; trigger < 8; ++trigger)
+    for (speed = 0; speed < 4; ++speed)
+    for (up = 0; up < 2; ++up)
+    for (crush = 0; crush < 2; ++crush)
+    for (change = 0; change < 4; ++change)
+    for (target_bits = 0; target_bits < 8; ++target_bits)
+    {
+        int expected;
+        special = 0x4000 | trigger | (speed << 3) | (up << 6) | (change << 10)
+                | (crush << 12) | (target_bits << 7);
+        expected = change == 0 && target_bits != 2 && target_bits != 5 && !(crush && up);
+        REQUIRE(DPT_GenCeilingSupported(special) == expected);
+    }
+
+    // Destination selection, with every neighbour value distinct so an
+    // accidental swap between two targets cannot pass.
+    {
+        dpt_ceiling_env_t env;
+        env.current = 0;
+        env.highest_ceiling = 200 * FRACUNIT;
+        env.lowest_ceiling = 120 * FRACUNIT;
+        env.highest_floor = 48 * FRACUNIT;
+        env.floor = -16 * FRACUNIT;
+
+        ceiling.target = DPT_CEILING_TARGET_HNC; ceiling.up = 1;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.highest_ceiling);
+        ceiling.target = DPT_CEILING_TARGET_LNC; ceiling.up = 0;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.lowest_ceiling);
+        ceiling.target = DPT_CEILING_TARGET_HNF; ceiling.up = 1;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.highest_floor);
+        ceiling.target = DPT_CEILING_TARGET_FLOOR; ceiling.up = 0;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.floor);
+
+        ceiling.target = 0;
+        ceiling.relative_height = 24;
+        ceiling.up = 1;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.current + 24*FRACUNIT);
+        ceiling.up = 0;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.current - 24*FRACUNIT);
+        ceiling.relative_height = 32;
+        ceiling.up = 1;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.current + 32*FRACUNIT);
+
+        // No crush offset: BOOM's generalized ceiling stops at its target.
+        ceiling.target = DPT_CEILING_TARGET_FLOOR;
+        ceiling.up = 0;
+        ceiling.crush = 1;
+        REQUIRE(DPT_GenCeilingDest(&ceiling, &env) == env.floor);
+
+        REQUIRE(DPT_GenCeilingDest(NULL, &env) == env.current);
+        REQUIRE(DPT_GenCeilingDest(&ceiling, NULL) == 0);
+    }
+
     puts("Boom generalized ceilings: range bounds, 2048 field combinations, "
-         "ceiling target order and supported-subset rules OK");
+         "ceiling target order, supported targets and destination heights OK");
     return 0;
 }

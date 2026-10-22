@@ -43,12 +43,12 @@ boolean DPT_GenFloorDecode(int special, dpt_genfloor_t *out)
     if (raw_target >= DPT_TARGET_FIRST_ABSOLUTE)
     {
         out->target = 0;
-        out->absolute_height = 24 + (raw_target - DPT_TARGET_FIRST_ABSOLUTE) * 8;
+        out->relative_height = 24 + (raw_target - DPT_TARGET_FIRST_ABSOLUTE) * 8;
     }
     else
     {
         out->target = raw_target;
-        out->absolute_height = 0;
+        out->relative_height = 0;
     }
 
     // The model bit doubles as the monster-activation flag when the action does
@@ -65,19 +65,54 @@ boolean DPT_GenFloorSupported(int special)
     if (!DPT_GenFloorDecode(special, &floor))
         return false;
 
-    // Only the subset that maps exactly onto an existing floor behaviour is
-    // supported. Texture/sector-type changes and absolute heights would need
-    // model-sector logic or new movement types, so they are reported instead of
-    // being approximated.
-    if (floor.change != 0 || floor.absolute_height != 0)
+    // Texture/sector-type changes need model-sector logic, and the "shortest
+    // texture" target needs a helper this engine does not have, so both are
+    // reported instead of approximated. Every remaining target is a height this
+    // engine can compute, and the floor thinker takes an explicit destination.
+    if (floor.change != 0 || floor.target == DPT_FLOOR_TARGET_TEXTURE)
         return false;
+
+    // Crushing only exists as a raising floor.
     if (floor.crush && !floor.up)
         return false;
 
-    if (!floor.up)
-        return floor.target == DPT_FLOOR_TARGET_HNF
-            || floor.target == DPT_FLOOR_TARGET_LNF;
+    return true;
+}
 
-    return floor.target == DPT_FLOOR_TARGET_NNF
-        || floor.target == DPT_FLOOR_TARGET_LNC;
+
+fixed_t DPT_GenFloorDest (const dpt_genfloor_t* gen, const dpt_floor_env_t* env)
+{
+    if (!gen || !env)
+        return env ? env->current : 0;
+
+    switch (gen->target)
+    {
+      case DPT_FLOOR_TARGET_HNF:
+        return env->highest_floor;
+
+      case DPT_FLOOR_TARGET_LNF:
+        return env->lowest_floor;
+
+      case DPT_FLOOR_TARGET_NNF:
+        // "Next" depends on direction: the nearest level above when rising,
+        // below when lowering.
+        return gen->up ? env->next_highest_floor : env->next_lowest_floor;
+
+      case DPT_FLOOR_TARGET_LNC:
+        return env->lowest_ceiling;
+
+      case DPT_FLOOR_TARGET_CEIL:
+        return env->ceiling;
+
+      case 0:
+        // Relative by 24 or 32 units from the current height.
+        return gen->up
+            ? env->current + gen->relative_height * FRACUNIT
+            : env->current - gen->relative_height * FRACUNIT;
+
+      default:
+        // Unsupported targets never reach the engine; returning the current
+        // height keeps a mistake harmless instead of teleporting the floor.
+        return env->current;
+    }
 }

@@ -462,36 +462,37 @@ GenFloorOnSector
     floor->speed = FLOORSPEED << gen->speed_shift;
     floor->crush = false;
 
+    // Destination comes from the tested pure function; the engine only gathers
+    // the neighbour heights it needs.
+    {
+	dpt_floor_env_t env;
+	env.current = sec->floorheight;
+	env.highest_floor = P_FindHighestFloorSurrounding(sec);
+	env.lowest_floor = P_FindLowestFloorSurrounding(sec);
+	env.next_lowest_floor = P_FindNextLowestFloor(sec, sec->floorheight);
+	env.next_highest_floor = P_FindNextHighestFloor(sec, sec->floorheight);
+	env.lowest_ceiling = P_FindLowestCeilingSurrounding(sec);
+	env.ceiling = sec->ceilingheight;
+	floor->floordestheight = DPT_GenFloorDest(gen, &env);
+    }
+
     if (!gen->up)
     {
 	floor->direction = -1;
-	if (gen->target == DPT_FLOOR_TARGET_LNF)
-	{
-	    floor->type = lowerFloorToLowest;
-	    floor->floordestheight = P_FindLowestFloorSurrounding(sec);
-	}
-	else
-	{
-	    floor->type = lowerFloor;
-	    floor->floordestheight = P_FindHighestFloorSurrounding(sec);
-	}
+	// Every generalized floor is an explicit destination, so the plain
+	// lowering type is enough; the destination is what differs.
+	floor->type = lowerFloor;
     }
     else if (gen->target == DPT_FLOOR_TARGET_NNF)
     {
 	floor->direction = 1;
 	floor->type = raiseFloorToNearest;
-	floor->floordestheight = P_FindNextHighestFloor(sec,sec->floorheight);
     }
     else
     {
-	// LNC: rise to the lowest surrounding ceiling, optionally crushing.
 	floor->direction = 1;
 	floor->type = gen->crush ? raiseFloorCrush : raiseFloor;
 	floor->crush = gen->crush;
-	floor->floordestheight = P_FindLowestCeilingSurrounding(sec);
-	if (floor->floordestheight > sec->ceilingheight)
-	    floor->floordestheight = sec->ceilingheight;
-	floor->floordestheight -= (8*FRACUNIT) * (gen->crush != 0);
     }
     return 1;
 }
