@@ -196,6 +196,7 @@ void M_ChangeMouseFlip(int choice);
 void M_ChangeCrosshair(int choice);
 void M_ChangeAutoRun(int choice);
 void M_ChangePitch(int choice);
+void M_ChangePitchAim(int choice);
 void M_ChangeGamepad(int choice);
 void M_Controls(int choice);
 void M_DrawControls(void);
@@ -365,6 +366,7 @@ enum
     ctl_grab,
     ctl_crosshair,
     ctl_pitch,
+    ctl_aim,
     ctl_autorun,
     ctl_gamepad,
     ctl_end
@@ -408,6 +410,7 @@ menuitem_t ControlsMenu[]=
     {1,"",	M_ChangeMouseGrab,'r'},
     {1,"",	M_ChangeCrosshair,'h'},
     {1,"",	M_ChangePitch,'p'},
+    {1,"",	M_ChangePitchAim,'k'},
     {1,"",	M_ChangeAutoRun,'u'},
     {1,"",	M_ChangeGamepad,'j'}
 };
@@ -1108,6 +1111,7 @@ static const char *controlsLabels[ctl_end] = {
     "GRAB MOUSE",
     "CROSSHAIR",
     "LOOK UP/DN",
+    "AIM WITH LOOK",
     "AUTO RUN",
     "GAMEPAD"
 };
@@ -1233,6 +1237,13 @@ void M_DrawControls(void)
 
           case ctl_pitch:
             M_WriteText(vx, liney, dpt_pitch_enabled ? "ON" : "OFF");
+            break;
+
+          case ctl_aim:
+            // Shows OFF when looking is off, because aiming with the view is
+            // meaningless without a view pitch: ON would promise something the
+            // engine will not do.
+            M_WriteText(vx, liney, (dpt_pitch_enabled && dpt_pitch_aim) ? "ON" : "OFF");
             break;
 
           case ctl_autorun:
@@ -1532,6 +1543,16 @@ void M_ChangePitch(int choice)
 	// Recentre so the view does not stay tilted with the feature off.
 	dpt_view_pitch = 0;
     }
+}
+
+void M_ChangePitchAim(int choice)
+{
+    (void) choice;
+    // Turning aim on implies looking: without a pitch there is nothing to aim
+    // with, and the menu would show two switches that contradict each other.
+    if (!dpt_pitch_aim && !dpt_pitch_enabled)
+	dpt_pitch_enabled = 1;
+    dpt_pitch_aim = !dpt_pitch_aim;
 }
 
 // Enter the Controls submenu. Borrowed from Duke3D's split between the top-level

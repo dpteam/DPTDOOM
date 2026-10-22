@@ -40,10 +40,14 @@ extern int		viewwindowy;
 extern int		centerx;
 extern int		centery;
 
-// DPT view-only vertical look (y-shearing). Never part of the simulation.
+// DPT vertical look (y-shearing), and optionally vertical aim. The pitch itself
+// is never part of the simulation: it is not in ticcmd, demos, saves or the
+// network. dpt_pitch_aim lets it steer hitscan in single player only; every path
+// that would record or replay input refuses to run with it enabled.
 extern int		dpt_view_pitch;
 extern int		dpt_pitch_enabled;
 extern int		dpt_pitch_max;
+extern int		dpt_pitch_aim;
 // Anchor for player sprites (the weapon): the view centre without pitch.
 extern fixed_t		dpt_centeryfrac_nopitch;
 extern boolean		dpt_drawing_psprite;

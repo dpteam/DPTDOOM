@@ -40,6 +40,7 @@ typedef int SOCKET;
 #include "../master/client.h"
 #include "dpt_connect_screen.h"
 #include "deh_classic.h"
+#include "r_main.h"
 
 static dm_client_query_t master_query;
 static boolean master_initialized, master_enabled, master_waiting, master_removing;
@@ -405,6 +406,13 @@ void DPT_NetStart(net_gamesettings_t *settings, void (*pump)(void))
     disconnect_requested = false;
     alone = false;
     if ((host != NULL) == (join != NULL)) I_Error("Use exactly one of -net-host or -net-join");
+    // Vertical aim is not in the tic command, so the peer simulating this
+    // player's shot would use a level aim and the two would diverge. Refusing at
+    // startup beats a desync twenty seconds into a session.
+    if (dpt_pitch_aim)
+        I_Error("Vertical aim is single-player only: the coop protocol carries no "
+                "pitch, so the peers would desynchronise. Turn off Options - "
+                "Controls - AIM WITH LOOK before starting a network game.");
     if((master || session_name) && !host)I_Error("Master publication requires -net-host");
     if(session_name && !master)I_Error("-session-name requires -master");
     relay_requested=M_ParmExists("-net-relay");

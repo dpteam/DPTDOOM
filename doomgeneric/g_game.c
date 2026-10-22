@@ -73,6 +73,7 @@
 
 #include "g_game.h"
 #include "d_diagnostics.h"
+#include "r_main.h"
 #include "dpt_net.h"
 #include "dpt_rules.h"
 
@@ -2200,6 +2201,16 @@ void G_RecordDemo (char *name)
     int i;
     int maxsize;
 
+    // The vanilla demo stream has no pitch field, so a recording made while
+    // vertical aim was steering shots would replay with the aim level: the demo
+    // would silently show a different game than the one that happened. Refusing
+    // is the only honest option short of a new demo format.
+    if (dpt_pitch_aim)
+	I_Error("Demo recording is unavailable while vertical aim is enabled: "
+		"the demo format has no pitch, so the recording would replay "
+		"differently. Turn off Options - Controls - AIM WITH LOOK, or "
+		"start without -record.");
+
     usergame = false;
     demoname_size = strlen(name) + 5;
     demoname = Z_Malloc(demoname_size, PU_STATIC, NULL);
@@ -2379,6 +2390,11 @@ void G_DoPlayDemo (void)
 	 
     gameaction = ga_nothing; 
     demobuffer = demo_p = W_CacheLumpName (defdemoname, PU_STATIC); 
+
+    // A pitch left over from a live session must not tilt the view during
+    // playback: the demo has no pitch, so the replay would look pitched while
+    // its shots are level, and the mismatch would look like a broken demo.
+    dpt_view_pitch = 0;
 
     demoversion = *demo_p++;
     printf("Playing demo %s (version %d).\n", defdemoname, demoversion);

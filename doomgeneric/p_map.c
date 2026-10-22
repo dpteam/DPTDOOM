@@ -37,6 +37,8 @@
 #include "doomstat.h"
 #include "dpt_rules.h"
 #include "r_state.h"
+#include "r_main.h"
+#include "dpt_pitch.h"
 // Data.
 #include "sounds.h"
 
@@ -1072,6 +1074,34 @@ boolean PTR_ShootTraverse (intercept_t* in)
 
 
 //
+// DPT_AimPitch
+//
+// The view pitch as an aim slope, or 0 where it must not be used.
+//
+// Deliberately narrow. A pitch that steers a shot is simulation input, but it is
+// not in ticcmd, so anything that replays or shares a game would diverge: a demo
+// recorded with pitch would replay with aim straight ahead, and in coop the
+// peer simulating the other player's shot would use slope 0. So this returns 0
+// during demo playback and in a network game, and only for the local player's
+// own shots - monsters aiming at a player must keep vanilla behaviour, which is
+// why the shooter is compared rather than the target.
+//
+// G_RecordDemo and DPT_NetStart refuse to start with dpt_pitch_aim enabled, so
+// these guards are the second line of defence, not the only one.
+//
+static fixed_t DPT_AimPitch (mobj_t* shooter)
+{
+    if (!dpt_pitch_aim || demoplayback || netgame)
+	return 0;
+
+    if (shooter == NULL || players[consoleplayer].mo != shooter)
+	return 0;
+
+    return DPT_PitchSlope (DPT_PitchClamp (dpt_view_pitch, dpt_pitch_max));
+}
+
+
+//
 // P_AimLineAttack
 //
 fixed_t
@@ -1082,8 +1112,10 @@ P_AimLineAttack
 {
     fixed_t	x2;
     fixed_t	y2;
+    fixed_t	pitch;
 
     t1 = P_SubstNullMobj(t1);
+    pitch = DPT_AimPitch (t1);
 	
     angle >>= ANGLETOFINESHIFT;
     shootthing = t1;
@@ -1092,9 +1124,11 @@ P_AimLineAttack
     y2 = t1->y + (distance>>FRACBITS)*finesine[angle];
     shootz = t1->z + (t1->height>>1) + 8*FRACUNIT;
 
-    // can't shoot outside view angles
-    topslope = 100*FRACUNIT/160;	
-    bottomslope = -100*FRACUNIT/160;
+    // The autoaim window follows the view direction instead of staying level.
+    // Without this, looking up would aim at nothing while looking straight
+    // ahead, which is exactly the disconnect this feature exists to remove.
+    topslope = DPT_PitchAimTop (pitch);
+    bottomslope = DPT_PitchAimBottom (pitch);
     
     attackrange = distance;
     linetarget = NULL;
@@ -1107,7 +1141,8 @@ P_AimLineAttack
     if (linetarget)
 	return aimslope;
 
-    return 0;
+    // Nothing to autoaim at: follow the crosshair instead of going level.
+    return pitch;
 }
  
 

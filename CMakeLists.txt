@@ -79,7 +79,7 @@ set(engine_sources
 )
 list(TRANSFORM engine_sources PREPEND "doomgeneric/")
 add_executable(dptdoom ${engine_sources})
-target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c doomgeneric/dpt_secspecial.c)
+target_sources(dptdoom PRIVATE doomgeneric/deh_classic.c doomgeneric/deh_actions.c doomgeneric/dpt_gendoor.c doomgeneric/dpt_genfloor.c doomgeneric/dpt_genceiling.c doomgeneric/dpt_gencrusher.c doomgeneric/dpt_genstairs.c doomgeneric/dpt_genlift.c doomgeneric/dpt_genlocked.c doomgeneric/dpt_secspecial.c doomgeneric/dpt_pitch.c)
 target_compile_definitions(dptdoom PRIVATE DPT_DEH_CLASSIC)
 target_include_directories(dptdoom PRIVATE doomgeneric)
 if(DPTDOOM_NETWORK)
@@ -264,6 +264,9 @@ if(BUILD_TESTING)
     target_include_directories(deh-misc-test PRIVATE doomgeneric)
     target_compile_definitions(deh-misc-test PRIVATE DPT_DEH_CLASSIC $<$<C_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
     add_test(NAME deh-misc COMMAND deh-misc-test)
+    add_executable(pitch-math-test tests/pitch-math.c doomgeneric/dpt_pitch.c)
+    target_include_directories(pitch-math-test PRIVATE doomgeneric)
+    add_test(NAME pitch-math COMMAND pitch-math-test)
     add_executable(gendoor-test tests/gendoor.c doomgeneric/dpt_gendoor.c)
     target_include_directories(gendoor-test PRIVATE doomgeneric)
     add_test(NAME gendoor COMMAND gendoor-test)
@@ -498,6 +501,10 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/state-smoke.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
         set_tests_properties(state-smoke PROPERTIES TIMEOUT 180)
+        add_test(NAME pitch-aim COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/pitch-aim.py"
+            --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
+        set_tests_properties(pitch-aim PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
         add_test(NAME map-sky COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/map-sky.py"
             --exe $<TARGET_FILE:dptdoom> --iwad "${DPTDOOM_TEST_IWAD}")
@@ -634,6 +641,7 @@ install(FILES LICENSE docs/SDL-LICENSES.txt DESTINATION share/dptdoom)
 set(DPTDOOM_FAST_TESTS
     # Data-free decoders and parsers
     deh-misc
+    pitch-math
     gendoor genfloor genceiling gencrusher genstairs genlift genlocked
     secspecial
     config-keys

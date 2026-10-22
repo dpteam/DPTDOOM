@@ -12,6 +12,7 @@
 #include "p_local.h"
 #include "p_saveg.h"
 #include "r_state.h"
+#include "r_main.h"
 #include "deh_classic.h"
 #include "deh_misc.h"
 #include "deh_str.h"
@@ -63,6 +64,17 @@ void D_DiagnosticsInit(void)
     tic_limit = PositiveArg("-headless-tics");
     save_tic = PositiveArg("-headless-save-tic");
     rules_probe = M_ParmExists("-headless-rules-probe");
+    {
+        // Testing aid: a scripted run cannot move the mouse, so the vertical
+        // aim needs a way to start pitched. Diagnostics-only, like the rest of
+        // this module; the value is clamped by the normal pitch path.
+        int pitch = M_CheckParm("-dpt-pitch");
+        if (pitch)
+        {
+            if (pitch + 1 >= myargc) I_Error("-dpt-pitch requires a value");
+            dpt_view_pitch = atoi(myargv[pitch + 1]);
+        }
+    }
     {
         int input = M_CheckParm("-headless-input");
         if (input)

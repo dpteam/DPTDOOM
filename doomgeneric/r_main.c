@@ -34,6 +34,7 @@
 
 #include "r_local.h"
 #include "r_sky.h"
+#include "dpt_pitch.h"
 
 
 
@@ -56,12 +57,16 @@ int			viewangleoffset;
 // projections consistent - shifting only one produces walls that slide against
 // the floor.
 //
-// This is deliberately VIEW-ONLY: it never touches player state, ticcmd, demos
-// or the network. Autoaim and shooting stay exactly as vanilla, so nothing can
-// desynchronise. A real aim angle would be simulation state and is a separate,
-// much larger change.
+// This started as VIEW-ONLY. It now optionally drives the shot too
+// (dpt_pitch_aim), but only where that cannot desynchronise anything: single
+// player, live input, no demo playback, no network. The aim path refuses the
+// cases it cannot cover instead of producing a demo that would replay
+// differently, and G_RecordDemo/DPT_NetStart refuse to start with the option on.
+// Pitch still never enters ticcmd, so every format stays as it was.
 //
 #define DPT_PITCH_MAX 80
+
+int			dpt_pitch_aim;	// 0 = vanilla aim, 1 = shoot where you look
 
 int			dpt_view_pitch;
 int			dpt_pitch_enabled = 1;
@@ -84,20 +89,21 @@ void R_UpdatePitchHorizon (void)
     int i;
     fixed_t dy;
     int horizon;
+    int shear;
     int limit = dpt_pitch_max;
 
-    if (limit < 0)
-	limit = 0;
-    else if (limit > 160)
-	limit = 160;
+    // Clamped here and in the aim path through the same helper, so the two can
+    // never disagree about how far the player may look.
+    dpt_view_pitch = DPT_PitchClamp(dpt_view_pitch, limit);
 
-    if (dpt_view_pitch > limit)
-	dpt_view_pitch = limit;
-    else if (dpt_view_pitch < -limit)
-	dpt_view_pitch = -limit;
+    // Pitch is stored as nominal pixels but rendered as an angle: converting
+    // through the slope keeps the vertical angle constant across render sizes.
+    // Without this, the same 80 pixels meant twice the angle at 320 wide as at
+    // 640, and aim (which is resolution-independent) could not match the view.
+    shear = DPT_PitchShear(dpt_view_pitch, projection);
 
     // Looking up moves the horizon down the screen.
-    horizon = viewheight/2 + dpt_view_pitch;
+    horizon = viewheight/2 + shear;
     if (horizon < 0)
 	horizon = 0;
     else if (horizon > viewheight)

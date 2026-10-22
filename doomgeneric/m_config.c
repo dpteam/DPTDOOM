@@ -823,6 +823,14 @@ static default_t extra_defaults_list[] =
 
     CONFIG_VARIABLE_INT(dpt_pitch_max),
 
+    //! Let the vertical look steer hitscan aim, so the shot follows the
+    //! crosshair instead of always going level. Single player only: the demo
+    //! and coop formats carry no pitch, so recording and network games refuse
+    //! to start while this is on.
+    //
+
+    CONFIG_VARIABLE_INT(dpt_pitch_aim),
+
     //!
     // Sound output sample rate, in Hz.  Typical values to use are
     // 11025, 22050, 44100 and 48000.
@@ -1676,6 +1684,8 @@ static void SaveDefaultCollection(default_collection_t *collection)
     fprintf(f, "#\n");
     fprintf(f, "# Input defaults: W/S move, A/D strafe, mouse turns.\n");
     fprintf(f, "#   crosshair / auto_run / mouseflip / dpt_pitch_enabled: 0 or 1.\n");
+    fprintf(f, "#   dpt_pitch_aim 1 makes hitscan follow the vertical look (single\n");
+    fprintf(f, "#   player only: demo recording and coop refuse to start with it on).\n");
     fprintf(f, "#   novert 1 ignores vertical mouse motion; set 0 to use the mouse\n");
     fprintf(f, "#   vertically (with dpt_pitch_enabled 1 that looks up/down).\n");
     fprintf(f, "#   grabmouse 0 keeps the pointer free (for window controls).\n");

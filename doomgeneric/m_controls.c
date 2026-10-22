@@ -265,6 +265,7 @@ void M_BindBaseControls(void)
     M_BindVariable("mouseflip",          &mouseflip);
     M_BindVariable("dpt_pitch_enabled",  &dpt_pitch_enabled);
     M_BindVariable("dpt_pitch_max",      &dpt_pitch_max);
+    M_BindVariable("dpt_pitch_aim",      &dpt_pitch_aim);
 
     M_BindVariable("mouseb_fire",        &mousebfire);
     M_BindVariable("mouseb_strafe",      &mousebstrafe);
